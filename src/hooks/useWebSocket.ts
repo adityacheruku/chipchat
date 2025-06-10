@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { WebSocketEventData, Message, SupportedEmoji, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, User } from '@/types';
+import type { WebSocketEventData, Message, SupportedEmoji, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, User, Mood } from '@/types'; // Added Mood
 import { useToast } from './use-toast';
 
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL || 'ws://localhost:8000';
@@ -12,7 +12,7 @@ interface UseWebSocketOptions {
   onOpen?: () => void;
   onClose?: (event: CloseEvent) => void;
   onMessageReceived: (message: Message) => void;
-  onReactionUpdate: (data: { messageId: string; chatId: string; reactions: Partial<Record<SupportedEmoji, string[]>> }) => void;
+  onReactionUpdate: (data: MessageReactionUpdateEventData) => void; // Changed to use the specific event type
   onPresenceUpdate: (data: UserPresenceUpdateEventData) => void;
   onTypingUpdate: (data: TypingIndicatorEventData) => void;
   onThinkingOfYouReceived: (data: ThinkingOfYouReceivedEventData) => void;
@@ -62,7 +62,7 @@ export function useWebSocket({
             onMessageReceived((data as NewMessageEventData).message);
             break;
           case 'message_reaction_update':
-            onReactionUpdate(data as MessageReactionUpdateEventData);
+            onReactionUpdate(data as MessageReactionUpdateEventData); // Directly pass the typed data
             break;
           case 'user_presence_update':
             onPresenceUpdate(data as UserPresenceUpdateEventData);
