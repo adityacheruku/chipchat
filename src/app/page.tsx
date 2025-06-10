@@ -2,51 +2,141 @@
 "use client";
 
 import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
+import type { UserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
-export default function LoginPage() {
-  const [username, setUsername] = useState('');
-  const router = useRouter();
+type AuthMode = 'login' | 'register';
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+export default function AuthPage() {
+  const { login, register, isLoading: isAuthLoading } = useAuth();
+  const { toast } = useToast();
+
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [email, setEmail] = useState(''); // Changed from username to email
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState(''); // For registration
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (username.trim()) {
-      // Store the active username. Profile details will be keyed by this.
-      localStorage.setItem('chirpChatActiveUsername', username.trim());
-      router.push('/chat');
+    setIsSubmitting(true);
+
+    if (authMode === 'login') {
+      if (!email.trim() || !password.trim()) {
+        toast({ variant: 'destructive', title: 'Missing Fields', description: 'Please enter both email and password.' });
+        setIsSubmitting(false);
+        return;
+      }
+      try {
+        await login(email, password);
+        // Navigation is handled by AuthContext
+      } catch (error) {
+        // Error toast is handled by AuthContext or api service
+        console.error("Login submission error:", error);
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else { // Register mode
+      if (!email.trim() || !password.trim() || !displayName.trim()) {
+        toast({ variant: 'destructive', title: 'Missing Fields', description: 'Please fill in all fields for registration.' });
+        setIsSubmitting(false);
+        return;
+      }
+      if (password.length < 8) {
+         toast({ variant: 'destructive', title: 'Password Too Short', description: 'Password must be at least 8 characters.' });
+         setIsSubmitting(false);
+         return;
+      }
+      const registerData: UserCreate = { email, password, display_name: displayName };
+      try {
+        await register(registerData);
+        // Navigation is handled by AuthContext
+      } catch (error) {
+        console.error("Registration submission error:", error);
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
+
+  const toggleAuthMode = () => {
+    setAuthMode(prevMode => prevMode === 'login' ? 'register' : 'login');
+    setEmail('');
+    setPassword('');
+    setDisplayName('');
+  };
+
+  const loading = isAuthLoading || isSubmitting;
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-headline text-primary">ChirpChat</CardTitle>
-          <CardDescription className="text-muted-foreground">Join the conversation</CardDescription>
+          <CardDescription className="text-muted-foreground">
+            {authMode === 'login' ? 'Welcome back! Please log in.' : 'Create your account to join.'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {authMode === 'register' && (
+              <div className="space-y-2">
+                <Label htmlFor="displayName">Display Name</Label>
+                <Input
+                  id="displayName"
+                  type="text"
+                  placeholder="Your display name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  required={authMode === 'register'}
+                  className="bg-card focus-visible:ring-ring"
+                  disabled={loading}
+                />
+              </div>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-foreground">Username</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="username"
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                id="email"
+                type="email" 
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
                 className="bg-card focus-visible:ring-ring"
+                disabled={loading}
               />
             </div>
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground transition-colors duration-200 focus-visible:ring-ring">
-              Join Chat
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="bg-card focus-visible:ring-ring"
+                disabled={loading}
+              />
+            </div>
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground transition-colors duration-200 focus-visible:ring-ring" disabled={loading}>
+              {loading ? <Loader2 className="animate-spin mr-2" /> : (authMode === 'login' ? 'Login' : 'Register')}
             </Button>
           </form>
         </CardContent>
+        <CardFooter className="flex justify-center">
+          <Button variant="link" onClick={toggleAuthMode} disabled={loading}>
+            {authMode === 'login' ? "Don't have an account? Register" : "Already have an account? Login"}
+          </Button>
+        </CardFooter>
       </Card>
     </main>
   );

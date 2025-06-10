@@ -1,11 +1,11 @@
 
 import type { Message, User, SupportedEmoji } from '@/types';
 import { ALL_SUPPORTED_EMOJIS } from '@/types';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { SmilePlus, PlayCircle } from 'lucide-react'; // Added PlayCircle
+import { SmilePlus, PlayCircle, Image as ImageIcon } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -32,7 +32,16 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
 
-  const formattedTimestamp = new Date(message.timestamp);
+  let formattedTime = "sending...";
+  try {
+    if (message.created_at) {
+        const timestampDate = parseISO(message.created_at);
+        formattedTime = format(timestampDate, 'p');
+    }
+  } catch(e) {
+    console.warn("Could not parse message timestamp:", message.created_at)
+  }
+  
 
   const prevReactionsRef = useRef<Message['reactions']>();
   const [animatedEmojis, setAnimatedEmojis] = useState<Record<SupportedEmoji, boolean>>({});
@@ -101,13 +110,28 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
 
   const messageContentDiv = (
     <div className={cn('p-3 rounded-xl shadow min-w-[80px] relative group/bubble', bubbleColorClass, bubbleBorderRadius)}>
-      {message.clipType ? (
+      {message.clip_url && message.clip_type ? (
         <div className="flex items-center gap-2">
           <PlayCircle size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
-          <p className="text-sm italic">{message.clipPlaceholderText || "Mood clip"}</p>
+          <a href={message.clip_url} target="_blank" rel="noopener noreferrer" className="text-sm italic underline hover:opacity-80">
+            {message.clip_placeholder_text || `View ${message.clip_type} clip`}
+          </a>
         </div>
-      ) : (
+      ) : message.image_url ? (
+         <a href={message.image_url} target="_blank" rel="noopener noreferrer" className="block max-w-xs">
+            <Image 
+                src={message.image_url} 
+                alt="Chat image" 
+                width={200} 
+                height={150} 
+                className="rounded-md object-cover cursor-pointer hover:opacity-80"
+                data-ai-hint="chat photo"
+            />
+         </a>
+      ) : message.text ? (
         <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
+      ) : (
+        <p className="text-sm italic text-muted-foreground">Message content not available</p>
       )}
       
       {message.reactions && Object.keys(message.reactions).length > 0 && (
@@ -152,8 +176,8 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
             : 'flex-row items-start space-x-2'
       )}>
         <Image
-          src={sender.avatar}
-          alt={sender.name}
+          src={sender.avatar_url || "https://placehold.co/100x100.png"}
+          alt={sender.display_name}
           width={32}
           height={32}
           className={cn(
@@ -161,10 +185,11 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
              isCurrentUser ? "self-end mb-0.5" : "" 
           )}
           data-ai-hint={sender['data-ai-hint'] || "person portrait"}
+          key={sender.avatar_url || sender.id}
         />
          <div className="flex flex-col w-full">
           {!isCurrentUser && (
-            <p className="text-xs font-semibold text-secondary-foreground mb-0.5 ml-0.5">{sender.name}</p>
+            <p className="text-xs font-semibold text-secondary-foreground mb-0.5 ml-0.5">{sender.display_name}</p>
           )}
           {messageContentDiv}
         </div>
@@ -174,12 +199,14 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
         <Tooltip>
           <TooltipTrigger asChild>
             <p className={cn('text-xs text-muted-foreground mt-1 px-2 cursor-default', isCurrentUser ? 'text-right' : 'text-left ml-10')}>
-              {format(formattedTimestamp, 'p')}
+              {formattedTime}
             </p>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>{format(formattedTimestamp, 'PPpp')}</p>
-          </TooltipContent>
+           {message.created_at && (
+            <TooltipContent>
+                <p>{format(parseISO(message.created_at), 'PPpp')}</p>
+            </TooltipContent>
+           )}
         </Tooltip>
       </TooltipProvider>
     </div>

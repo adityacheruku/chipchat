@@ -17,16 +17,15 @@ import Image from 'next/image';
 import type { FormEvent, ChangeEvent } from 'react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-// import { useAvatar } from '@/hooks/useAvatar'; // Directly using props now
-// import { MAX_AVATAR_SIZE_KB } from '@/config/app-config'; // Used via useAvatar prop
+import { Loader2 } from 'lucide-react';
 
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: User | null;
-  onSave: (updatedUser: User) => void;
-  avatarPreview: string | null; // From useAvatar hook in parent
-  onAvatarFileChange: (event: ChangeEvent<HTMLInputElement>, currentAvatarUrl?: string) => void; // From useAvatar hook
+  onSave: (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone'>>, newAvatarFile?: File) => Promise<void>;
+  avatarPreview: string | null;
+  onAvatarFileChange: (event: ChangeEvent<HTMLInputElement>, currentAvatarUrl?: string | null) => void;
 }
 
 export default function UserProfileModal({ 
@@ -37,41 +36,52 @@ export default function UserProfileModal({
   avatarPreview,
   onAvatarFileChange
 }: UserProfileModalProps) {
-  const [name, setName] = useState(user?.name || '');
+  const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [mood, setMood] = useState<Mood>(user?.mood || 'Neutral');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  // Avatar logic is now managed by useAvatar hook in ChatPage and passed as props
 
   useEffect(() => {
     if (user) {
-      setName(user.name);
+      setDisplayName(user.display_name);
       setMood(user.mood);
-      // Avatar preview is initialized in ChatPage via useAvatar hook's setAvatarPreview
+      setPhone(user.phone || '');
+      // Avatar preview is managed by parent via props
+      setSelectedAvatarFile(null); // Reset selected file when modal opens or user changes
     }
-  }, [user]);
+  }, [user, isOpen]); // Reset form when modal opens or user data changes
 
   if (!user) return null;
 
   const internalHandleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
-    onAvatarFileChange(e, user.avatar);
+    onAvatarFileChange(e, user.avatar_url); // Let parent hook handle preview
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedAvatarFile(file);
+    }
   }
 
-  const handleSave = (e: FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
-    const updatedUser: User = {
-      ...user,
-      name,
-      mood,
-      avatar: avatarPreview || user.avatar, 
-      "data-ai-hint": (avatarPreview && avatarPreview !== user.avatar) ? undefined : user["data-ai-hint"], 
-    };
-    onSave(updatedUser);
-    toast({
-      title: "Profile Updated",
-      description: "Your profile picture and details have been saved.",
-    });
-    onClose();
+    setIsSaving(true);
+    try {
+      const profileUpdates: Partial<Pick<User, 'display_name' | 'mood' | 'phone'>> = {};
+      if (displayName !== user.display_name) profileUpdates.display_name = displayName;
+      if (mood !== user.mood) profileUpdates.mood = mood;
+      if (phone !== (user.phone || '')) profileUpdates.phone = phone;
+
+      await onSave(profileUpdates, selectedAvatarFile || undefined);
+      // Toast for success is handled in parent `onSave`
+      onClose(); // Close modal on successful save
+    } catch (error: any) {
+      // Toast for error is handled in parent `onSave`
+      console.error("Error saving profile from modal:", error.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -87,43 +97,58 @@ export default function UserProfileModal({
           <div className="grid gap-6 py-4">
             <div className="flex items-center justify-center">
               <Image
-                src={avatarPreview || "https://placehold.co/100x100.png"}
-                alt={name || "User avatar"}
+                src={avatarPreview || user.avatar_url || "https://placehold.co/100x100.png"}
+                alt={displayName || "User avatar"}
                 width={80}
                 height={80}
                 className="rounded-full object-cover"
                 data-ai-hint={avatarPreview ? undefined : user["data-ai-hint"] || "person portrait"}
-                key={avatarPreview} 
+                key={avatarPreview || user.avatar_url} 
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right text-foreground">
+              <Label htmlFor="displayNameModal" className="text-right text-foreground">
                 Name
               </Label>
               <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                id="displayNameModal"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
                 className="col-span-3 bg-card focus:ring-primary"
+                disabled={isSaving}
+              />
+            </div>
+             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="phoneModal" className="text-right text-foreground">
+                Phone
+              </Label>
+              <Input
+                id="phoneModal"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="col-span-3 bg-card focus:ring-primary"
+                placeholder="Optional"
+                disabled={isSaving}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="avatar-upload" className="text-right text-foreground">
+              <Label htmlFor="avatar-upload-modal" className="text-right text-foreground">
                 Picture
               </Label>
               <Input
-                id="avatar-upload"
+                id="avatar-upload-modal"
                 type="file"
                 onChange={internalHandleAvatarChange}
                 className="col-span-3 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 accept="image/*"
+                disabled={isSaving}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="mood" className="text-right text-foreground">
+              <Label htmlFor="moodModal" className="text-right text-foreground">
                 Mood
               </Label>
-              <Select value={mood} onValueChange={(value) => setMood(value as Mood)}>
+              <Select value={mood} onValueChange={(value) => setMood(value as Mood)} disabled={isSaving}>
                 <SelectTrigger className="col-span-3 bg-card focus:ring-primary">
                   <SelectValue placeholder="Select your mood" />
                 </SelectTrigger>
@@ -138,10 +163,12 @@ export default function UserProfileModal({
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} className="hover:bg-muted active:bg-muted/80">
+            <Button type="button" variant="outline" onClick={onClose} className="hover:bg-muted active:bg-muted/80" disabled={isSaving}>
               Cancel
             </Button>
-            <Button type="submit" className="bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground">Save changes</Button>
+            <Button type="submit" className="bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground" disabled={isSaving}>
+              {isSaving ? <Loader2 className="animate-spin mr-2" /> : "Save changes"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

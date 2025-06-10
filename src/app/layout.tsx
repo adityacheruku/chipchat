@@ -1,6 +1,8 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from '@/contexts/AuthContext'; // Import AuthProvider
 
 const APP_NAME = "ChirpChat";
 const APP_DESCRIPTION = "A friendly chat application with PWA shortcuts.";
@@ -13,30 +15,25 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: APP_NAME,
-    // startUpImage: [], // You can add startup images here
   },
   formatDetection: {
     telephone: false,
   },
-  // Open Graph tags
   openGraph: {
     type: "website",
-    url: "https://your-app-url.com", // Replace with your actual URL
+    url: "https://your-app-url.com", 
     title: APP_NAME,
     description: APP_DESCRIPTION,
     siteName: APP_NAME,
     images: [{
-      url: "https://your-app-url.com/icons/icon-512.png", // Replace with your actual URL
+      url: "https://your-app-url.com/icons/icon-512.png", 
     }],
   },
-  // Twitter Card tags
   twitter: {
     card: "summary",
-    // creator: "@yourtwitterhandle", // Replace with your Twitter handle
-    // site: "@yourtwitterhandle", // Replace with your Twitter handle
     title: APP_NAME,
     description: APP_DESCRIPTION,
-    images: ["https://your-app-url.com/icons/icon-512.png"], // Replace with your actual URL
+    images: ["https://your-app-url.com/icons/icon-512.png"], 
   },
 };
 
@@ -58,11 +55,13 @@ export default function RootLayout({
         <meta name="description" content={APP_DESCRIPTION} />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#90AFC5" />
+        <meta name="theme-color" content="#90AFC5" /> 
       </head>
       <body className="font-body antialiased">
-        {children}
-        <Toaster />
+        <AuthProvider> {/* Wrap children with AuthProvider */}
+          {children}
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );

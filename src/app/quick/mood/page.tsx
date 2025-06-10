@@ -1,119 +1,100 @@
 
-// src/app/quick/mood/page.tsx
 "use client";
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { SmilePlus } from 'lucide-react'; // Changed icon for more "set mood" feel
+import { SmilePlus, Loader2 } from 'lucide-react';
 import type { Mood, User } from '@/types';
 import { ALL_MOODS } from '@/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/services/api';
 
 export default function QuickMoodPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isLoading: isAuthLoading, isAuthenticated, fetchAndUpdateUser } = useAuth();
+  
   const [selectedMood, setSelectedMood] = useState<Mood | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     console.log("Action: Set My Mood triggered via PWA shortcut.");
-    const activeUsername = localStorage.getItem('chirpChatActiveUsername');
-    if (!activeUsername) {
-      setIsLoggedIn(false);
+    if (!isAuthLoading && !isAuthenticated) {
       toast({
         variant: "destructive",
         title: "Not Logged In",
         description: "Please log in to ChirpChat first to set your mood.",
         duration: 5000,
       });
-      setIsLoading(false);
+      router.replace('/'); // Use replace to prevent back navigation to this page
       return;
     }
-    setIsLoggedIn(true);
-
-    const userProfileKey = `chirpChatUserProfile_${activeUsername}`;
-    const storedProfileJson = localStorage.getItem(userProfileKey);
-
-    if (storedProfileJson) {
-      try {
-        const user = JSON.parse(storedProfileJson) as User;
-        setCurrentUser(user);
-        setSelectedMood(user.mood); 
-      } catch (error) {
-        console.error("Failed to parse stored user profile:", error);
-        toast({
-          variant: "destructive",
-          title: "Profile Error",
-          description: "Could not load your profile. Try logging in via the main app.",
-        });
-        setCurrentUser(null); // Ensure currentUser is null on error
-      }
-    } else {
-       toast({
-        variant: "destructive",
-        title: "Profile Not Found",
-        description: "Your profile was not found. Please log in again via the main app.",
-      });
-       setCurrentUser(null);
+    if (currentUser) {
+      setSelectedMood(currentUser.mood); 
     }
-    setIsLoading(false);
-  }, [toast]);
+  }, [isAuthLoading, isAuthenticated, currentUser, router, toast]);
 
-  const handleSetMood = () => {
+  const handleSetMood = async () => {
     if (!currentUser) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "User profile not loaded or found. Cannot set mood. Please log in via the main app.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "User profile not loaded." });
       return;
     }
-    if (!isLoggedIn) {
-       toast({
-        variant: "destructive",
-        title: "Not Logged In",
-        description: "Please log in to ChirpChat first.",
-      });
+    if (!selectedMood) {
+      toast({ variant: "destructive", title: "No Mood Selected", description: "Please select a mood." });
       return;
     }
-    if (selectedMood) {
-      const originalLoginUsername = localStorage.getItem('chirpChatActiveUsername');
-      if (!originalLoginUsername) { // Should not happen if isLoggedIn is true, but defensive check
-          toast({ variant: "destructive", title: "Critical Error", description: "Active username not found."});
-          return;
-      }
-      const updatedUser = { ...currentUser, mood: selectedMood, lastSeen: Date.now() };
-      const userProfileKey = `chirpChatUserProfile_${originalLoginUsername}`; 
-      localStorage.setItem(userProfileKey, JSON.stringify(updatedUser));
-      
+
+    setIsSubmitting(true);
+    try {
+      await api.updateUserProfile({ mood: selectedMood });
+      await fetchAndUpdateUser(); // Update context
       toast({
         title: "Mood Updated!",
-        description: `Your mood has been set to: ${selectedMood}. This will reflect in the chat.`,
+        description: `Your mood has been set to: ${selectedMood}.`,
         duration: 4000,
       });
       router.push('/chat');
-    } else {
-      toast({
-        variant: "destructive",
-        title: "No Mood Selected",
-        description: "Please select a mood first.",
-      });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Update Failed", description: error.message });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  if (isLoading && isLoggedIn) { // Only show global loading if we expect to load a profile
+  const isLoadingPage = isAuthLoading || (isAuthenticated && !currentUser);
+
+  if (isLoadingPage) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
-        <SmilePlus className="w-12 h-12 text-primary animate-pulse mb-4" />
+        <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
         <p className="text-foreground">Loading your mood settings...</p>
       </main>
     );
   }
+  
+  if (!isAuthenticated || !currentUser) {
+    // This case should ideally be handled by the useEffect redirect, but as a fallback:
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
+        <Card className="w-full max-w-md shadow-xl text-center">
+          <CardHeader>
+            <CardTitle className="text-2xl font-headline text-primary">Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-red-600 py-4">Please log in via the main ChirpChat app to use this feature.</p>
+            <Button onClick={() => router.push('/')} className="w-full" variant="outline">
+              Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
@@ -124,37 +105,30 @@ export default function QuickMoodPage() {
           </div>
           <CardTitle className="text-2xl font-headline text-primary">Set Your Mood</CardTitle>
           <CardDescription className="text-muted-foreground">
-            {currentUser && isLoggedIn ? `Hi ${currentUser.name}, how are you feeling?` : 
-             isLoggedIn ? "Loading your profile..." : "Log in to ChirpChat to set your mood."}
+            Hi {currentUser.display_name}, how are you feeling?
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <p className="text-sm text-muted-foreground">This page was accessed via a PWA shortcut.</p>
           
-          {isLoggedIn ? (
-            <>
-              <Select value={selectedMood} onValueChange={(value) => setSelectedMood(value as Mood)} disabled={!currentUser || isLoading}>
-                <SelectTrigger className="w-full bg-card focus:ring-primary text-foreground">
-                  <SelectValue placeholder="Select your mood" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ALL_MOODS.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <Select value={selectedMood} onValueChange={(value) => setSelectedMood(value as Mood)} disabled={isSubmitting}>
+            <SelectTrigger className="w-full bg-card focus:ring-primary text-foreground">
+              <SelectValue placeholder="Select your mood" />
+            </SelectTrigger>
+            <SelectContent>
+              {ALL_MOODS.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <Button onClick={handleSetMood} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={!selectedMood || !currentUser || isLoading}>
-                Set Mood & Go to Chat
-              </Button>
-            </>
-          ) : (
-            <p className="text-red-600 py-4">Please open ChirpChat and log in to use this feature.</p>
-          )}
-          <Button onClick={() => router.push(isLoggedIn && currentUser ? '/chat' : '/')} className="w-full" variant="outline">
-            {isLoggedIn && currentUser ? "Cancel & Go to Chat" : "Go to Login"}
+          <Button onClick={handleSetMood} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={!selectedMood || isSubmitting}>
+            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Set Mood & Go to Chat"}
+          </Button>
+          <Button onClick={() => router.push('/chat')} className="w-full" variant="outline" disabled={isSubmitting}>
+            Cancel & Go to Chat
           </Button>
         </CardContent>
       </Card>

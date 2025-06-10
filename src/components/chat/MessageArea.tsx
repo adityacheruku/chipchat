@@ -8,29 +8,35 @@ import { useAutoScroll } from '@/hooks/useAutoScroll';
 interface MessageAreaProps {
   messages: Message[];
   currentUser: User;
-  users: User[]; // All users, to find sender details
+  allUsers: Record<string, User>; // Changed from User[] to Record<string, User> for easier lookup
   onToggleReaction: (messageId: string, emoji: SupportedEmoji) => void;
 }
 
-export default function MessageArea({ messages, currentUser, users, onToggleReaction }: MessageAreaProps) {
+export default function MessageArea({ messages, currentUser, allUsers, onToggleReaction }: MessageAreaProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null); 
   const viewportRef = useRef<HTMLDivElement>(null); 
 
   useAutoScroll(viewportRef, [messages]);
   
-  const findUser = (userId: string) => users.find(u => u.id === userId) || currentUser;
+  // If sender info is not in allUsers (e.g., self message before full hydration), default to currentUser info
+  const findUser = (userId: string) => allUsers[userId] || (userId === currentUser.id ? currentUser : null);
 
   return (
     <ScrollArea className="flex-grow p-4 bg-transparent" viewportRef={viewportRef} ref={scrollAreaRef}>
       <div className="space-y-4">
         {messages.map((msg) => {
-          const sender = findUser(msg.userId);
+          const sender = findUser(msg.user_id);
+          if (!sender) {
+            console.warn("Sender not found for message:", msg.id, "senderId:", msg.user_id);
+            // Optionally render a placeholder or skip rendering this message
+            return null;
+          }
           return (
             <MessageBubble
               key={msg.id}
               message={msg}
               sender={sender}
-              isCurrentUser={msg.userId === currentUser.id}
+              isCurrentUser={msg.user_id === currentUser.id}
               currentUserId={currentUser.id}
               onToggleReaction={onToggleReaction}
             />
