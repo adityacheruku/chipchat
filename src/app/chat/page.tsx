@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User, Message as MessageType, Mood, SupportedEmoji } from '@/types';
-import { mockUsers, mockMessages } from '@/lib/mock-data';
+import { mockUsers, mockMessages, ALL_MOODS } from '@/lib/mock-data'; // Ensure ALL_MOODS is imported if not already
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -14,6 +14,8 @@ import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { THINKING_OF_YOU_DURATION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { suggestMood, type SuggestMoodOutput } from '@/ai/flows/suggestMoodFlow';
+import { Button } from '@/components/ui/button';
 
 export default function ChatPage() {
   const router = useRouter();
@@ -27,7 +29,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
 
-  const lastReactionToggleTimes = useRef<Record<string, number>>({}); // { [messageId_emoji]: timestamp }
+  const lastReactionToggleTimes = useRef<Record<string, number>>({}); 
 
   const { 
     activeTargetId: activeThoughtNotificationFor, 
@@ -54,16 +56,15 @@ export default function ChatPage() {
         userToSet = JSON.parse(storedProfileJson) as User;
       } catch (error) {
         console.error("Failed to parse stored user profile:", error);
-        localStorage.removeItem(userProfileKey); // Clear corrupted profile
+        localStorage.removeItem(userProfileKey); 
       }
     }
 
     if (!userToSet) {
       const foundInMock = mockUsers.find(u => u.name.toLowerCase() === activeUsername.toLowerCase());
       if (foundInMock) {
-        userToSet = { ...foundInMock }; // Create a mutable copy
+        userToSet = { ...foundInMock }; 
       } else {
-        // Create a brand new user profile
         userToSet = {
           id: `user_${Date.now()}`,
           name: activeUsername,
@@ -89,7 +90,6 @@ export default function ChatPage() {
         } else {
             users.push(userToSet!);
         }
-        // Deduplicate users based on ID, ensuring the most recent version is kept (implicitly by order of operations above)
         return users.filter((user, index, self) => index === self.findIndex((t) => t.id === user.id));
     });
         
@@ -104,7 +104,6 @@ export default function ChatPage() {
       let newOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
 
       if (!newOtherUser) {
-        // Fallback if no other user exists (e.g., first time run or only one mock user)
         const fallbackOther: User = { 
             id: 'other_dummy_user', 
             name: 'Virtual Friend', 
@@ -114,19 +113,58 @@ export default function ChatPage() {
             lastSeen: Date.now(),
             "data-ai-hint": "person letter V" 
         };
-        // Add fallback to allUsers if not already present
         if (!allUsers.find(u => u.id === fallbackOther.id)) {
              setAllUsers(prev => [...prev, fallbackOther].filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)));
         }
         newOtherUser = fallbackOther;
       }
       
-      // Only update if otherUser is null, or if newOtherUser is different (ID or content)
       if (!otherUser || newOtherUser.id !== otherUser.id || JSON.stringify(newOtherUser) !== JSON.stringify(otherUser)) {
         setOtherUser(newOtherUser);
       }
     }
   }, [currentUser, allUsers, otherUser]);
+
+  const handleMoodSuggestion = async (messageText: string) => {
+    if (!currentUser) return;
+    try {
+      const result: SuggestMoodOutput = await suggestMood({ messageText, currentMood: currentUser.mood });
+      if (result.suggestedMood && result.suggestedMood !== currentUser.mood && ALL_MOODS.includes(result.suggestedMood as Mood)) {
+        const newMood = result.suggestedMood as Mood;
+        toast({
+          title: "Mood Suggestion",
+          description: `AI thinks your message sounds ${newMood}. Update mood? ${result.reasoning ? `(${result.reasoning})` : ''}`,
+          duration: 10000, // Give user time to react
+          action: (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if(currentUser){
+                    const updatedUser = { ...currentUser, mood: newMood };
+                    handleSaveProfile(updatedUser); // This will also save to localStorage
+                    toast({ title: "Mood Updated!", description: `Your mood is now ${newMood}.` });
+                  }
+                }}
+              >
+                Set to {newMood}
+              </Button>
+            </>
+          ),
+        });
+      } else if (result.reasoning) {
+        console.log("AI mood analysis:", result.reasoning);
+      }
+    } catch (error) {
+      console.error("Error suggesting mood:", error);
+      toast({
+        variant: "destructive",
+        title: "Mood AI Error",
+        description: "Could not analyze message sentiment.",
+      });
+    }
+  };
 
 
   const handleSendMessage = (text: string) => {
@@ -139,12 +177,13 @@ export default function ChatPage() {
       reactions: {},
     };
     setMessages(prevMessages => [...prevMessages, newMessage]);
+    handleMoodSuggestion(text); // Call mood suggestion after sending message
   };
 
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser) return;
 
-    const RATE_LIMIT_MS = 1000; // 1 second
+    const RATE_LIMIT_MS = 1000; 
     const key = `${messageId}_${emoji}`;
     const now = Date.now();
 
@@ -153,7 +192,6 @@ export default function ChatPage() {
         title: "Woah there!",
         description: "You're reacting a bit too quickly.",
         duration: 2000,
-        variant: "default", 
       });
       return;
     }
@@ -206,19 +244,21 @@ export default function ChatPage() {
 
     if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
     if (mood1 === 'Excited' && mood2 === 'Excited') return 'bg-mood-excited-excited';
-    if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful') &&
-         (mood2 === 'Chilling' || mood2 === 'Neutral' || mood2 === 'Thoughtful') ) {
-      if (sortedMoods === 'Chilling-Chilling' || sortedMoods === 'Neutral-Neutral' || sortedMoods === 'Thoughtful-Thoughtful' ||
-          sortedMoods === 'Chilling-Neutral' || sortedMoods === 'Chilling-Thoughtful' || sortedMoods === 'Neutral-Thoughtful') {
-        return 'bg-mood-calm-calm';
+    if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful' || mood1 === 'Content') &&
+         (mood2 === 'Chilling' || mood2 === 'Neutral' || mood2 === 'Thoughtful' || mood2 === 'Content') ) {
+      if (ALL_MOODS.includes(mood1) && ALL_MOODS.includes(mood2)) { // Check if moods are valid
+        const calmMoods = ['Chilling', 'Neutral', 'Thoughtful', 'Content'];
+        if (calmMoods.includes(mood1) && calmMoods.includes(mood2)) {
+           return 'bg-mood-calm-calm';
+        }
       }
     }
     if (mood1 === 'Sad' && mood2 === 'Sad') return 'bg-mood-sad-sad';
+    if (mood1 === 'Angry' && mood2 === 'Angry') return 'bg-mood-angry-angry'; // Added for completeness
     
-    // Mixed strong emotions or one strong one neutral might lead to thoughtful
-    if ((mood1 === 'Happy' && mood2 === 'Sad') || (mood1 === 'Sad' && mood2 === 'Happy') ||
-        (mood1 === 'Excited' && (mood2 === 'Sad' || mood2 === 'Chilling')) ||
-        ((mood1 === 'Sad' || mood1 === 'Chilling') && mood2 === 'Excited') ) {
+    if ((mood1 === 'Happy' && (mood2 === 'Sad' || mood2 === 'Angry')) || ((mood1 === 'Sad' || mood1 === 'Angry') && mood2 === 'Happy') ||
+        (mood1 === 'Excited' && (mood2 === 'Sad' || mood2 === 'Chilling' || mood2 === 'Angry')) ||
+        ((mood1 === 'Sad' || mood1 === 'Chilling' || mood1 === 'Angry') && mood2 === 'Excited') ) {
       return 'bg-mood-thoughtful-thoughtful'; 
     }
 
@@ -273,3 +313,4 @@ export default function ChatPage() {
     </div>
   );
 }
+

@@ -4,7 +4,7 @@
 @tailwind utilities;
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'PT Sans', Arial, Helvetica, sans-serif; /* Ensure PT Sans is primary */
 }
 
 @layer base {
@@ -106,7 +106,7 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-body; /* Ensure font-body is applied */
     min-height: 100vh;
   }
 }
@@ -122,10 +122,10 @@ body {
   .bg-mood-happy-happy {
     background-image: linear-gradient(to bottom right, #fff1cc, #ffe0b3); /* Light yellow to light orange */
   }
-  .bg-mood-calm-calm {
+  .bg-mood-calm-calm { /* For Neutral, Chilling, Thoughtful, Content combinations */
     background-image: linear-gradient(to bottom right, #e0f7fa, #d1e9fc); /* Light cyan to light blue */
   }
-  .bg-mood-thoughtful-thoughtful {
+  .bg-mood-thoughtful-thoughtful { /* Fallback for strong mixed, or when one is strong and other is calming */
     background-image: linear-gradient(to bottom right, #ede7f6, #e1d8f1); /* Light purple to softer purple */
   }
   .bg-mood-sad-sad {
@@ -134,7 +134,14 @@ body {
   .bg-mood-excited-excited {
     background-image: linear-gradient(to bottom right, #ffebcc, #ffd8a8); /* Light orange to peachy orange */
   }
+  .bg-mood-angry-angry { /* Added for Angry mood */
+    background-image: linear-gradient(to bottom right, #ffcdd2, #ef9a9a); /* Light red to softer red */
+  }
+  .bg-mood-anxious-anxious { /* Added for Anxious mood, can be same as thoughtful or a unique one */
+    background-image: linear-gradient(to bottom right, #f3e5f5, #e1bee7); /* Light lavender / lilac */
+  }
   .bg-mood-default-chat-area {
     @apply bg-background; /* Default background for message area */
   }
 }
+
