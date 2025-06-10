@@ -9,11 +9,11 @@ import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
-import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal'; // Added import
+import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal';
 import { useToast } from '@/hooks/use-toast'; 
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useAvatar } from '@/hooks/useAvatar';
-import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx'; // Ensure .tsx if it contains JSX
+import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
 import { THINKING_OF_YOU_DURATION, MAX_AVATAR_SIZE_KB, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -33,9 +33,8 @@ export default function ChatPage() {
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
   const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
 
-  // State for FullScreenAvatarModal
   const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
-  const [fullScreenAvatarData, setFullScreenAvatarData] = useState<{url: string, name: string, hint?: string} | null>(null);
+  const [fullScreenUserData, setFullScreenUserData] = useState<User | null>(null);
 
   const lastReactionToggleTimes = useRef<Record<string, number>>({}); 
   const lastMessageTextRef = useRef<string>("");
@@ -120,7 +119,7 @@ export default function ChatPage() {
           mood: 'Neutral',
           isOnline: true,
           lastSeen: Date.now(),
-          phone: undefined, // New users start without a phone
+          phone: undefined, 
           "data-ai-hint": `letter ${activeUsername.charAt(0).toUpperCase()}`,
         };
       }
@@ -153,7 +152,7 @@ export default function ChatPage() {
       const potentialOtherUsers = allUsers.filter(u => u.id !== currentUser.id);
       let newOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
 
-      if (!newOtherUser && allUsers.length === 1 && allUsers[0].id === currentUser.id) { // Only current user exists
+      if (!newOtherUser && allUsers.length === 1 && allUsers[0].id === currentUser.id) { 
         const fallbackOther: User = { 
             id: 'other_dummy_user', 
             name: 'Virtual Friend', 
@@ -168,12 +167,12 @@ export default function ChatPage() {
              setAllUsers(prev => [...prev, fallbackOther].filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)));
         }
         newOtherUser = fallbackOther;
-      } else if (!newOtherUser) { // No other users at all from mock, create fallback
+      } else if (!newOtherUser) { 
          const fallbackOther: User = { 
             id: 'other_dummy_user_2', 
             name: 'Support Bot', 
             avatar: 'https://placehold.co/100x100.png?text=S', 
-            mood: 'Helpful' as Mood, // Custom mood, ensure 'Helpful' is in ALL_MOODS or handle appropriately
+            mood: 'Helpful' as Mood, 
             isOnline: true, 
             lastSeen: Date.now(),
             phone: '+15552223333',
@@ -349,11 +348,7 @@ export default function ChatPage() {
 
   const handleOtherUserAvatarClick = useCallback(() => {
     if (otherUser) {
-      setFullScreenAvatarData({ 
-        url: otherUser.avatar, 
-        name: otherUser.name, 
-        hint: otherUser['data-ai-hint'] 
-      });
+      setFullScreenUserData(otherUser);
       setIsFullScreenAvatarOpen(true);
     }
   }, [otherUser]);
@@ -378,7 +373,7 @@ export default function ChatPage() {
                 onProfileClick={() => setIsProfileModalOpen(true)}
                 onSendThinkingOfYou={handleSendThought}
                 isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
-                onOtherUserAvatarClick={handleOtherUserAvatarClick} // Pass handler to ChatHeader
+                onOtherUserAvatarClick={handleOtherUserAvatarClick}
                 onToggleSidebar={() => { /* Sidebar removed */ }} 
               />
               <MessageArea 
@@ -405,13 +400,11 @@ export default function ChatPage() {
           onAvatarFileChange={handleAvatarFileChange}
         />
       )}
-      {fullScreenAvatarData && (
+      {fullScreenUserData && (
         <FullScreenAvatarModal
           isOpen={isFullScreenAvatarOpen}
           onClose={() => setIsFullScreenAvatarOpen(false)}
-          avatarUrl={fullScreenAvatarData.url}
-          userName={fullScreenAvatarData.name}
-          dataAiHint={fullScreenAvatarData.hint}
+          user={fullScreenUserData}
         />
       )}
       <ReasoningDialog />
