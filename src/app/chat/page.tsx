@@ -3,8 +3,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType } from '@/types';
-import { mockUsers, mockMessages, ALL_MOODS } from '@/lib/mock-data'; 
+import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent } from '@/types';
+import { mockUsers, mockMessages } from '@/lib/mock-data'; 
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -12,11 +12,13 @@ import UserProfileModal from '@/components/chat/UserProfileModal';
 import { useToast } from '@/hooks/use-toast'; 
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useAvatar } from '@/hooks/useAvatar';
+import { useMoodSuggestion } from '@/hooks/useMoodSuggestion';
 import { THINKING_OF_YOU_DURATION, MAX_AVATAR_SIZE_KB, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { suggestMood, type SuggestMoodOutput } from '@/ai/flows/suggestMoodFlow';
-import { Button } from '@/components/ui/button';
+// import { Button } from '@/components/ui/button'; // No longer directly used for AI toast action
+import { formatDistanceToNowStrict } from 'date-fns';
+
 
 export default function ChatPage() {
   const router = useRouter();
@@ -29,8 +31,26 @@ export default function ChatPage() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
+  const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
 
   const lastReactionToggleTimes = useRef<Record<string, number>>({}); 
+  const lastMessageTextRef = useRef<string>(""); // For AI mood suggestion retry
+
+  const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string) => {
+    setAppEvents(prevEvents => {
+      const newEvent: AppEvent = {
+        id: `event_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: Date.now(),
+        type,
+        description,
+        userId,
+        userName,
+      };
+      // Keep only the last N events, e.g., 50
+      return [newEvent, ...prevEvents].slice(0, 50);
+    });
+  }, []);
+
 
   const { 
     activeTargetId: activeThoughtNotificationFor, 
@@ -46,6 +66,24 @@ export default function ChatPage() {
     setAvatarPreview,
   } = useAvatar({ maxSizeKB: MAX_AVATAR_SIZE_KB, toast });
 
+
+  const handleMoodChangeForAISuggestion = useCallback((newMood: Mood) => {
+    if (currentUser) {
+      const updatedUser = { ...currentUser, mood: newMood };
+      handleSaveProfile(updatedUser, false); // Save profile without adding a separate event for mood change
+      addAppEvent('moodChange', `${currentUser.name} updated mood to ${newMood} via AI suggestion.`, currentUser.id, currentUser.name);
+    }
+  }, [currentUser, addAppEvent]);
+
+  const { 
+    isLoadingAISuggestion, 
+    suggestMood: aiSuggestMood,
+    ReasoningDialog 
+  } = useMoodSuggestion({
+    currentUserMood: currentUser?.mood || 'Neutral',
+    onMoodChange: handleMoodChangeForAISuggestion,
+    currentMessageTextRef: lastMessageTextRef,
+  });
 
   useEffect(() => {
     const activeUsername = localStorage.getItem('chirpChatActiveUsername');
@@ -133,48 +171,6 @@ export default function ChatPage() {
     }
   }, [currentUser, allUsers, otherUser]);
 
-  const handleMoodSuggestion = async (messageText: string) => {
-    if (!ENABLE_AI_MOOD_SUGGESTION || !currentUser) return;
-
-    try {
-      const result: SuggestMoodOutput = await suggestMood({ messageText, currentMood: currentUser.mood });
-      if (result.suggestedMood && result.suggestedMood !== currentUser.mood && ALL_MOODS.includes(result.suggestedMood as Mood)) {
-        const newMood = result.suggestedMood as Mood;
-        toast({
-          title: "Mood Suggestion",
-          description: `AI thinks your message sounds ${newMood}. Update mood? ${result.reasoning ? `(${result.reasoning})` : ''}`,
-          duration: 10000, 
-          action: (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if(currentUser){
-                    const updatedUser = { ...currentUser, mood: newMood };
-                    handleSaveProfile(updatedUser);
-                    toast({ title: "Mood Updated!", description: `Your mood is now ${newMood}.` });
-                  }
-                }}
-              >
-                Set to {newMood}
-              </Button>
-            </>
-          ),
-        });
-      } else if (result.reasoning) {
-        // console.log("AI mood analysis:", result.reasoning); // Optionally log neutral suggestions
-      }
-    } catch (error) {
-      console.error("Error suggesting mood:", error);
-      toast({
-        variant: "destructive",
-        title: "Mood AI Error",
-        description: "Could not analyze message sentiment.",
-      });
-    }
-  };
-
 
   const handleSendMessage = (text: string) => {
     if (!currentUser) return;
@@ -186,11 +182,29 @@ export default function ChatPage() {
       reactions: {},
     };
     setMessages(prevMessages => [...prevMessages, newMessage]);
-    handleMoodSuggestion(text); 
+    addAppEvent('messageSent', `${currentUser.name} sent a message: "${text.substring(0,30)}..."`, currentUser.id, currentUser.name);
+
+    if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) {
+      lastMessageTextRef.current = text; // Store for potential retry
+      aiSuggestMood(text);
+    }
   };
 
   const handleSendMoodClip = (clipType: MessageClipType) => {
     if (!currentUser) return;
+
+    // Simulate permission check
+    const hasPermission = Math.random() > 0.2; // 80% chance of having permission (for testing)
+    if (!hasPermission) {
+        toast({
+            variant: 'destructive',
+            title: 'Permissions Required',
+            description: `ChirpChat needs access to your ${clipType === 'audio' ? 'microphone' : 'camera and microphone'} to send mood clips. Please grant permission in your browser settings.`,
+            duration: 7000,
+        });
+        return;
+    }
+
     const placeholderText = clipType === 'audio' ? `${currentUser.name} sent an audio mood clip.` : `${currentUser.name} sent a video mood clip.`;
     const newMessage: MessageType = {
       id: `clip_${Date.now()}`,
@@ -201,6 +215,7 @@ export default function ChatPage() {
       reactions: {},
     };
     setMessages(prevMessages => [...prevMessages, newMessage]);
+    addAppEvent('moodClipSent', `${currentUser.name} sent a ${clipType} mood clip.`, currentUser.id, currentUser.name);
     toast({
       title: "Mood Clip Sent (Mock)",
       description: `Your ${clipType} mood clip placeholder has been added to the chat.`,
@@ -225,9 +240,13 @@ export default function ChatPage() {
     }
     lastReactionToggleTimes.current[key] = now;
 
+    let reactionAdded = false;
+    let reactedMessageText = "";
+
     setMessages(prevMessages => 
       prevMessages.map(msg => {
         if (msg.id === messageId) {
+          reactedMessageText = msg.text?.substring(0, 20) || "a clip";
           const updatedReactions = { ...(msg.reactions || {}) };
           const existingReactors = updatedReactions[emoji] || [];
           
@@ -238,17 +257,24 @@ export default function ChatPage() {
             }
           } else {
             updatedReactions[emoji] = [...existingReactors, currentUser.id];
+            reactionAdded = true; // Reaction was added, not removed
           }
           return { ...msg, reactions: updatedReactions };
         }
         return msg;
       })
     );
-  }, [currentUser, toast]);
 
-  const handleSaveProfile = (updatedUser: User) => {
+    if (reactionAdded) {
+        addAppEvent('reactionAdded', `${currentUser.name} reacted with ${emoji} to "${reactedMessageText}..."`, currentUser.id, currentUser.name);
+    }
+  }, [currentUser, toast, addAppEvent]);
+
+  const handleSaveProfile = (updatedUser: User, triggerEvent: boolean = true) => {
     if (!currentUser) return;
+    const oldMood = currentUser.mood;
     const newCurrentUser = {...updatedUser, isOnline: true, lastSeen: Date.now()};
+    
     setCurrentUser(newCurrentUser);
     setAllUsers(prevUsers => 
         prevUsers.map(u => u.id === newCurrentUser.id ? newCurrentUser : u)
@@ -259,12 +285,16 @@ export default function ChatPage() {
     if (originalLoginUsername) {
         localStorage.setItem(`chirpChatUserProfile_${originalLoginUsername}`, JSON.stringify(newCurrentUser));
     }
+    if (triggerEvent && oldMood !== newCurrentUser.mood) {
+        addAppEvent('moodChange', `${newCurrentUser.name} updated mood to ${newCurrentUser.mood}.`, newCurrentUser.id, newCurrentUser.name);
+    }
   };
 
   const handleSendThought = useCallback((targetUserId: string) => {
     if (!currentUser || !otherUser) return;
     initiateThoughtNotification(targetUserId, otherUser.name, currentUser.name);
-  }, [currentUser, otherUser, initiateThoughtNotification]);
+    addAppEvent('thoughtPingSent', `${currentUser.name} sent a 'thinking of you' to ${otherUser.name}.`, currentUser.id, currentUser.name);
+  }, [currentUser, otherUser, initiateThoughtNotification, addAppEvent]);
 
   const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
     if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
@@ -273,12 +303,10 @@ export default function ChatPage() {
     if (mood1 === 'Excited' && mood2 === 'Excited') return 'bg-mood-excited-excited';
     if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful' || mood1 === 'Content') &&
          (mood2 === 'Chilling' || mood2 === 'Neutral' || mood2 === 'Thoughtful' || mood2 === 'Content') ) {
-      if (ALL_MOODS.includes(mood1) && ALL_MOODS.includes(mood2)) { 
         const calmMoods = ['Chilling', 'Neutral', 'Thoughtful', 'Content'];
         if (calmMoods.includes(mood1) && calmMoods.includes(mood2)) {
            return 'bg-mood-calm-calm';
         }
-      }
     }
     if (mood1 === 'Sad' && mood2 === 'Sad') return 'bg-mood-sad-sad';
     if (mood1 === 'Angry' && mood2 === 'Angry') return 'bg-mood-angry-angry';
@@ -312,26 +340,31 @@ export default function ChatPage() {
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
-      <div className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
-        <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try resetting or refreshing the page.">
-          <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden">
-            <ChatHeader
-              currentUser={currentUser}
-              otherUser={otherUser}
-              onProfileClick={() => setIsProfileModalOpen(true)}
-              onSendThinkingOfYou={handleSendThought}
-              isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
-            />
-            <MessageArea 
-              messages={messages} 
-              currentUser={currentUser} 
-              users={allUsers}
-              onToggleReaction={handleToggleReaction} 
-            />
-            <InputBar onSendMessage={handleSendMessage} onSendMoodClip={handleSendMoodClip} />
-          </div>
-        </ErrorBoundary>
-      </div>
+        <div className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
+          <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try resetting or refreshing the page.">
+            <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden">
+              <ChatHeader
+                currentUser={currentUser}
+                otherUser={otherUser}
+                onProfileClick={() => setIsProfileModalOpen(true)}
+                onSendThinkingOfYou={handleSendThought}
+                isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
+                onToggleSidebar={() => { /* Sidebar removed, this can be removed if not used elsewhere */ }} 
+              />
+              <MessageArea 
+                messages={messages} 
+                currentUser={currentUser} 
+                users={allUsers}
+                onToggleReaction={handleToggleReaction} 
+              />
+              <InputBar 
+                onSendMessage={handleSendMessage} 
+                onSendMoodClip={handleSendMoodClip}
+                isSending={isLoadingAISuggestion} // Pass loading state to InputBar
+              />
+            </div>
+          </ErrorBoundary>
+        </div>
       {isProfileModalOpen && currentUser && (
         <UserProfileModal
           isOpen={isProfileModalOpen}
@@ -342,6 +375,7 @@ export default function ChatPage() {
           onAvatarFileChange={handleAvatarFileChange}
         />
       )}
+      <ReasoningDialog />
     </div>
   );
 }

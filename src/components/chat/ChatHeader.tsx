@@ -2,7 +2,7 @@
 import type { User } from '@/types';
 import MoodIndicator from './MoodIndicator';
 import { Button } from '@/components/ui/button';
-import { Settings, Heart } from 'lucide-react';
+import { Settings, Heart, PanelLeftOpen } from 'lucide-react'; // PanelLeftOpen might be removed if sidebar is removed
 import Image from 'next/image';
 import {
   Tooltip,
@@ -19,6 +19,7 @@ interface ChatHeaderProps {
   onProfileClick: () => void;
   onSendThinkingOfYou: (targetUserId: string) => void;
   isTargetUserBeingThoughtOf: boolean;
+  onToggleSidebar?: () => void; // Made optional as sidebar might be removed
 }
 
 export default function ChatHeader({ 
@@ -27,10 +28,11 @@ export default function ChatHeader({
   onProfileClick, 
   onSendThinkingOfYou, 
   isTargetUserBeingThoughtOf,
+  onToggleSidebar 
 }: ChatHeaderProps) {
   let presenceStatusText = `${otherUser.name} is offline.`;
   let formattedLastSeen = "Last seen: N/A";
-  let srPresenceText = `${otherUser.name} is offline.`;
+  let srPresenceText = `${otherUser.name} is offline. Last seen information not available.`;
 
   if (otherUser.isOnline) {
     presenceStatusText = `${otherUser.name} is online.`;
@@ -44,16 +46,33 @@ export default function ChatHeader({
       formattedLastSeen = `Last seen: ${formatDistanceToNowStrict(lastSeenDate, { addSuffix: true })}`;
     }
     presenceStatusText = `${otherUser.name} is offline. ${formattedLastSeen}`;
-    srPresenceText = presenceStatusText;
-  } else {
-     presenceStatusText = `${otherUser.name} is offline. Last seen: N/A`;
-     srPresenceText = presenceStatusText;
+    srPresenceText = `${otherUser.name} is offline. ${formattedLastSeen}`;
   }
 
 
   return (
     <header className="flex items-center justify-between p-4 border-b border-border bg-card rounded-t-lg">
       <div className="flex items-center space-x-3">
+        {onToggleSidebar && ( // Conditionally render sidebar toggle if function is provided
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={onToggleSidebar} 
+                        className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full mr-2 md:hidden" // Example: show on mobile, or always if needed
+                        aria-label="Toggle Event Timeline"
+                    >
+                        <PanelLeftOpen size={20} />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Toggle Event Timeline</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+        )}
         <div className="relative">
           <Image 
             src={otherUser.avatar} 
@@ -136,3 +155,4 @@ export default function ChatHeader({
     </header>
   );
 }
+
