@@ -111,7 +111,13 @@ body {
   }
 }
 
-/* Dynamic Mood Backgrounds - Phase 3 */
+/* 
+  Dynamic Mood Backgrounds - Phase 3 
+  Important: Verify text and input legibility on each gradient.
+  Check against WCAG AA contrast standards, especially for foreground text,
+  input placeholders, and button text. Consider a semi-transparent overlay 
+  behind text areas if contrast is insufficient on certain gradients.
+*/
 @layer utilities {
   .bg-mood-happy-happy {
     background-image: linear-gradient(to bottom right, #fff1cc, #ffe0b3); /* Light yellow to light orange */

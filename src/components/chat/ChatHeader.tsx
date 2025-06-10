@@ -11,6 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
+import { differenceInDays } from 'date-fns';
 
 interface ChatHeaderProps {
   currentUser: User;
@@ -21,10 +22,24 @@ interface ChatHeaderProps {
 }
 
 export default function ChatHeader({ currentUser, otherUser, onProfileClick, onSendThinkingOfYou, isTargetUserBeingThoughtOf }: ChatHeaderProps) {
-  const lastSeenDate = otherUser.lastSeen ? new Date(otherUser.lastSeen) : null;
-  const formattedLastSeen = lastSeenDate 
-    ? `Last seen: ${lastSeenDate.toLocaleDateString()} at ${lastSeenDate.toLocaleTimeString()}`
-    : 'Last seen: N/A';
+  let presenceStatusText = `${otherUser.name} is offline.`;
+  let formattedLastSeen = "Last seen: N/A";
+
+  if (otherUser.isOnline) {
+    presenceStatusText = `${otherUser.name} is online.`;
+    formattedLastSeen = "Currently online";
+  } else if (otherUser.lastSeen) {
+    const lastSeenDate = new Date(otherUser.lastSeen);
+    if (differenceInDays(new Date(), lastSeenDate) > 7) {
+      formattedLastSeen = "Last seen a while ago";
+    } else {
+      formattedLastSeen = `Last seen: ${lastSeenDate.toLocaleDateString()} at ${lastSeenDate.toLocaleTimeString()}`;
+    }
+    presenceStatusText = `${otherUser.name} is offline. ${formattedLastSeen}`;
+  } else {
+     presenceStatusText = `${otherUser.name} is offline. Last seen: N/A`;
+  }
+
 
   return (
     <header className="flex items-center justify-between p-4 border-b border-border bg-card rounded-t-lg">
@@ -39,29 +54,23 @@ export default function ChatHeader({ currentUser, otherUser, onProfileClick, onS
             data-ai-hint={otherUser['data-ai-hint'] || "person portrait"}
             key={otherUser.avatar} // Force re-render if avatar changes
           />
-          {otherUser.isOnline ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-green-500 border-2 border-card ring-1 ring-green-500" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{otherUser.name} is online</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-gray-400 border-2 border-card ring-1 ring-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{otherUser.name} is offline. {formattedLastSeen}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className={cn(
+                    "absolute bottom-0 right-0 block h-3 w-3 rounded-full border-2 border-card ring-1",
+                    otherUser.isOnline ? "bg-green-500 ring-green-500" : "bg-gray-400 ring-gray-400"
+                  )}
+                  aria-hidden="true" 
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{otherUser.isOnline ? `${otherUser.name} is online` : `${otherUser.name} is offline. ${formattedLastSeen}`}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+           <span className="sr-only">{presenceStatusText}</span>
         </div>
         <div>
           <div className="flex items-center space-x-2">

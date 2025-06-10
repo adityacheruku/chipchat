@@ -17,6 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useState, useEffect, useRef } from 'react';
 
 interface MessageBubbleProps {
   message: Message;
@@ -32,6 +33,34 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
 
   const formattedTimestamp = new Date(message.timestamp);
+
+  const prevReactionsRef = useRef<Message['reactions']>();
+  const [animatedEmojis, setAnimatedEmojis] = useState<Record<SupportedEmoji, boolean>>({});
+
+  useEffect(() => {
+    const newAnimations: Record<SupportedEmoji, boolean> = {};
+    let hasChanges = false;
+
+    ALL_SUPPORTED_EMOJIS.forEach(emoji => {
+      const prevCount = prevReactionsRef.current?.[emoji]?.length || 0;
+      const currentCount = message.reactions?.[emoji]?.length || 0;
+
+      if (currentCount !== prevCount) { // Animate if count changes (add or remove)
+        newAnimations[emoji] = true;
+        hasChanges = true;
+      }
+    });
+
+    if (hasChanges) {
+      setAnimatedEmojis(newAnimations);
+      const timer = setTimeout(() => setAnimatedEmojis({}), 300); // Duration of animation
+      return () => clearTimeout(timer);
+    }
+
+    // Store deep copy for next comparison
+    prevReactionsRef.current = message.reactions ? JSON.parse(JSON.stringify(message.reactions)) : {};
+  }, [message.reactions]);
+
 
   const handleReactionClick = (emoji: SupportedEmoji) => {
     onToggleReaction(message.id, emoji);
@@ -80,7 +109,10 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
           {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
             const reactors = message.reactions?.[emoji];
             if (!reactors || reactors.length === 0) return null;
+            
             const currentUserReacted = reactors.includes(currentUserId);
+            const isAnimated = animatedEmojis[emoji];
+
             return (
               <button
                 key={emoji}
@@ -89,7 +121,8 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
                   "text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-colors",
                   currentUserReacted 
                     ? (isCurrentUser ? "bg-primary-foreground/30 border-primary-foreground/50 text-primary-foreground" : "bg-accent text-accent-foreground border-accent/80")
-                    : (isCurrentUser ? "bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-primary-foreground/20" : "bg-background/50 border-border hover:bg-muted")
+                    : (isCurrentUser ? "bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-primary-foreground/20" : "bg-background/50 border-border hover:bg-muted"),
+                  isAnimated && "animate-pop" 
                 )}
                 aria-label={`React with ${emoji}, current count ${reactors.length}. ${currentUserReacted ? 'You reacted.' : 'Click to react.'}`}
               >
@@ -118,25 +151,23 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
           width={32}
           height={32}
           className={cn(
-            "rounded-full object-cover",
-            isCurrentUser ? "self-end" : "" // For !isCurrentUser, avatar is aligned by parent's items-start
+            "rounded-full object-cover self-start mt-1", // Ensure avatar aligns with name/top of bubble
+             isCurrentUser ? "self-end mb-0.5" : "" 
           )}
           data-ai-hint={sender['data-ai-hint'] || "person portrait"}
         />
-        {isCurrentUser ? (
-          messageContentDiv
-        ) : (
-          <div className="flex flex-col">
-            <p className="text-xs font-semibold text-secondary-foreground mb-0.5">{sender.name}</p>
-            {messageContentDiv}
-          </div>
-        )}
+         <div className="flex flex-col w-full">
+          {!isCurrentUser && (
+            <p className="text-xs font-semibold text-secondary-foreground mb-0.5 ml-0.5">{sender.name}</p>
+          )}
+          {messageContentDiv}
+        </div>
       </div>
       
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <p className={cn('text-xs text-muted-foreground mt-1 px-2 cursor-default', isCurrentUser ? 'text-right' : 'text-left')}>
+            <p className={cn('text-xs text-muted-foreground mt-1 px-2 cursor-default', isCurrentUser ? 'text-right' : 'text-left ml-10')}> {/* Adjust margin for non-current user timestamp */}
               {format(formattedTimestamp, 'p')}
             </p>
           </TooltipTrigger>
