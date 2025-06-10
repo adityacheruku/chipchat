@@ -17,6 +17,8 @@ import Image from 'next/image';
 import type { FormEvent, ChangeEvent } from 'react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useAvatar } from '@/hooks/useAvatar';
+import { MAX_AVATAR_SIZE_KB } from '@/config/app-config';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -28,29 +30,30 @@ interface UserProfileModalProps {
 export default function UserProfileModal({ isOpen, onClose, user, onSave }: UserProfileModalProps) {
   const [name, setName] = useState(user?.name || '');
   const [mood, setMood] = useState<Mood>(user?.mood || 'Neutral');
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null);
   const { toast } = useToast();
+
+  const {
+    avatarPreview,
+    // avatarError, // Error is handled by toast within the hook
+    handleFileChange,
+    setAvatarPreview,
+    // clearAvatarError // Can be used if displaying error in modal UI
+  } = useAvatar({ maxSizeKB: MAX_AVATAR_SIZE_KB, toast });
+
 
   useEffect(() => {
     if (user) {
       setName(user.name);
       setMood(user.mood);
-      setAvatarPreview(user.avatar);
+      setAvatarPreview(user.avatar); // Initialize preview with current avatar
     }
-  }, [user]);
+  }, [user, setAvatarPreview]);
 
   if (!user) return null;
 
-  const handleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  const internalHandleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
+    handleFileChange(e, user.avatar);
+  }
 
   const handleSave = (e: FormEvent) => {
     e.preventDefault();
@@ -59,7 +62,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onSave }: User
       name,
       mood,
       avatar: avatarPreview || user.avatar, // Use preview if available, else original
-      "data-ai-hint": avatarPreview ? undefined : user["data-ai-hint"], // Remove hint if custom avatar
+      "data-ai-hint": (avatarPreview && avatarPreview !== user.avatar) ? undefined : user["data-ai-hint"], // Remove hint if custom avatar uploaded
     };
     onSave(updatedUser);
     toast({
@@ -82,12 +85,13 @@ export default function UserProfileModal({ isOpen, onClose, user, onSave }: User
           <div className="grid gap-6 py-4">
             <div className="flex items-center justify-center">
               <Image
-                src={avatarPreview || user.avatar || "https://placehold.co/100x100.png"}
+                src={avatarPreview || "https://placehold.co/100x100.png"}
                 alt={name || "User avatar"}
                 width={80}
                 height={80}
                 className="rounded-full object-cover"
                 data-ai-hint={avatarPreview ? undefined : user["data-ai-hint"] || "person portrait"}
+                key={avatarPreview} // Force re-render if preview changes to same URL but different content (less likely here)
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -108,7 +112,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onSave }: User
               <Input
                 id="avatar-upload"
                 type="file"
-                onChange={handleAvatarChange}
+                onChange={internalHandleAvatarChange}
                 className="col-span-3 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 accept="image/*"
               />

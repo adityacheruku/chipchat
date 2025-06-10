@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User, Message as MessageType } from '@/types';
 import { mockUsers, mockMessages } from '@/lib/mock-data';
@@ -9,13 +9,14 @@ import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
-import { useToast } from '@/hooks/use-toast';
-
-const THINKING_OF_YOU_DURATION = 30 * 1000; // 30 seconds for testing, original 10 * 60 * 1000 for 10 mins
+import { useToast, toast as globalToast } from '@/hooks/use-toast'; // Renamed to avoid conflict
+import { useThoughtNotification } from '@/hooks/useThoughtNotification';
+import { THINKING_OF_YOU_DURATION } from '@/config/app-config';
 
 export default function ChatPage() {
   const router = useRouter();
-  const { toast } = useToast();
+  // const { toast } = useToast(); // useToast hook for local context if needed, globalToast for direct calls
+  
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [otherUser, setOtherUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -23,8 +24,14 @@ export default function ChatPage() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [activeThoughtNotificationFor, setActiveThoughtNotificationFor] = useState<string | null>(null);
-  const thoughtTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const { 
+    activeTargetId: activeThoughtNotificationFor, 
+    initiateThoughtNotification 
+  } = useThoughtNotification({ 
+    duration: THINKING_OF_YOU_DURATION, 
+    toast: globalToast // Pass the global toast function
+  });
+
 
   useEffect(() => {
     const activeUsername = localStorage.getItem('chirpChatActiveUsername');
@@ -74,24 +81,17 @@ export default function ChatPage() {
         }
         return users;
     });
-    
-    // This effect runs when allUsers is updated, which happens after currentUser is set.
-    // We need to select otherUser *after* allUsers is guaranteed to contain the currentUser.
-    // To do this safely, let's move otherUser selection logic to another effect or ensure it runs after allUsers update.
-    // For now, assuming allUsers will contain currentUser for the first render after login.
-    // A more robust way would be to derive otherUser inside the render or use a separate effect dependent on `allUsers`.
-    
-    // Initial setup of otherUser
-    if (userToSet) { // Ensure currentUser is set before determining otherUser
+        
+    if (userToSet) { 
         const potentialOtherUsers = allUsers.filter(u => u.id !== userToSet!.id);
         let assignedOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
 
         if (!assignedOtherUser && mockUsers.length > 0) {
              const mockOtherUsers = mockUsers.filter(u => u.id !== userToSet!.id);
-             assignedOtherUser = mockOtherUsers.length > 0 ? mockOtherUsers[0] : mockUsers[0]; // Fallback to first mock if current is the only one different
+             assignedOtherUser = mockOtherUsers.length > 0 ? mockOtherUsers[0] : mockUsers[0];
         }
         
-        if (!assignedOtherUser) { // If still no other user (e.g. only one user in system)
+        if (!assignedOtherUser) { 
             assignedOtherUser = { 
                 id: 'other_dummy', 
                 name: 'Virtual Friend', 
@@ -99,7 +99,6 @@ export default function ChatPage() {
                 mood: 'Neutral', 
                 "data-ai-hint": "person letter V" 
             };
-            // Add this dummy user to allUsers if not already present, so it can be found by ID
             setAllUsers(prev => {
                 if (!prev.find(u => u.id === assignedOtherUser!.id)) {
                     return [...prev, assignedOtherUser!];
@@ -113,21 +112,16 @@ export default function ChatPage() {
     setMessages(mockMessages);
     setIsLoading(false);
 
-    // Cleanup timeouts on unmount
-    return () => {
-      Object.values(thoughtTimeoutsRef.current).forEach(clearTimeout);
-    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]); // Only router as dependency for initial load logic. AllUsers updates handled separately if needed.
+  }, [router]);
 
 
-  // Effect to update otherUser when allUsers changes (e.g. profile update) or currentUser changes
   useEffect(() => {
     if (currentUser && allUsers.length > 0) {
         const potentialOtherUsers = allUsers.filter(u => u.id !== currentUser.id);
         let newOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
 
-        if (!newOtherUser) { // Fallback logic similar to above
+        if (!newOtherUser) { 
             const mockOtherUsers = mockUsers.filter(u => u.id !== currentUser.id);
             newOtherUser = mockOtherUsers.length > 0 ? mockOtherUsers[0] : (mockUsers.length > 0 ? mockUsers[0] : null);
         }
@@ -139,7 +133,7 @@ export default function ChatPage() {
                 mood: 'Neutral', 
                 "data-ai-hint": "person letter V" 
             };
-             setAllUsers(prev => { // Ensure this new dummy is added if needed
+             setAllUsers(prev => { 
                 if (!prev.find(u => u.id === newOtherUser!.id)) {
                     return [...prev, newOtherUser!];
                 }
@@ -153,7 +147,6 @@ export default function ChatPage() {
         if (newOtherUser && newOtherUser.id !== otherUser?.id) {
             setOtherUser(newOtherUser);
         } else if (newOtherUser && newOtherUser.id === otherUser?.id) {
-            // If it's the same user, check if their details (avatar, mood) changed
             const otherUserFromAllUsers = allUsers.find(u => u.id === newOtherUser.id);
             if (otherUserFromAllUsers && JSON.stringify(otherUserFromAllUsers) !== JSON.stringify(otherUser)) {
                 setOtherUser(otherUserFromAllUsers);
@@ -180,31 +173,15 @@ export default function ChatPage() {
     
     const originalLoginUsername = localStorage.getItem('chirpChatActiveUsername');
     if (originalLoginUsername) {
+        // Use the original login username to key the profile, even if the display name changes
         localStorage.setItem(`chirpChatUserProfile_${originalLoginUsername}`, JSON.stringify(updatedUser));
     }
-
-    // toast is now called from UserProfileModal after onSave
   };
 
-  const handleSendThinkingOfYou = useCallback((targetUserId: string) => {
-    if (!currentUser) return;
-
-    setActiveThoughtNotificationFor(targetUserId);
-    toast({
-      title: "Sent!",
-      description: `You let ${otherUser?.name || 'them'} know you're thinking of them.`,
-      duration: 3000,
-    });
-
-    if (thoughtTimeoutsRef.current[targetUserId]) {
-      clearTimeout(thoughtTimeoutsRef.current[targetUserId]);
-    }
-
-    thoughtTimeoutsRef.current[targetUserId] = setTimeout(() => {
-      setActiveThoughtNotificationFor(currentId => (currentId === targetUserId ? null : currentId));
-      delete thoughtTimeoutsRef.current[targetUserId];
-    }, THINKING_OF_YOU_DURATION);
-  }, [currentUser, otherUser?.name, toast]);
+  const handleSendThought = useCallback((targetUserId: string) => {
+    if (!currentUser || !otherUser) return;
+    initiateThoughtNotification(targetUserId, otherUser.name, currentUser.name);
+  }, [currentUser, otherUser, initiateThoughtNotification]);
 
 
   if (isLoading || !currentUser || !otherUser) {
@@ -222,7 +199,7 @@ export default function ChatPage() {
           currentUser={currentUser}
           otherUser={otherUser}
           onProfileClick={() => setIsProfileModalOpen(true)}
-          onSendThinkingOfYou={handleSendThinkingOfYou}
+          onSendThinkingOfYou={handleSendThought}
           isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
         />
         <MessageArea messages={messages} currentUser={currentUser} users={allUsers} />
