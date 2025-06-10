@@ -1,7 +1,9 @@
+
 import type { Message, User } from '@/types';
 import MessageBubble from './MessageBubble';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
+import { useAutoScroll } from '@/hooks/useAutoScroll';
 
 interface MessageAreaProps {
   messages: Message[];
@@ -10,14 +12,10 @@ interface MessageAreaProps {
 }
 
 export default function MessageArea({ messages, currentUser, users }: MessageAreaProps) {
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const viewportRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null); // Ref for the ScrollArea component itself
+  const viewportRef = useRef<HTMLDivElement>(null); // Ref for the viewport div inside ScrollArea
 
-  useEffect(() => {
-    if (viewportRef.current) {
-      viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
-    }
-  }, [messages]);
+  useAutoScroll(viewportRef, [messages]);
   
   const findUser = (userId: string) => users.find(u => u.id === userId) || currentUser;
 

@@ -1,7 +1,14 @@
+
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile } from 'lucide-react'; // Smile for emoji icon
+import { Send, Smile } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface InputBarProps {
   onSendMessage: (text: string) => void;
@@ -23,21 +30,35 @@ export default function InputBar({ onSendMessage }: InputBarProps) {
       onSubmit={handleSubmit}
       className="flex items-center p-3 border-t border-border bg-card rounded-b-lg"
     >
-      <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full mr-2">
-        <Smile size={22} />
-        <span className="sr-only">Emoji</span>
-      </Button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              type="button" 
+              className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full mr-2 focus-visible:ring-ring"
+              aria-label="Open emoji picker (coming soon)"
+            >
+              <Smile size={22} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Emoji - Coming Soon!</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <Input
         type="text"
         placeholder="Type a message..."
         value={messageText}
         onChange={(e) => setMessageText(e.target.value)}
-        className="flex-grow bg-card border-input focus:ring-primary mr-2"
+        className="flex-grow bg-card border-input focus-visible:ring-ring mr-2"
         autoComplete="off"
       />
-      <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground rounded-full">
+      <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground rounded-full focus-visible:ring-ring">
         <Send size={20} />
-        <span className="sr-only">Send</span>
+        <span className="sr-only">Send message</span>
       </Button>
     </form>
   );

@@ -1,8 +1,9 @@
+
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User, Message as MessageType, Mood } from '@/types';
+import type { User, Message as MessageType } from '@/types';
 import { mockUsers, mockMessages } from '@/lib/mock-data';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
@@ -21,48 +22,72 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const storedUsername = localStorage.getItem('chirpChatUser');
-    if (!storedUsername) {
+    const activeUsername = localStorage.getItem('chirpChatActiveUsername');
+    if (!activeUsername) {
       router.push('/');
       return;
     }
 
-    let user = allUsers.find(u => u.name.toLowerCase() === storedUsername.toLowerCase());
-    if (!user) {
-      user = {
-        id: `user_${Date.now()}`,
-        name: storedUsername,
-        avatar: `https://placehold.co/100x100.png?text=${storedUsername.charAt(0).toUpperCase()}`,
-        mood: 'Neutral',
-      };
-      setAllUsers(prevUsers => [...prevUsers, user!]); // Add new user to the list
+    let userToSet: User | null = null;
+    const userProfileKey = `chirpChatUserProfile_${activeUsername}`;
+    const storedProfileJson = localStorage.getItem(userProfileKey);
+
+    if (storedProfileJson) {
+      try {
+        userToSet = JSON.parse(storedProfileJson) as User;
+      } catch (error) {
+        console.error("Failed to parse stored user profile:", error);
+        localStorage.removeItem(userProfileKey); // Clear corrupted data
+      }
+    }
+
+    if (!userToSet) {
+      let foundInMock = mockUsers.find(u => u.name.toLowerCase() === activeUsername.toLowerCase());
+      if (foundInMock) {
+        userToSet = { ...foundInMock }; // Use a copy
+      } else {
+        // Create a new default user if not in mock and no stored profile
+        userToSet = {
+          id: `user_${Date.now()}`,
+          name: activeUsername,
+          avatar: `https://placehold.co/100x100.png?text=${activeUsername.charAt(0).toUpperCase()}`,
+          mood: 'Neutral',
+        };
+      }
+      // Persist this newly determined/created user profile
+      localStorage.setItem(userProfileKey, JSON.stringify(userToSet));
     }
     
-    setCurrentUser(user);
+    setCurrentUser(userToSet);
 
+    // Ensure allUsers state contains the currentUser if they are new
+    if (userToSet && !allUsers.find(u => u.id === userToSet!.id)) {
+        setAllUsers(prevUsers => {
+            // Avoid duplicates if already added by another logic path
+            if (prevUsers.find(u => u.id === userToSet!.id)) return prevUsers;
+            return [...prevUsers, userToSet!];
+        });
+    } else if (userToSet && allUsers.find(u => u.id === userToSet!.id)) {
+        // If user exists, ensure it's updated from localStorage potentially
+        setAllUsers(prevUsers => prevUsers.map(u => u.id === userToSet!.id ? userToSet! : u));
+    }
+
+
+    // Determine otherUser. This logic remains largely the same but uses the updated allUsers.
     // For simplicity, 'otherUser' is the first mock user different from currentUser
     // or the second if currentUser is the first.
-    let assignedOtherUser = allUsers.find(u => u.id !== user!.id);
-    if (!assignedOtherUser && allUsers.length > 1) { // Handle if only one user was in mockUsers and it was current
-        assignedOtherUser = allUsers.find(u => u.id === user!.id) === allUsers[0] ? allUsers[1] : allUsers[0];
-    } else if (!assignedOtherUser) { // No other users at all, create a default one or handle appropriately
-        // For now, if no other user, this might be an issue. Let's assume mockUsers has at least one other.
-        // This scenario should be rare if mockUsers has multiple entries.
-        // If only one user exists (the current user), then otherUser will be null.
-        // For this phase, let's assume we always find an otherUser if mockUsers.length > 0
-        if (mockUsers.length > 0) {
-          assignedOtherUser = mockUsers[0].id !== user!.id ? mockUsers[0] : (mockUsers[1] || mockUsers[0]);
-        } else {
-          // Fallback: create a dummy other user if mockUsers is empty
-          assignedOtherUser = { id: 'other_dummy', name: 'Virtual Friend', avatar: 'https://placehold.co/100x100.png?text=V', mood: 'Neutral' };
-          setAllUsers(prev => [...prev, assignedOtherUser!]);
-        }
+    let assignedOtherUser = allUsers.find(u => u.id !== userToSet!.id);
+     if (!assignedOtherUser && mockUsers.length > 0) { // Fallback if allUsers only had currentUser
+        assignedOtherUser = mockUsers[0].id !== userToSet!.id ? mockUsers[0] : (mockUsers[1] || mockUsers[0]);
+    } else if (!assignedOtherUser) {
+        assignedOtherUser = { id: 'other_dummy', name: 'Virtual Friend', avatar: 'https://placehold.co/100x100.png?text=V', mood: 'Neutral', "data-ai-hint": "person letter V" };
+        setAllUsers(prev => [...prev, assignedOtherUser!]);
     }
     setOtherUser(assignedOtherUser);
     
     setMessages(mockMessages); // Load initial messages
     setIsLoading(false);
-  }, [router, allUsers]); // Add allUsers to dependency array to react to new user creation
+  }, [router, allUsers]); // Rerun if allUsers changes, e.g. when a new user is added dynamically.
 
   const handleSendMessage = (text: string) => {
     if (!currentUser) return;
@@ -78,6 +103,20 @@ export default function ChatPage() {
   const handleSaveProfile = (updatedUser: User) => {
     setCurrentUser(updatedUser);
     setAllUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
+    
+    // Persist the updated profile to localStorage, using the original login username as key part
+    const activeUsername = localStorage.getItem('chirpChatActiveUsername');
+    if (activeUsername) { // activeUsername should always exist here
+      const userProfileKey = `chirpChatUserProfile_${updatedUser.name}`; // Use updated name for key or original? For now use current name.
+      // If name can be changed, need robust keying. Let's assume name change in modal implies key change.
+      // For simplicity for now: if updatedUser.name is the new key.
+      // Or, better: always use the *original* activeUsername for the key.
+      const originalLoginUsername = localStorage.getItem('chirpChatActiveUsername');
+      if (originalLoginUsername) {
+          localStorage.setItem(`chirpChatUserProfile_${originalLoginUsername}`, JSON.stringify(updatedUser));
+      }
+    }
+
     toast({
       title: "Profile Updated",
       description: "Your profile information has been saved.",

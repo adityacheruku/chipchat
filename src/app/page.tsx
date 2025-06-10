@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent } from 'react';
@@ -14,7 +15,8 @@ export default function LoginPage() {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (username.trim()) {
-      localStorage.setItem('chirpChatUser', username.trim());
+      // Store the active username. Profile details will be keyed by this.
+      localStorage.setItem('chirpChatActiveUsername', username.trim());
       router.push('/chat');
     }
   };
@@ -37,10 +39,10 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                className="bg-card focus:ring-primary"
+                className="bg-card focus-visible:ring-ring"
               />
             </div>
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground transition-colors duration-200">
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground transition-colors duration-200 focus-visible:ring-ring">
               Join Chat
             </Button>
           </form>

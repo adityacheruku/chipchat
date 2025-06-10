@@ -1,7 +1,14 @@
+
 import type { Message, User } from '@/types';
 import { format } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface MessageBubbleProps {
   message: Message;
@@ -13,6 +20,8 @@ export default function MessageBubble({ message, sender, isCurrentUser }: Messag
   const alignmentClass = isCurrentUser ? 'items-end' : 'items-start';
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
+
+  const formattedTimestamp = new Date(message.timestamp);
 
   return (
     <div className={cn('flex flex-col mb-4', alignmentClass)}>
@@ -38,9 +47,18 @@ export default function MessageBubble({ message, sender, isCurrentUser }: Messag
           <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
         </div>
       </div>
-      <p className={cn('text-xs text-muted-foreground mt-1 px-2', isCurrentUser ? 'text-right' : 'text-left')}>
-        {format(new Date(message.timestamp), 'p')}
-      </p>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <p className={cn('text-xs text-muted-foreground mt-1 px-2 cursor-default', isCurrentUser ? 'text-right' : 'text-left')}>
+              {format(formattedTimestamp, 'p')}
+            </p>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{format(formattedTimestamp, 'PPpp')}</p> {/* PPpp for full date and time */}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
