@@ -1,7 +1,7 @@
 
 import type { User } from '@/types';
 import MoodIndicator from './MoodIndicator';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Settings, Heart, PanelLeftOpen, Phone } from 'lucide-react';
 import Image from 'next/image';
 import {
