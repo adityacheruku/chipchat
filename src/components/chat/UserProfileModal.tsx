@@ -17,42 +17,44 @@ import Image from 'next/image';
 import type { FormEvent, ChangeEvent } from 'react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useAvatar } from '@/hooks/useAvatar';
-import { MAX_AVATAR_SIZE_KB } from '@/config/app-config';
+// import { useAvatar } from '@/hooks/useAvatar'; // Directly using props now
+// import { MAX_AVATAR_SIZE_KB } from '@/config/app-config'; // Used via useAvatar prop
 
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: User | null;
   onSave: (updatedUser: User) => void;
+  avatarPreview: string | null; // From useAvatar hook in parent
+  onAvatarFileChange: (event: ChangeEvent<HTMLInputElement>, currentAvatarUrl?: string) => void; // From useAvatar hook
 }
 
-export default function UserProfileModal({ isOpen, onClose, user, onSave }: UserProfileModalProps) {
+export default function UserProfileModal({ 
+  isOpen, 
+  onClose, 
+  user, 
+  onSave,
+  avatarPreview,
+  onAvatarFileChange
+}: UserProfileModalProps) {
   const [name, setName] = useState(user?.name || '');
   const [mood, setMood] = useState<Mood>(user?.mood || 'Neutral');
   const { toast } = useToast();
 
-  const {
-    avatarPreview,
-    // avatarError, // Error is handled by toast within the hook
-    handleFileChange,
-    setAvatarPreview,
-    // clearAvatarError // Can be used if displaying error in modal UI
-  } = useAvatar({ maxSizeKB: MAX_AVATAR_SIZE_KB, toast });
-
+  // Avatar logic is now managed by useAvatar hook in ChatPage and passed as props
 
   useEffect(() => {
     if (user) {
       setName(user.name);
       setMood(user.mood);
-      setAvatarPreview(user.avatar); // Initialize preview with current avatar
+      // Avatar preview is initialized in ChatPage via useAvatar hook's setAvatarPreview
     }
-  }, [user, setAvatarPreview]);
+  }, [user]);
 
   if (!user) return null;
 
   const internalHandleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
-    handleFileChange(e, user.avatar);
+    onAvatarFileChange(e, user.avatar);
   }
 
   const handleSave = (e: FormEvent) => {
@@ -61,8 +63,8 @@ export default function UserProfileModal({ isOpen, onClose, user, onSave }: User
       ...user,
       name,
       mood,
-      avatar: avatarPreview || user.avatar, // Use preview if available, else original
-      "data-ai-hint": (avatarPreview && avatarPreview !== user.avatar) ? undefined : user["data-ai-hint"], // Remove hint if custom avatar uploaded
+      avatar: avatarPreview || user.avatar, 
+      "data-ai-hint": (avatarPreview && avatarPreview !== user.avatar) ? undefined : user["data-ai-hint"], 
     };
     onSave(updatedUser);
     toast({
@@ -91,7 +93,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onSave }: User
                 height={80}
                 className="rounded-full object-cover"
                 data-ai-hint={avatarPreview ? undefined : user["data-ai-hint"] || "person portrait"}
-                key={avatarPreview} // Force re-render if preview changes to same URL but different content (less likely here)
+                key={avatarPreview} 
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">

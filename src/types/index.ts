@@ -18,11 +18,24 @@ export interface User {
   lastSeen?: number; 
 }
 
+export type MessageClipType = 'audio' | 'video';
+
 export interface Message {
   id: string;
   userId: string; 
-  text: string;
+  text?: string; // Text is now optional for clip messages
   timestamp: number; 
   reactions?: Partial<Record<SupportedEmoji, string[]>>; 
+  clipType?: MessageClipType;
+  clipPlaceholderText?: string; // e.g., "User sent an audio mood clip"
 }
 
+// For Phase 4 Sidebar
+export interface AppEvent {
+  id: string;
+  timestamp: number;
+  type: 'moodChange' | 'thoughtPingSent' | 'messageSent' | 'reactionAdded' | 'moodClipSent';
+  description: string;
+  userId?: string; // Optional: ID of the user who initiated the event
+  userName?: string; // Optional: Name of the user
+}

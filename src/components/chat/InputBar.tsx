@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile } from 'lucide-react';
+import { Send, Smile, Mic } from 'lucide-react'; // Added Mic icon
 import {
   Tooltip,
   TooltipContent,
@@ -12,9 +12,10 @@ import {
 
 interface InputBarProps {
   onSendMessage: (text: string) => void;
+  onSendMoodClip: (clipType: 'audio' | 'video') => void; // New prop
 }
 
-export default function InputBar({ onSendMessage }: InputBarProps) {
+export default function InputBar({ onSendMessage, onSendMoodClip }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -23,6 +24,11 @@ export default function InputBar({ onSendMessage }: InputBarProps) {
       onSendMessage(messageText.trim());
       setMessageText('');
     }
+  };
+
+  const handleMoodClipClick = () => {
+    // For now, let's default to 'audio'. This could be more sophisticated later.
+    onSendMoodClip('audio'); 
   };
 
   return (
@@ -48,6 +54,27 @@ export default function InputBar({ onSendMessage }: InputBarProps) {
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+
+       <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              type="button" 
+              onClick={handleMoodClipClick}
+              className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full mr-2 focus-visible:ring-ring"
+              aria-label="Send mood clip (mock)"
+            >
+              <Mic size={22} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Send Audio Mood Clip (Mock)</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
       <Input
         type="text"
         placeholder="Type a message..."

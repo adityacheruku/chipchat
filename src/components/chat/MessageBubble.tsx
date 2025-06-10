@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { SmilePlus } from 'lucide-react';
+import { SmilePlus, PlayCircle } from 'lucide-react'; // Added PlayCircle
 import {
   Tooltip,
   TooltipContent,
@@ -45,7 +45,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
       const prevCount = prevReactionsRef.current?.[emoji]?.length || 0;
       const currentCount = message.reactions?.[emoji]?.length || 0;
 
-      if (currentCount !== prevCount) { // Animate if count changes (add or remove)
+      if (currentCount !== prevCount) { 
         newAnimations[emoji] = true;
         hasChanges = true;
       }
@@ -53,11 +53,10 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
 
     if (hasChanges) {
       setAnimatedEmojis(newAnimations);
-      const timer = setTimeout(() => setAnimatedEmojis({}), 300); // Duration of animation
+      const timer = setTimeout(() => setAnimatedEmojis({}), 300); 
       return () => clearTimeout(timer);
     }
 
-    // Store deep copy for next comparison
     prevReactionsRef.current = message.reactions ? JSON.parse(JSON.stringify(message.reactions)) : {};
   }, [message.reactions]);
 
@@ -102,7 +101,14 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
 
   const messageContentDiv = (
     <div className={cn('p-3 rounded-xl shadow min-w-[80px] relative group/bubble', bubbleColorClass, bubbleBorderRadius)}>
-      <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
+      {message.clipType ? (
+        <div className="flex items-center gap-2">
+          <PlayCircle size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
+          <p className="text-sm italic">{message.clipPlaceholderText || "Mood clip"}</p>
+        </div>
+      ) : (
+        <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
+      )}
       
       {message.reactions && Object.keys(message.reactions).length > 0 && (
         <div className={cn("mt-2 flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
@@ -151,7 +157,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
           width={32}
           height={32}
           className={cn(
-            "rounded-full object-cover self-start mt-1", // Ensure avatar aligns with name/top of bubble
+            "rounded-full object-cover self-start mt-1", 
              isCurrentUser ? "self-end mb-0.5" : "" 
           )}
           data-ai-hint={sender['data-ai-hint'] || "person portrait"}
@@ -167,7 +173,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <p className={cn('text-xs text-muted-foreground mt-1 px-2 cursor-default', isCurrentUser ? 'text-right' : 'text-left ml-10')}> {/* Adjust margin for non-current user timestamp */}
+            <p className={cn('text-xs text-muted-foreground mt-1 px-2 cursor-default', isCurrentUser ? 'text-right' : 'text-left ml-10')}>
               {format(formattedTimestamp, 'p')}
             </p>
           </TooltipTrigger>

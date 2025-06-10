@@ -3,19 +3,25 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User, Message as MessageType, Mood, SupportedEmoji } from '@/types';
-import { mockUsers, mockMessages, ALL_MOODS } from '@/lib/mock-data'; // Ensure ALL_MOODS is imported if not already
+import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent } from '@/types';
+import { mockUsers, mockMessages, ALL_MOODS } from '@/lib/mock-data'; 
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
 import { useToast } from '@/hooks/use-toast'; 
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
-import { THINKING_OF_YOU_DURATION } from '@/config/app-config';
+import { useAvatar } from '@/hooks/useAvatar';
+import { THINKING_OF_YOU_DURATION, MAX_AVATAR_SIZE_KB } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { suggestMood, type SuggestMoodOutput } from '@/ai/flows/suggestMoodFlow';
 import { Button } from '@/components/ui/button';
+import { SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarInset } from '@/components/ui/sidebar';
+import { PanelLeftOpen, History } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { formatDistanceToNowStrict } from 'date-fns';
+
 
 export default function ChatPage() {
   const router = useRouter();
@@ -28,6 +34,8 @@ export default function ChatPage() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
 
   const lastReactionToggleTimes = useRef<Record<string, number>>({}); 
 
@@ -38,6 +46,20 @@ export default function ChatPage() {
     duration: THINKING_OF_YOU_DURATION, 
     toast: toast 
   });
+
+  const {
+    avatarPreview,
+    handleFileChange: handleAvatarFileChange,
+    setAvatarPreview,
+  } = useAvatar({ maxSizeKB: MAX_AVATAR_SIZE_KB, toast });
+
+
+  const addAppEvent = useCallback((type: AppEvent['type'], description: string, eventUserId?: string, eventUserName?: string) => {
+    setAppEvents(prevEvents => [
+      { id: `event_${Date.now()}_${Math.random()}`, timestamp: Date.now(), type, description, userId: eventUserId, userName: eventUserName },
+      ...prevEvents,
+    ].slice(0, 50)); // Keep last 50 events
+  }, []);
 
 
   useEffect(() => {
@@ -81,6 +103,7 @@ export default function ChatPage() {
     localStorage.setItem(userProfileKey, JSON.stringify(userToSet)); 
     
     setCurrentUser(userToSet);
+    setAvatarPreview(userToSet.avatar); // Initialize avatar preview for the modal
 
     setAllUsers(prevUsers => {
         let users = [...prevUsers];
@@ -95,7 +118,7 @@ export default function ChatPage() {
         
     setIsLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]); 
+  }, [router, setAvatarPreview]); 
 
 
   useEffect(() => {
@@ -134,7 +157,7 @@ export default function ChatPage() {
         toast({
           title: "Mood Suggestion",
           description: `AI thinks your message sounds ${newMood}. Update mood? ${result.reasoning ? `(${result.reasoning})` : ''}`,
-          duration: 10000, // Give user time to react
+          duration: 10000, 
           action: (
             <>
               <Button
@@ -143,8 +166,9 @@ export default function ChatPage() {
                 onClick={() => {
                   if(currentUser){
                     const updatedUser = { ...currentUser, mood: newMood };
-                    handleSaveProfile(updatedUser); // This will also save to localStorage
+                    handleSaveProfile(updatedUser);
                     toast({ title: "Mood Updated!", description: `Your mood is now ${newMood}.` });
+                    addAppEvent('moodChange', `${currentUser.name} mood updated to ${newMood} (AI Suggestion)`, currentUser.id, currentUser.name);
                   }
                 }}
               >
@@ -177,8 +201,29 @@ export default function ChatPage() {
       reactions: {},
     };
     setMessages(prevMessages => [...prevMessages, newMessage]);
-    handleMoodSuggestion(text); // Call mood suggestion after sending message
+    addAppEvent('messageSent', `${currentUser.name} sent: "${text.substring(0,30)}${text.length > 30 ? '...' : ''}"`, currentUser.id, currentUser.name);
+    handleMoodSuggestion(text); 
   };
+
+  const handleSendMoodClip = (clipType: MessageClipType) => {
+    if (!currentUser) return;
+    const placeholderText = clipType === 'audio' ? `${currentUser.name} sent an audio mood clip.` : `${currentUser.name} sent a video mood clip.`;
+    const newMessage: MessageType = {
+      id: `clip_${Date.now()}`,
+      userId: currentUser.id,
+      timestamp: Date.now(),
+      clipType: clipType,
+      clipPlaceholderText: placeholderText,
+      reactions: {},
+    };
+    setMessages(prevMessages => [...prevMessages, newMessage]);
+    addAppEvent('moodClipSent', placeholderText, currentUser.id, currentUser.name);
+    toast({
+      title: "Mood Clip Sent (Mock)",
+      description: `Your ${clipType} mood clip placeholder has been added to the chat.`,
+    });
+  };
+
 
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser) return;
@@ -197,6 +242,7 @@ export default function ChatPage() {
     }
     lastReactionToggleTimes.current[key] = now;
 
+    let reactionAdded = false;
     setMessages(prevMessages => 
       prevMessages.map(msg => {
         if (msg.id === messageId) {
@@ -210,15 +256,20 @@ export default function ChatPage() {
             }
           } else {
             updatedReactions[emoji] = [...existingReactors, currentUser.id];
+            reactionAdded = true;
           }
           return { ...msg, reactions: updatedReactions };
         }
         return msg;
       })
     );
-  }, [currentUser, toast]);
+    if (reactionAdded) {
+      addAppEvent('reactionAdded', `${currentUser.name} reacted with ${emoji} to a message.`, currentUser.id, currentUser.name);
+    }
+  }, [currentUser, toast, addAppEvent]);
 
   const handleSaveProfile = (updatedUser: User) => {
+    const oldMood = currentUser?.mood;
     const newCurrentUser = {...updatedUser, isOnline: true, lastSeen: Date.now()};
     setCurrentUser(newCurrentUser);
     setAllUsers(prevUsers => 
@@ -230,23 +281,27 @@ export default function ChatPage() {
     if (originalLoginUsername) {
         localStorage.setItem(`chirpChatUserProfile_${originalLoginUsername}`, JSON.stringify(newCurrentUser));
     }
+    if (oldMood !== newCurrentUser.mood && newCurrentUser.name) {
+        addAppEvent('moodChange', `${newCurrentUser.name} changed mood to ${newCurrentUser.mood}.`, newCurrentUser.id, newCurrentUser.name);
+    }
   };
 
   const handleSendThought = useCallback((targetUserId: string) => {
     if (!currentUser || !otherUser) return;
     initiateThoughtNotification(targetUserId, otherUser.name, currentUser.name);
-  }, [currentUser, otherUser, initiateThoughtNotification]);
+    addAppEvent('thoughtPingSent', `${currentUser.name} sent a 'Thinking of You' to ${otherUser.name}.`, currentUser.id, currentUser.name);
+  }, [currentUser, otherUser, initiateThoughtNotification, addAppEvent]);
 
   const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
     if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
     
-    const sortedMoods = [mood1, mood2].sort().join('-');
+    // const sortedMoods = [mood1, mood2].sort().join('-'); // Not used currently, direct mapping
 
     if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
     if (mood1 === 'Excited' && mood2 === 'Excited') return 'bg-mood-excited-excited';
     if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful' || mood1 === 'Content') &&
          (mood2 === 'Chilling' || mood2 === 'Neutral' || mood2 === 'Thoughtful' || mood2 === 'Content') ) {
-      if (ALL_MOODS.includes(mood1) && ALL_MOODS.includes(mood2)) { // Check if moods are valid
+      if (ALL_MOODS.includes(mood1) && ALL_MOODS.includes(mood2)) { 
         const calmMoods = ['Chilling', 'Neutral', 'Thoughtful', 'Content'];
         if (calmMoods.includes(mood1) && calmMoods.includes(mood2)) {
            return 'bg-mood-calm-calm';
@@ -254,7 +309,8 @@ export default function ChatPage() {
       }
     }
     if (mood1 === 'Sad' && mood2 === 'Sad') return 'bg-mood-sad-sad';
-    if (mood1 === 'Angry' && mood2 === 'Angry') return 'bg-mood-angry-angry'; // Added for completeness
+    if (mood1 === 'Angry' && mood2 === 'Angry') return 'bg-mood-angry-angry';
+    if (mood1 === 'Anxious' && mood2 === 'Anxious') return 'bg-mood-anxious-anxious';
     
     if ((mood1 === 'Happy' && (mood2 === 'Sad' || mood2 === 'Angry')) || ((mood1 === 'Sad' || mood1 === 'Angry') && mood2 === 'Happy') ||
         (mood1 === 'Excited' && (mood2 === 'Sad' || mood2 === 'Chilling' || mood2 === 'Angry')) ||
@@ -283,34 +339,77 @@ export default function ChatPage() {
   }
 
   return (
-    <div className={cn("flex flex-col items-center justify-center min-h-screen p-2 sm:p-4 transition-colors duration-500", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
-      <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try resetting or refreshing the page.">
-        <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden">
-          <ChatHeader
-            currentUser={currentUser}
-            otherUser={otherUser}
-            onProfileClick={() => setIsProfileModalOpen(true)}
-            onSendThinkingOfYou={handleSendThought}
-            isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
-          />
-          <MessageArea 
-            messages={messages} 
-            currentUser={currentUser} 
-            users={allUsers}
-            onToggleReaction={handleToggleReaction} 
-          />
-          <InputBar onSendMessage={handleSendMessage} />
-        </div>
-      </ErrorBoundary>
+    <SidebarProvider defaultOpen={false} open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+      <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
+        <Sidebar side="left" variant="sidebar" collapsible="icon" className="border-r">
+          <SidebarHeader className="p-2 border-b">
+            <div className="flex items-center gap-2">
+              <History size={20} className="text-primary"/>
+              <h3 className="font-semibold text-lg text-primary group-data-[collapsible=icon]:hidden">Event Timeline</h3>
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <ScrollArea className="h-full p-2">
+              {appEvents.length === 0 && <p className="text-sm text-muted-foreground text-center group-data-[collapsible=icon]:hidden">No events yet.</p>}
+              <SidebarMenu className="group-data-[collapsible=icon]:items-center">
+                {appEvents.map(event => (
+                  <SidebarMenuItem key={event.id} className="group-data-[collapsible=icon]:w-auto">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <div className="flex items-start gap-2 p-1.5 rounded-md hover:bg-accent/10 text-xs">
+                              <History size={14} className="mt-0.5 text-muted-foreground shrink-0"/>
+                              <div className="group-data-[collapsible=icon]:hidden">
+                                <p className="text-foreground leading-tight">{event.description}</p>
+                                <p className="text-muted-foreground text-xs">{formatDistanceToNowStrict(new Date(event.timestamp), { addSuffix: true })}</p>
+                              </div>
+                           </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" align="start" className="group-data-[collapsible=icon]:block hidden">
+                          <p>{event.description}</p>
+                          <p className="text-xs text-muted-foreground">{formatDistanceToNowStrict(new Date(event.timestamp), { addSuffix: true })}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </ScrollArea>
+          </SidebarContent>
+        </Sidebar>
+        
+        <SidebarInset className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
+          <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try resetting or refreshing the page.">
+            <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden">
+              <ChatHeader
+                currentUser={currentUser}
+                otherUser={otherUser}
+                onProfileClick={() => setIsProfileModalOpen(true)}
+                onSendThinkingOfYou={handleSendThought}
+                isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
+                onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+              />
+              <MessageArea 
+                messages={messages} 
+                currentUser={currentUser} 
+                users={allUsers}
+                onToggleReaction={handleToggleReaction} 
+              />
+              <InputBar onSendMessage={handleSendMessage} onSendMoodClip={handleSendMoodClip} />
+            </div>
+          </ErrorBoundary>
+        </SidebarInset>
+      </div>
       {isProfileModalOpen && currentUser && (
         <UserProfileModal
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
           user={currentUser}
           onSave={handleSaveProfile}
+          avatarPreview={avatarPreview}
+          onAvatarFileChange={handleAvatarFileChange}
         />
       )}
-    </div>
+    </SidebarProvider>
   );
 }
-
