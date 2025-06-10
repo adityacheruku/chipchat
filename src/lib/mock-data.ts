@@ -1,5 +1,5 @@
 
-import type { User, Message, SupportedEmoji } from '@/types';
+import type { User, Message } from '@/types';
 
 export const mockUsers: User[] = [
   {
@@ -9,7 +9,7 @@ export const mockUsers: User[] = [
     mood: 'Happy',
     'data-ai-hint': 'letter A',
     isOnline: true,
-    lastSeen: Date.now(),
+    lastSeen: Date.now() - 1000 * 60 * 1, // 1 minute ago
   },
   {
     id: 'user2',
@@ -17,7 +17,7 @@ export const mockUsers: User[] = [
     avatar: 'https://placehold.co/100x100.png?text=B',
     mood: 'Thoughtful',
     'data-ai-hint': 'letter B',
-    isOnline: true, // Simulate Bob is online too
+    isOnline: true, 
     lastSeen: Date.now() - 1000 * 60 * 2, // 2 minutes ago
   },
   {
@@ -75,8 +75,9 @@ export const mockMessages: Message[] = [
   },
   {
     id: 'msg6',
-    userId: 'user3',
+    userId: 'user3', // Charlie's message
     text: "Hey everyone, what's up?",
     timestamp: now - 1000 * 30, // 30 seconds ago
+    reactions: {}
   },
 ];

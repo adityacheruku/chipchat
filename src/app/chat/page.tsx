@@ -19,7 +19,7 @@ export default function ChatPage() {
   
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [otherUser, setOtherUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<MessageType[]>(mockMessages); // Initialize with mockMessages
+  const [messages, setMessages] = useState<MessageType[]>(mockMessages); 
   const [allUsers, setAllUsers] = useState<User[]>(mockUsers);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,7 +73,7 @@ export default function ChatPage() {
     }
     // Ensure isOnline status is set for the current session
     userToSet = { ...userToSet, isOnline: true, lastSeen: Date.now() };
-    localStorage.setItem(userProfileKey, JSON.stringify(userToSet)); // Save updated status
+    localStorage.setItem(userProfileKey, JSON.stringify(userToSet)); 
     
     setCurrentUser(userToSet);
 
@@ -85,84 +85,43 @@ export default function ChatPage() {
         } else {
             users.push(userToSet!);
         }
-        return users;
+        return users.filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)); // Deduplicate
     });
         
-    if (userToSet) { 
-        const potentialOtherUsers = allUsers.filter(u => u.id !== userToSet!.id);
-        let assignedOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
-
-        if (!assignedOtherUser && mockUsers.length > 0) {
-             const mockOtherUsers = mockUsers.filter(u => u.id !== userToSet!.id);
-             assignedOtherUser = mockOtherUsers.length > 0 ? mockOtherUsers[0] : mockUsers[0];
-        }
-        
-        if (!assignedOtherUser) { 
-            assignedOtherUser = { 
-                id: 'other_dummy', 
-                name: 'Virtual Friend', 
-                avatar: 'https://placehold.co/100x100.png?text=V', 
-                mood: 'Neutral', 
-                isOnline: true, // Simulate online
-                lastSeen: Date.now(),
-                "data-ai-hint": "person letter V" 
-            };
-            setAllUsers(prev => {
-                if (!prev.find(u => u.id === assignedOtherUser!.id)) {
-                    return [...prev, assignedOtherUser!];
-                }
-                return prev;
-            });
-        }
-        setOtherUser(assignedOtherUser);
-    }
-    
-    // Messages are initialized from mockMessages directly in useState
     setIsLoading(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]); // Removed allUsers from deps to avoid loop, manage it separately
+  }, [router]); 
 
 
   useEffect(() => {
+    // This effect ensures otherUser is correctly set and updated from allUsers
     if (currentUser && allUsers.length > 0) {
-        const potentialOtherUsers = allUsers.filter(u => u.id !== currentUser.id);
-        let newOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
+      const potentialOtherUsers = allUsers.filter(u => u.id !== currentUser.id);
+      let newOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
 
-        if (!newOtherUser) { 
-            const mockOtherUsers = mockUsers.filter(u => u.id !== currentUser.id);
-            newOtherUser = mockOtherUsers.length > 0 ? mockOtherUsers[0] : (mockUsers.length > 0 ? mockUsers[0] : null);
+      if (!newOtherUser) {
+        const fallbackOther: User = { 
+            id: 'other_dummy_user', 
+            name: 'Virtual Friend', 
+            avatar: 'https://placehold.co/100x100.png?text=V', 
+            mood: 'Neutral', 
+            isOnline: true,
+            lastSeen: Date.now(),
+            "data-ai-hint": "person letter V" 
+        };
+        if (!allUsers.find(u => u.id === fallbackOther.id)) {
+             setAllUsers(prev => [...prev, fallbackOther].filter((user, index, self) => index === self.findIndex((t) => t.id === user.id))); // Deduplicate
         }
-         if (!newOtherUser && !allUsers.find(u => u.id === 'other_dummy')) {
-            newOtherUser = { 
-                id: 'other_dummy', 
-                name: 'Virtual Friend', 
-                avatar: 'https://placehold.co/100x100.png?text=V', 
-                mood: 'Neutral', 
-                isOnline: true,
-                lastSeen: Date.now(),
-                "data-ai-hint": "person letter V" 
-            };
-             setAllUsers(prev => { 
-                if (!prev.find(u => u.id === newOtherUser!.id)) {
-                    return [...prev, newOtherUser!];
-                }
-                return prev;
-            });
-        } else if (!newOtherUser && allUsers.find(u => u.id === 'other_dummy')) {
-           newOtherUser = allUsers.find(u => u.id === 'other_dummy')!;
-        }
-
-        if (newOtherUser && newOtherUser.id !== otherUser?.id) {
-            setOtherUser(newOtherUser);
-        } else if (newOtherUser && newOtherUser.id === otherUser?.id) {
-            const otherUserFromAllUsers = allUsers.find(u => u.id === newOtherUser.id);
-            if (otherUserFromAllUsers && JSON.stringify(otherUserFromAllUsers) !== JSON.stringify(otherUser)) {
-                setOtherUser(otherUserFromAllUsers);
-            }
-        }
+        newOtherUser = fallbackOther;
+      }
+      
+      // Only update otherUser if it's different or its properties have changed
+      if (!otherUser || newOtherUser.id !== otherUser.id || JSON.stringify(newOtherUser) !== JSON.stringify(otherUser)) {
+        setOtherUser(newOtherUser);
+      }
     }
-  }, [currentUser, allUsers, otherUser?.id, otherUser]);
+  }, [currentUser, allUsers, otherUser]);
 
 
   const handleSendMessage = (text: string) => {
@@ -189,7 +148,7 @@ export default function ChatPage() {
             // User already reacted, remove reaction
             updatedReactions[emoji] = existingReactors.filter(uid => uid !== currentUser.id);
             if (updatedReactions[emoji]?.length === 0) {
-              delete updatedReactions[emoji]; // Remove emoji if no one reacted
+              delete updatedReactions[emoji]; 
             }
           } else {
             // User has not reacted, add reaction
@@ -205,7 +164,10 @@ export default function ChatPage() {
   const handleSaveProfile = (updatedUser: User) => {
     const newCurrentUser = {...updatedUser, isOnline: true, lastSeen: Date.now()};
     setCurrentUser(newCurrentUser);
-    setAllUsers(prevUsers => prevUsers.map(u => u.id === newCurrentUser.id ? newCurrentUser : u));
+    setAllUsers(prevUsers => 
+        prevUsers.map(u => u.id === newCurrentUser.id ? newCurrentUser : u)
+                 .filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)) // Deduplicate
+    );
     
     const originalLoginUsername = localStorage.getItem('chirpChatActiveUsername');
     if (originalLoginUsername) {
@@ -234,11 +196,9 @@ export default function ChatPage() {
     }
     if (mood1 === 'Sad' && mood2 === 'Sad') return 'bg-mood-sad-sad';
     
-    // Add more specific combinations or fallbacks as needed
-    // Example: One happy, one sad
-    if ((mood1 === 'Happy' && mood2 === 'Sad') || (mood1 === 'Sad' && mood2 === 'Happy')) return 'bg-mood-thoughtful-thoughtful'; // Or a more contrasting one
+    if ((mood1 === 'Happy' && mood2 === 'Sad') || (mood1 === 'Sad' && mood2 === 'Happy')) return 'bg-mood-thoughtful-thoughtful'; 
 
-    return 'bg-mood-default-chat-area'; // Default if no specific combo matches
+    return 'bg-mood-default-chat-area'; 
   }, []);
 
   useEffect(() => {

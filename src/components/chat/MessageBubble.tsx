@@ -50,7 +50,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
         />
         <div
           className={cn(
-            'p-3 rounded-xl shadow min-w-[80px]', // min-w added to ensure bubble has some width
+            'p-3 rounded-xl shadow min-w-[80px]', 
             bubbleColorClass,
             bubbleBorderRadius
           )}
@@ -60,7 +60,6 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
           )}
           <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
           
-          {/* Reactions Display */}
           {message.reactions && Object.keys(message.reactions).length > 0 && (
             <div className={cn("mt-2 flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
               {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
@@ -72,12 +71,12 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
                     key={emoji}
                     onClick={() => handleReactionClick(emoji)}
                     className={cn(
-                      "text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1",
+                      "text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-colors",
                       currentUserReacted 
-                        ? isCurrentUser ? "bg-primary-foreground/30 border-primary-foreground/50 text-primary-foreground" : "bg-accent text-accent-foreground border-accent/80"
-                        : isCurrentUser ? "bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-primary-foreground/20" : "bg-background/50 border-border hover:bg-muted"
+                        ? (isCurrentUser ? "bg-primary-foreground/30 border-primary-foreground/50 text-primary-foreground" : "bg-accent text-accent-foreground border-accent/80")
+                        : (isCurrentUser ? "bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-primary-foreground/20" : "bg-background/50 border-border hover:bg-muted")
                     )}
-                    aria-label={`React with ${emoji}, current count ${reactors.length}. ${currentUserReacted ? 'You reacted.' : ''}`}
+                    aria-label={`React with ${emoji}, current count ${reactors.length}. ${currentUserReacted ? 'You reacted.' : 'Click to react.'}`}
                   >
                     <span>{emoji}</span>
                     <span className="font-medium">{reactors.length}</span>
@@ -88,14 +87,13 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
           )}
         </div>
 
-        {/* Reaction Button Popover */}
         <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               className={cn(
-                "absolute -top-3 p-1 h-7 w-7 rounded-full bg-card text-muted-foreground opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity",
+                "absolute -top-3 p-1 h-7 w-7 rounded-full bg-card text-muted-foreground opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shadow-md hover:text-accent active:text-accent",
                 isCurrentUser ? "-left-2" : "-right-2" 
               )}
               aria-label="Add reaction"
@@ -110,7 +108,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
                   key={emoji}
                   variant="ghost"
                   size="icon"
-                  className="p-1.5 h-8 w-8 text-xl rounded-full hover:bg-accent/20"
+                  className="p-1.5 h-8 w-8 text-xl rounded-full hover:bg-accent/20 active:scale-90 transition-transform"
                   onClick={() => handleReactionClick(emoji)}
                   aria-label={`React with ${emoji}`}
                 >

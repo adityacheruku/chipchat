@@ -21,6 +21,11 @@ interface ChatHeaderProps {
 }
 
 export default function ChatHeader({ currentUser, otherUser, onProfileClick, onSendThinkingOfYou, isTargetUserBeingThoughtOf }: ChatHeaderProps) {
+  const lastSeenDate = otherUser.lastSeen ? new Date(otherUser.lastSeen) : null;
+  const formattedLastSeen = lastSeenDate 
+    ? `Last seen: ${lastSeenDate.toLocaleDateString()} at ${lastSeenDate.toLocaleTimeString()}`
+    : 'Last seen: N/A';
+
   return (
     <header className="flex items-center justify-between p-4 border-b border-border bg-card rounded-t-lg">
       <div className="flex items-center space-x-3">
@@ -32,8 +37,9 @@ export default function ChatHeader({ currentUser, otherUser, onProfileClick, onS
             height={40} 
             className="rounded-full object-cover"
             data-ai-hint={otherUser['data-ai-hint'] || "person portrait"}
+            key={otherUser.avatar} // Force re-render if avatar changes
           />
-          {otherUser.isOnline && (
+          {otherUser.isOnline ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -41,6 +47,17 @@ export default function ChatHeader({ currentUser, otherUser, onProfileClick, onS
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>{otherUser.name} is online</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-gray-400 border-2 border-card ring-1 ring-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{otherUser.name} is offline. {formattedLastSeen}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

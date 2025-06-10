@@ -13,8 +13,8 @@ export interface User {
   avatar: string; // URL to placeholder or data URI
   mood: Mood;
   "data-ai-hint"?: string; // For placeholder images
-  isOnline?: boolean; // Added for Phase 3
-  lastSeen?: number; // Added for Phase 3 (timestamp)
+  isOnline?: boolean; 
+  lastSeen?: number; // Timestamp
 }
 
 export interface Message {
@@ -22,5 +22,6 @@ export interface Message {
   userId: string; // Corresponds to User.id
   text: string;
   timestamp: number; // Unix timestamp
-  reactions?: Partial<Record<SupportedEmoji, string[]>>; // Emoji -> array of user IDs who reacted. Partial for optional.
+  reactions?: Partial<Record<SupportedEmoji, string[]>>; // Emoji -> array of user IDs who reacted.
 }
+
