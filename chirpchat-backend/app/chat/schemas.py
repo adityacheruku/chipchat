@@ -3,14 +3,13 @@ from typing import List, Optional, Dict
 from uuid import UUID
 from pydantic import BaseModel, Field
 from datetime import datetime
-# Removed direct import of ClipTypeEnum from models if that file is mostly empty.
-# Define ClipTypeEnum here or import from a common types file.
-class ClipTypeEnum(str): # Simplified for schema definition, validation can be added
-    audio = "audio"
-    video = "video"
+import enum
 
-# Ensure SupportedEmoji matches frontend/types.ts
-SUPPORTED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢'] # Keep in sync with frontend
+class ClipTypeEnum(str, enum.Enum): # Using enum.Enum for proper value access
+    AUDIO = "audio"
+    VIDEO = "video"
+
+SUPPORTED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢'] 
 SupportedEmoji = str # Use Pydantic enum or validator for stricter check
 
 class MessageBase(BaseModel):
@@ -21,16 +20,14 @@ class MessageBase(BaseModel):
     image_url: Optional[str] = None
 
 class MessageCreate(MessageBase):
-    # chat_id is usually part of the path for POST /chats/{chat_id}/messages
-    # recipient_id is used if creating a message should also find/create a chat
-    recipient_id: Optional[UUID] = None # If sending to a user directly to find/create chat
-    client_temp_id: Optional[str] = None # For client-side message tracking before DB ID
+    recipient_id: Optional[UUID] = None
+    client_temp_id: Optional[str] = None
 
 class MessageInDB(MessageBase):
     id: UUID
-    user_id: UUID # Sender's ID
+    user_id: UUID
     chat_id: UUID
-    created_at: datetime # Renamed from timestamp for consistency
+    created_at: datetime
     updated_at: datetime
     reactions: Optional[Dict[SupportedEmoji, List[UUID]]] = Field(default_factory=dict)
 
@@ -38,11 +35,14 @@ class MessageInDB(MessageBase):
         from_attributes = True
 
 
-class ChatParticipant(BaseModel):
-    user_id: UUID
-    display_name: str # Renamed from name
+class ChatParticipant(BaseModel): # Renamed from UserPublic in context of chat participant list
+    id: UUID # Changed from user_id to id to match UserPublic
+    display_name: str
     avatar_url: Optional[str] = None
-    # mood: Optional[str] = None # Can be added if needed in participant list
+    mood: Optional[str] = "Neutral"
+    is_online: Optional[bool] = False
+    last_seen: Optional[datetime] = None
+
 
     class Config:
         from_attributes = True
@@ -51,7 +51,7 @@ class ChatParticipant(BaseModel):
 class ChatBase(BaseModel):
     id: UUID
 
-class ChatResponse(ChatBase): # Renamed from Chat for clarity as API response
+class ChatResponse(ChatBase):
     participants: List[ChatParticipant]
     last_message: Optional[MessageInDB] = None
     created_at: datetime
@@ -62,10 +62,10 @@ class ChatResponse(ChatBase): # Renamed from Chat for clarity as API response
 
 
 class ReactionToggle(BaseModel):
-    emoji: SupportedEmoji # Ensure this matches an emoji from SUPPORTED_EMOJIS
+    emoji: SupportedEmoji
 
 class ChatCreate(BaseModel):
-    recipient_id: UUID # To create a chat with this user
+    recipient_id: UUID
 
 class ChatListResponse(BaseModel):
     chats: List[ChatResponse]
@@ -74,7 +74,7 @@ class MessageListResponse(BaseModel):
     messages: List[MessageInDB]
 
 class DefaultChatPartnerResponse(BaseModel):
-    user_id: UUID
+    user_id: UUID # Kept as user_id for clarity of purpose
     display_name: str
     avatar_url: Optional[str] = None
 

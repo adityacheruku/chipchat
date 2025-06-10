@@ -14,7 +14,7 @@ export const mockUsers: User[] = [
     phone: '+15551234567',
     'data-ai-hint': 'letter A',
     isOnline: true,
-    lastSeen: Date.now() - 1000 * 60 * 1, 
+    lastSeen: Date.now() - 1000 * 60 * 1,
   },
   {
     id: 'user2',
@@ -23,18 +23,8 @@ export const mockUsers: User[] = [
     mood: getRandomMood(),
     phone: '+15557654321',
     'data-ai-hint': 'letter B',
-    isOnline: true, 
-    lastSeen: Date.now() - 1000 * 60 * 2, 
-  },
-  {
-    id: 'user3',
-    name: 'Charlie',
-    avatar: 'https://placehold.co/100x100.png?text=C',
-    mood: getRandomMood(),
-    // Charlie has no phone number
-    'data-ai-hint': 'letter C',
-    isOnline: false,
-    lastSeen: Date.now() - 1000 * 60 * 60 * 3, 
+    isOnline: true,
+    lastSeen: Date.now() - 1000 * 60 * 2,
   },
 ];
 
@@ -43,49 +33,42 @@ const now = Date.now();
 export const mockMessages: Message[] = [
   {
     id: 'msg1',
-    userId: 'user1',
+    userId: 'user1', // Alice
     text: 'Hey Bob, how are you doing today?',
-    timestamp: now - 1000 * 60 * 5, 
+    timestamp: now - 1000 * 60 * 5,
     reactions: {
-      '👍': ['user2']
+      '👍': ['user2'] // Bob reacted
     }
   },
   {
     id: 'msg2',
-    userId: 'user2',
+    userId: 'user2', // Bob
     text: "Hi Alice! I'm doing well, thanks for asking. Just working on a new project.",
-    timestamp: now - 1000 * 60 * 4, 
+    timestamp: now - 1000 * 60 * 4,
   },
   {
     id: 'msg3',
-    userId: 'user1',
+    userId: 'user1', // Alice
     text: 'Oh, that sounds exciting! What kind of project?',
-    timestamp: now - 1000 * 60 * 3, 
+    timestamp: now - 1000 * 60 * 3,
     reactions: {
-      '😮': ['user2']
+      '😮': ['user2'] // Bob reacted
     }
   },
   {
     id: 'msg4',
-    userId: 'user2',
+    userId: 'user2', // Bob
     text: "It's a chat application, actually. Trying to make something cool and user-friendly.",
-    timestamp: now - 1000 * 60 * 2, 
+    timestamp: now - 1000 * 60 * 2,
     reactions: {
-      '❤️': ['user1']
+      '❤️': ['user1'] // Alice reacted
     }
   },
   {
     id: 'msg5',
-    userId: 'user1',
+    userId: 'user1', // Alice
     text: "That's awesome! Maybe we can brainstorm some ideas later?",
-    timestamp: now - 1000 * 60 * 1, 
-  },
-  {
-    id: 'msg6',
-    userId: 'user3', 
-    text: "Hey everyone, what's up?",
-    timestamp: now - 1000 * 30, 
-    reactions: {}
+    timestamp: now - 1000 * 60 * 1,
   },
 ];
 

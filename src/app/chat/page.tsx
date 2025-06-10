@@ -4,13 +4,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent } from '@/types';
-import { mockUsers, mockMessages } from '@/lib/mock-data'; 
+import { mockUsers, mockMessages } from '@/lib/mock-data';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
 import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal';
-import { useToast } from '@/hooks/use-toast'; 
+import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useAvatar } from '@/hooks/useAvatar';
 import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
@@ -23,10 +23,11 @@ import { formatDistanceToNowStrict } from 'date-fns';
 export default function ChatPage() {
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [otherUser, setOtherUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<MessageType[]>(mockMessages); 
+  const [messages, setMessages] = useState<MessageType[]>(mockMessages);
+  // allUsers will primarily be used to derive currentUser and otherUser in a 2-user model
   const [allUsers, setAllUsers] = useState<User[]>(mockUsers);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +37,7 @@ export default function ChatPage() {
   const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
   const [fullScreenUserData, setFullScreenUserData] = useState<User | null>(null);
 
-  const lastReactionToggleTimes = useRef<Record<string, number>>({}); 
+  const lastReactionToggleTimes = useRef<Record<string, number>>({});
   const lastMessageTextRef = useRef<string>("");
 
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string) => {
@@ -54,12 +55,12 @@ export default function ChatPage() {
   }, []);
 
 
-  const { 
-    activeTargetId: activeThoughtNotificationFor, 
-    initiateThoughtNotification 
-  } = useThoughtNotification({ 
-    duration: THINKING_OF_YOU_DURATION, 
-    toast: toast 
+  const {
+    activeTargetId: activeThoughtNotificationFor,
+    initiateThoughtNotification
+  } = useThoughtNotification({
+    duration: THINKING_OF_YOU_DURATION,
+    toast: toast
   });
 
   const {
@@ -75,12 +76,12 @@ export default function ChatPage() {
       handleSaveProfile(updatedUser, false);
       addAppEvent('moodChange', `${currentUser.name} updated mood to ${newMood} via AI suggestion.`, currentUser.id, currentUser.name);
     }
-  }, [currentUser, addAppEvent]);
+  }, [currentUser, addAppEvent]); // handleSaveProfile dependency removed as it's defined later
 
-  const { 
-    isLoadingAISuggestion, 
+  const {
+    isLoadingAISuggestion,
     suggestMood: aiSuggestMood,
-    ReasoningDialog 
+    ReasoningDialog
   } = useMoodSuggestion({
     currentUserMood: currentUser?.mood || 'Neutral',
     onMoodChange: handleMoodChangeForAISuggestion,
@@ -103,92 +104,56 @@ export default function ChatPage() {
         userToSet = JSON.parse(storedProfileJson) as User;
       } catch (error) {
         console.error("Failed to parse stored user profile:", error);
-        localStorage.removeItem(userProfileKey); 
+        localStorage.removeItem(userProfileKey);
       }
     }
 
-    if (!userToSet) {
-      const foundInMock = mockUsers.find(u => u.name.toLowerCase() === activeUsername.toLowerCase());
-      if (foundInMock) {
-        userToSet = { ...foundInMock }; 
-      } else {
-        userToSet = {
-          id: `user_${Date.now()}`,
-          name: activeUsername,
-          avatar: `https://placehold.co/100x100.png?text=${activeUsername.charAt(0).toUpperCase()}`,
-          mood: 'Neutral',
-          isOnline: true,
-          lastSeen: Date.now(),
-          phone: undefined, 
-          "data-ai-hint": `letter ${activeUsername.charAt(0).toUpperCase()}`,
-        };
-      }
+    // In a strict 2-user model, determine current user from mockUsers based on activeUsername
+    // and the other user is the one not matching activeUsername.
+    const foundUserInMock = mockUsers.find(u => u.name.toLowerCase() === activeUsername.toLowerCase());
+
+    if (!userToSet && foundUserInMock) {
+      userToSet = { ...foundUserInMock };
+    } else if (!userToSet) {
+      // Fallback if username doesn't match any mock user - this case should be less likely
+      // in a strict 2-user setup where users are predefined.
+      // For safety, redirect to login if no match.
+      console.warn("Active username not found in mock users. Redirecting to login.");
+      router.push('/');
+      return;
     }
-    
+
     userToSet = { ...userToSet, isOnline: true, lastSeen: Date.now() };
-    localStorage.setItem(userProfileKey, JSON.stringify(userToSet)); 
-    
-    setCurrentUser(userToSet);
-    setAvatarPreview(userToSet.avatar); 
+    localStorage.setItem(userProfileKey, JSON.stringify(userToSet));
 
-    setAllUsers(prevUsers => {
-        let users = [...prevUsers];
-        const currentUserExists = users.some(u => u.id === userToSet!.id);
-        if (currentUserExists) {
-            users = users.map(u => u.id === userToSet!.id ? userToSet! : u);
-        } else {
-            users.push(userToSet!);
-        }
-        return users.filter((user, index, self) => index === self.findIndex((t) => t.id === user.id));
-    });
-        
+    setCurrentUser(userToSet);
+    setAvatarPreview(userToSet.avatar);
+
+    // Determine the other user
+    const otherMockUser = mockUsers.find(u => u.id !== userToSet!.id);
+    if (otherMockUser) {
+      setOtherUser(otherMockUser);
+    } else {
+      // This case should ideally not happen in a 2-user system with correct mock data.
+      // If it does, it indicates an issue with mockUsers setup or logic.
+      console.error("Could not determine the other user. Check mockUsers setup.");
+      // Potentially redirect or show an error state. For now, chat might be unusable.
+      toast({ variant: 'destructive', title: "Chat Error", description: "Could not identify the other chat participant." });
+      setIsLoading(false);
+      return;
+    }
+    
+    // Update allUsers to reflect current state of the two users
+    setAllUsers(mockUsers.map(u => {
+      if (u.id === userToSet!.id) return userToSet!;
+      if (otherMockUser && u.id === otherMockUser.id) return otherMockUser; // Use the determined otherUser
+      return u; // Should not happen if mockUsers has only two
+    }));
+
+
     setIsLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, setAvatarPreview]); 
-
-
-  useEffect(() => {
-    if (currentUser && allUsers.length > 0) {
-      const potentialOtherUsers = allUsers.filter(u => u.id !== currentUser.id);
-      let newOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
-
-      if (!newOtherUser && allUsers.length === 1 && allUsers[0].id === currentUser.id) { 
-        const fallbackOther: User = { 
-            id: 'other_dummy_user', 
-            name: 'Virtual Friend', 
-            avatar: 'https://placehold.co/100x100.png?text=V', 
-            mood: 'Neutral', 
-            isOnline: true, 
-            lastSeen: Date.now(),
-            phone: '+15550001111',
-            "data-ai-hint": "person letter V" 
-        };
-        if (!allUsers.find(u => u.id === fallbackOther.id)) {
-             setAllUsers(prev => [...prev, fallbackOther].filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)));
-        }
-        newOtherUser = fallbackOther;
-      } else if (!newOtherUser) { 
-         const fallbackOther: User = { 
-            id: 'other_dummy_user_2', 
-            name: 'Support Bot', 
-            avatar: 'https://placehold.co/100x100.png?text=S', 
-            mood: 'Helpful' as Mood, 
-            isOnline: true, 
-            lastSeen: Date.now(),
-            phone: '+15552223333',
-            "data-ai-hint": "letter S" 
-        };
-         if (!allUsers.find(u => u.id === fallbackOther.id)) {
-             setAllUsers(prev => [...prev, fallbackOther].filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)));
-        }
-        newOtherUser = fallbackOther;
-      }
-      
-      if (!otherUser || newOtherUser.id !== otherUser.id || JSON.stringify(newOtherUser) !== JSON.stringify(otherUser)) {
-        setOtherUser(newOtherUser);
-      }
-    }
-  }, [currentUser, allUsers, otherUser]);
+  }, [router, setAvatarPreview, toast]); // Removed allUsers from deps to avoid loops with setAllUsers
 
 
   const handleSendMessage = (text: string) => {
@@ -211,7 +176,7 @@ export default function ChatPage() {
 
   const handleSendMoodClip = (clipType: MessageClipType) => {
     if (!currentUser) return;
-    const hasPermission = Math.random() > 0.2; 
+    const hasPermission = Math.random() > 0.2;
     if (!hasPermission) {
         toast({
             variant: 'destructive',
@@ -243,7 +208,7 @@ export default function ChatPage() {
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser) return;
 
-    const RATE_LIMIT_MS = 1000; 
+    const RATE_LIMIT_MS = 1000;
     const key = `${messageId}_${emoji}`;
     const now = Date.now();
 
@@ -260,17 +225,17 @@ export default function ChatPage() {
     let reactionAdded = false;
     let reactedMessageText = "";
 
-    setMessages(prevMessages => 
+    setMessages(prevMessages =>
       prevMessages.map(msg => {
         if (msg.id === messageId) {
           reactedMessageText = msg.text?.substring(0, 20) || "a clip";
           const updatedReactions = { ...(msg.reactions || {}) };
           const existingReactors = updatedReactions[emoji] || [];
-          
+
           if (existingReactors.includes(currentUser.id)) {
             updatedReactions[emoji] = existingReactors.filter(uid => uid !== currentUser.id);
             if (updatedReactions[emoji]?.length === 0) {
-              delete updatedReactions[emoji]; 
+              delete updatedReactions[emoji];
             }
           } else {
             updatedReactions[emoji] = [...existingReactors, currentUser.id];
@@ -291,11 +256,12 @@ export default function ChatPage() {
     if (!currentUser) return;
     const oldMood = currentUser.mood;
     const newCurrentUser = {...updatedUser, isOnline: true, lastSeen: Date.now()};
-    
+
     setCurrentUser(newCurrentUser);
-    setAllUsers(prevUsers => 
-        prevUsers.map(u => u.id === newCurrentUser.id ? newCurrentUser : u)
-                 .filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)) 
+
+    // Update allUsers state correctly
+    setAllUsers(prevUsers =>
+        prevUsers.map(u => (u.id === newCurrentUser.id ? newCurrentUser : u))
     );
     
     const originalLoginUsername = localStorage.getItem('chirpChatActiveUsername');
@@ -306,6 +272,16 @@ export default function ChatPage() {
         addAppEvent('moodChange', `${newCurrentUser.name} updated mood to ${newCurrentUser.mood}.`, newCurrentUser.id, newCurrentUser.name);
     }
   };
+  
+  // Add handleSaveProfile to handleMoodChangeForAISuggestion's dependency array
+  useEffect(() => {
+    if (currentUser && typeof handleSaveProfile === 'function') {
+        // This effect is to ensure that handleMoodChangeForAISuggestion's
+        // closure has the latest handleSaveProfile.
+        // The dependency array of handleMoodChangeForAISuggestion should include handleSaveProfile.
+    }
+  }, [currentUser, handleSaveProfile]);
+
 
   const handleSendThought = useCallback((targetUserId: string) => {
     if (!currentUser || !otherUser) return;
@@ -315,7 +291,7 @@ export default function ChatPage() {
 
   const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
     if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
-    
+
     if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
     if (mood1 === 'Excited' && mood2 === 'Excited') return 'bg-mood-excited-excited';
     if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful' || mood1 === 'Content') &&
@@ -328,14 +304,14 @@ export default function ChatPage() {
     if (mood1 === 'Sad' && mood2 === 'Sad') return 'bg-mood-sad-sad';
     if (mood1 === 'Angry' && mood2 === 'Angry') return 'bg-mood-angry-angry';
     if (mood1 === 'Anxious' && mood2 === 'Anxious') return 'bg-mood-anxious-anxious';
-    
+
     if ((mood1 === 'Happy' && (mood2 === 'Sad' || mood2 === 'Angry')) || ((mood1 === 'Sad' || mood1 === 'Angry') && mood2 === 'Happy') ||
         (mood1 === 'Excited' && (mood2 === 'Sad' || mood2 === 'Chilling' || mood2 === 'Angry')) ||
         ((mood1 === 'Sad' || mood1 === 'Chilling' || mood1 === 'Angry') && mood2 === 'Excited') ) {
-      return 'bg-mood-thoughtful-thoughtful'; 
+      return 'bg-mood-thoughtful-thoughtful';
     }
 
-    return 'bg-mood-default-chat-area'; 
+    return 'bg-mood-default-chat-area';
   }, []);
 
   useEffect(() => {
@@ -375,14 +351,14 @@ export default function ChatPage() {
                 isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
                 onOtherUserAvatarClick={handleOtherUserAvatarClick}
               />
-              <MessageArea 
-                messages={messages} 
-                currentUser={currentUser} 
-                users={allUsers}
-                onToggleReaction={handleToggleReaction} 
+              <MessageArea
+                messages={messages}
+                currentUser={currentUser}
+                users={allUsers} // Pass allUsers which now primarily contains the two active users
+                onToggleReaction={handleToggleReaction}
               />
-              <InputBar 
-                onSendMessage={handleSendMessage} 
+              <InputBar
+                onSendMessage={handleSendMessage}
                 onSendMoodClip={handleSendMoodClip}
                 isSending={isLoadingAISuggestion}
               />
