@@ -1,4 +1,5 @@
-import type { User, Message, Mood } from '@/types';
+
+import type { User, Message } from '@/types';
 
 export const mockUsers: User[] = [
   {
@@ -6,18 +7,21 @@ export const mockUsers: User[] = [
     name: 'Alice',
     avatar: 'https://placehold.co/100x100.png?text=A',
     mood: 'Happy',
+    'data-ai-hint': 'letter A',
   },
   {
     id: 'user2',
     name: 'Bob',
     avatar: 'https://placehold.co/100x100.png?text=B',
     mood: 'Thoughtful',
+    'data-ai-hint': 'letter B',
   },
   {
     id: 'user3',
     name: 'Charlie',
     avatar: 'https://placehold.co/100x100.png?text=C',
     mood: 'Chilling',
+    'data-ai-hint': 'letter C',
   },
 ];
 

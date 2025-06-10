@@ -1,3 +1,4 @@
+
 import type { User, Mood } from '@/types';
 import { ALL_MOODS } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -13,8 +14,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Image from 'next/image';
-import type { FormEvent } from 'react';
+import type { FormEvent, ChangeEvent } from 'react';
 import { useState, useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -26,28 +28,44 @@ interface UserProfileModalProps {
 export default function UserProfileModal({ isOpen, onClose, user, onSave }: UserProfileModalProps) {
   const [name, setName] = useState(user?.name || '');
   const [mood, setMood] = useState<Mood>(user?.mood || 'Neutral');
-  // File handling is a placeholder for Phase 1
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (user) {
       setName(user.name);
       setMood(user.mood);
+      setAvatarPreview(user.avatar);
     }
   }, [user]);
 
   if (!user) return null;
 
+  const handleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = (e: FormEvent) => {
     e.preventDefault();
-    const updatedUser = {
+    const updatedUser: User = {
       ...user,
       name,
       mood,
-      // avatar update logic would go here in a real app
+      avatar: avatarPreview || user.avatar, // Use preview if available, else original
+      "data-ai-hint": avatarPreview ? undefined : user["data-ai-hint"], // Remove hint if custom avatar
     };
     onSave(updatedUser);
+    toast({
+      title: "Profile Updated",
+      description: "Your profile picture and details have been saved.",
+    });
     onClose();
   };
 
@@ -64,12 +82,12 @@ export default function UserProfileModal({ isOpen, onClose, user, onSave }: User
           <div className="grid gap-6 py-4">
             <div className="flex items-center justify-center">
               <Image
-                src={user.avatar}
-                alt={user.name}
+                src={avatarPreview || user.avatar || "https://placehold.co/100x100.png"}
+                alt={name || "User avatar"}
                 width={80}
                 height={80}
-                className="rounded-full"
-                data-ai-hint="person portrait"
+                className="rounded-full object-cover"
+                data-ai-hint={avatarPreview ? undefined : user["data-ai-hint"] || "person portrait"}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -90,7 +108,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onSave }: User
               <Input
                 id="avatar-upload"
                 type="file"
-                onChange={(e) => setAvatarFile(e.target.files ? e.target.files[0] : null)}
+                onChange={handleAvatarChange}
                 className="col-span-3 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 accept="image/*"
               />

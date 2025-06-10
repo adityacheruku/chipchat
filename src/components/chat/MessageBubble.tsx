@@ -31,8 +31,8 @@ export default function MessageBubble({ message, sender, isCurrentUser }: Messag
           alt={sender.name}
           width={32}
           height={32}
-          className="rounded-full"
-          data-ai-hint="person portrait"
+          className="rounded-full object-cover"
+          data-ai-hint={sender['data-ai-hint'] || "person portrait"}
         />
         <div
           className={cn(
