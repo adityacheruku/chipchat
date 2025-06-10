@@ -374,7 +374,6 @@ export default function ChatPage() {
                 onSendThinkingOfYou={handleSendThought}
                 isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
                 onOtherUserAvatarClick={handleOtherUserAvatarClick}
-                onToggleSidebar={() => { /* Sidebar removed */ }} 
               />
               <MessageArea 
                 messages={messages} 
