@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import type { UserCreate } from '@/chirpchat-backend/app/auth/schemas';
+// Assuming UserCreate from backend will now use phone
+import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas'; 
 
 type AuthMode = 'login' | 'register';
 
@@ -18,9 +19,10 @@ export default function AuthPage() {
   const { toast } = useToast();
 
   const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [email, setEmail] = useState(''); // Changed from username to email
+  const [phone, setPhone] = useState(''); // Changed from email to phone
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState(''); // For registration
+  const [optionalEmail, setOptionalEmail] = useState(''); // Optional email for registration
   const [isSubmitting, setIsSubmitting] = useState(false);
 
 
@@ -29,13 +31,13 @@ export default function AuthPage() {
     setIsSubmitting(true);
 
     if (authMode === 'login') {
-      if (!email.trim() || !password.trim()) {
-        toast({ variant: 'destructive', title: 'Missing Fields', description: 'Please enter both email and password.' });
+      if (!phone.trim() || !password.trim()) {
+        toast({ variant: 'destructive', title: 'Missing Fields', description: 'Please enter both phone number and password.' });
         setIsSubmitting(false);
         return;
       }
       try {
-        await login(email, password);
+        await login(phone, password);
         // Navigation is handled by AuthContext
       } catch (error) {
         // Error toast is handled by AuthContext or api service
@@ -44,8 +46,8 @@ export default function AuthPage() {
         setIsSubmitting(false);
       }
     } else { // Register mode
-      if (!email.trim() || !password.trim() || !displayName.trim()) {
-        toast({ variant: 'destructive', title: 'Missing Fields', description: 'Please fill in all fields for registration.' });
+      if (!phone.trim() || !password.trim() || !displayName.trim()) {
+        toast({ variant: 'destructive', title: 'Missing Fields', description: 'Phone, password, and display name are required.' });
         setIsSubmitting(false);
         return;
       }
@@ -54,7 +56,13 @@ export default function AuthPage() {
          setIsSubmitting(false);
          return;
       }
-      const registerData: UserCreate = { email, password, display_name: displayName };
+      // Construct userData according to backend's UserCreate schema (which now expects phone)
+      const registerData: BackendUserCreate = { 
+        phone, 
+        password, 
+        display_name: displayName,
+        ...(optionalEmail.trim() && { email: optionalEmail.trim() }) // Add email if provided
+      };
       try {
         await register(registerData);
         // Navigation is handled by AuthContext
@@ -68,9 +76,10 @@ export default function AuthPage() {
 
   const toggleAuthMode = () => {
     setAuthMode(prevMode => prevMode === 'login' ? 'register' : 'login');
-    setEmail('');
+    setPhone('');
     setPassword('');
     setDisplayName('');
+    setOptionalEmail('');
   };
 
   const loading = isAuthLoading || isSubmitting;
@@ -102,18 +111,32 @@ export default function AuthPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="phone">Phone Number</Label>
               <Input
-                id="email"
-                type="email" 
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="phone"
+                type="tel" // Changed type to tel for phone numbers
+                placeholder="Enter your phone number (e.g., +12223334444)"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
                 required
                 className="bg-card focus-visible:ring-ring"
                 disabled={loading}
               />
             </div>
+            {authMode === 'register' && (
+              <div className="space-y-2">
+                <Label htmlFor="optionalEmail">Email (Optional)</Label>
+                <Input
+                  id="optionalEmail"
+                  type="email"
+                  placeholder="your.email@example.com"
+                  value={optionalEmail}
+                  onChange={(e) => setOptionalEmail(e.target.value)}
+                  className="bg-card focus-visible:ring-ring"
+                  disabled={loading}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input

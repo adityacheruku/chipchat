@@ -7,9 +7,11 @@ import type {
   Message,
   DefaultChatPartnerResponse,
   ApiErrorResponse,
-  Mood,
+  SupportedEmoji, // Added SupportedEmoji
 } from '@/types';
-import type { UserCreate } from '@/chirpchat-backend/app/auth/schemas'; // Assuming this path is resolvable or adjust as needed
+// Adjust the import path for UserCreate if it's different in your backend structure
+// Assuming UserCreate from backend will now take phone.
+import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas'; 
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -34,15 +36,27 @@ async function handleResponse<T>(response: Response): Promise<T> {
     console.error('API Error:', errorMessage, 'Full Response:', errorData);
     throw new Error(errorMessage);
   }
-  return response.json() as Promise<T>;
+  // Handle cases where response might be empty for 200/204
+  const contentType = response.headers.get("content-type");
+  if (contentType && contentType.indexOf("application/json") !== -1) {
+    if (response.headers.get("content-length") === "0" && response.status === 200) {
+        return {} as T; // Return empty object for empty JSON response
+    }
+    return response.json() as Promise<T>;
+  } else if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return {} as T; // Return empty object for No Content or empty response
+  }
+  // For non-JSON responses, or if you expect text/plain, handle differently
+  // For now, assuming JSON or empty as primary cases
+  return response.text().then(text => { throw new Error(`Unexpected response type: ${contentType}, content: ${text.substring(0,100)}`) }) as Promise<T>;
 }
 
 
 export const api = {
   // AUTH
-  login: async (username_email: string, password_plaintext: string): Promise<AuthResponse> => {
+  login: async (phone: string, password_plaintext: string): Promise<AuthResponse> => {
     const formData = new URLSearchParams();
-    formData.append('username', username_email); // Backend expects 'username' for email
+    formData.append('username', phone); // Backend's OAuth2PasswordRequestForm expects 'username' field for the phone number
     formData.append('password', password_plaintext);
 
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -55,8 +69,8 @@ export const api = {
     return handleResponse<AuthResponse>(response);
   },
 
-  register: async (userData: UserCreate): Promise<AuthResponse> => {
-     // UserCreate from backend is {email, password, display_name}
+  // Use the backend's UserCreate schema directly for the body
+  register: async (userData: BackendUserCreate): Promise<AuthResponse> => {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -82,7 +96,8 @@ export const api = {
     return handleResponse<User>(response);
   },
 
-  updateUserProfile: async (profileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone'>>): Promise<UserInToken> => {
+  // Backend UserUpdate schema might differ slightly, ensure frontend sends compatible data
+  updateUserProfile: async (profileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>): Promise<UserInToken> => {
     const token = getAuthToken();
     const response = await fetch(`${API_BASE_URL}/users/me/profile`, {
       method: 'PUT',
@@ -115,10 +130,10 @@ export const api = {
         headers: { Authorization: `Bearer ${token}` },
     });
     if (response.status === 200 && response.headers.get("content-length") === "0") {
-        return null; // Handle empty 200 response gracefully
+        return null; 
     }
-     if (response.status === 204) return null; // No content
-    return handleResponse<DefaultChatPartnerResponse>(response);
+     if (response.status === 204) return null; 
+    return handleResponse<DefaultChatPartnerResponse | null>(response);
   },
 
   createOrGetChat: async (recipientId: string): Promise<Chat> => {
@@ -153,7 +168,6 @@ export const api = {
     return handleResponse<{messages: Message[]}>(response);
   },
 
-  // Use WebSocket for sending messages primarily. This is a fallback.
   sendMessageHttp: async (chatId: string, messageData: { text?: string; clip_type?: string; clip_placeholder_text?: string; clip_url?: string; image_url?: string; client_temp_id?: string }): Promise<Message> => {
     const token = getAuthToken();
     const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, {
@@ -167,7 +181,6 @@ export const api = {
     return handleResponse<Message>(response);
   },
 
-  // Use WebSocket for reactions primarily. This is a fallback.
   toggleReactionHttp: async (messageId: string, emoji: SupportedEmoji): Promise<Message> => {
     const token = getAuthToken();
     const response = await fetch(`${API_BASE_URL}/messages/${messageId}/reactions`, {
@@ -181,7 +194,7 @@ export const api = {
     return handleResponse<Message>(response);
   },
 
-  // UPLOADS (frontend might call these directly, or via user profile updates)
+  // UPLOADS
   uploadChatImage: async (file: File): Promise<{ image_url: string }> => {
     const token = getAuthToken();
     const formData = new FormData();
@@ -210,14 +223,24 @@ export const api = {
   // PWA SHORTCUT ACTIONS
   sendThinkingOfYouPing: async (recipientUserId: string): Promise<{ status: string }> => {
     const token = getAuthToken();
-    // Backend uses POST /users/{recipient_user_id}/ping, but that seems more like a direct user action.
-    // For simplicity, assuming the chat router has a ping mechanism.
-    // If backend changed this to /chats/ping or similar, adjust here.
-    // The current backend has POST /users/{user_id}/ping, so this seems okay but should be confirmed.
-    const response = await fetch(`${API_BASE_URL}/users/${recipientUserId}/ping`, { // Check this path with backend.
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return handleResponse<{ status: string }>(response);
+    // The backend doesn't have a /users/{recipient_user_id}/ping.
+    // It should be handled via WebSocket event "ping_thinking_of_you" sent by the client.
+    // Or a new HTTP endpoint like /chats/ping could be created if HTTP is preferred for this.
+    // For now, this API function is problematic as there's no matching backend HTTP endpoint.
+    // This functionality is better suited for a WebSocket message from the client.
+    // I'll leave this as a placeholder, but it won't work with current backend.
+    // A better approach would be to use the WebSocket connection to send this ping.
+    console.warn("sendThinkingOfYouPing via HTTP is not directly supported by the current backend. Use WebSocket.");
+    
+    // Mocking a success for now, but this needs a backend change or use WebSocket
+    // return Promise.resolve({ status: "Ping sent (mocked)" });
+    
+    // If there was a backend endpoint:
+    // const response = await fetch(`${API_BASE_URL}/users/${recipientUserId}/ping`, { // This path is hypothetical
+    //   method: 'POST',
+    //   headers: { Authorization: `Bearer ${token}` },
+    // });
+    // return handleResponse<{ status: string }>(response);
+    throw new Error("sendThinkingOfYouPing via HTTP is not implemented on the backend. Use WebSockets.");
   },
 };

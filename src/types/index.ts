@@ -11,49 +11,43 @@ export interface User {
   display_name: string;
   avatar_url: string | null;
   mood: Mood;
-  phone?: string | null;
+  phone: string; // Phone is now the primary identifier from client perspective for login/signup
+  email?: string | null; // Email is optional
   is_online?: boolean;
   last_seen?: string | null; // ISO Date string
-  email?: string; // Added for potential use, backend returns it
-  "data-ai-hint"?: string; // Retained for frontend image hints
+  "data-ai-hint"?: string; 
 }
 
-// User for token response - from backend Token schema
 export interface UserInToken extends User {}
 
 
 export type MessageClipType = 'audio' | 'video';
 
-// Message type aligned with backend MessageInDB schema
 export interface Message {
-  id: string; // UUID
-  user_id: string; // UUID of sender
-  chat_id: string; // UUID of chat
+  id: string; 
+  user_id: string; 
+  chat_id: string; 
   text?: string | null;
-  timestamp?: string; // ISO Date string, will be created_at from backend
-  created_at: string; // ISO Date string
-  updated_at: string; // ISO Date string
+  created_at: string; 
+  updated_at: string; 
   reactions?: Partial<Record<SupportedEmoji, string[] /* User IDs */>> | null;
   clip_type?: MessageClipType | null;
   clip_placeholder_text?: string | null;
   clip_url?: string | null;
   image_url?: string | null;
-  client_temp_id?: string | null; // For optimistic UI updates
+  client_temp_id?: string | null; 
 }
 
-// Chat types aligned with backend
 export interface ChatParticipant extends User {}
 
 export interface Chat {
-  id: string; // UUID
+  id: string; 
   participants: ChatParticipant[];
   last_message: Message | null;
-  created_at: string; // ISO Date string
-  updated_at: string; // ISO Date string
+  created_at: string; 
+  updated_at: string; 
 }
 
-
-// For Phase 4 Sidebar - Event log, can be kept as is for client-side event logging
 export interface AppEvent {
   id: string;
   timestamp: number;
@@ -89,10 +83,11 @@ export interface NewMessageEventData {
 
 export interface MessageReactionUpdateEventData {
   event_type: "message_reaction_update";
-  message_id: string;
-  chat_id: string;
+  message_id: string; // Changed from messageId
+  chat_id: string;    // Changed from chatId
   reactions: Partial<Record<SupportedEmoji, string[]>>;
 }
+
 
 export interface UserPresenceUpdateEventData {
   event_type: "user_presence_update";
@@ -115,20 +110,37 @@ export interface ThinkingOfYouReceivedEventData {
   sender_name: string;
 }
 
+export type UserProfileUpdateEventData = {
+  event_type: "user_profile_update";
+  user_id: string;
+  mood?: Mood;
+  display_name?: string;
+  avatar_url?: string;
+  // Add other updatable fields if necessary
+};
+
+
 export type WebSocketEventData =
   | NewMessageEventData
   | MessageReactionUpdateEventData
   | UserPresenceUpdateEventData
   | TypingIndicatorEventData
   | ThinkingOfYouReceivedEventData
+  | UserProfileUpdateEventData
   | { event_type: "error", detail: string }
-  | { event_type: "authenticated" } // Example confirmation event
-  | { event_type: "user_profile_update", user_id: string, mood?: Mood, display_name?: string, avatar_url?: string };
+  | { event_type: "authenticated" };
 
 
-// Default chat partner response from backend
 export interface DefaultChatPartnerResponse {
-    user_id: string; // UUID
+    user_id: string; 
     display_name: string;
     avatar_url: string | null;
+}
+
+// For frontend form, matching backend UserCreate with phone
+export interface UserCreateFrontend {
+  phone: string;
+  password_plaintext: string; // To match AuthContext
+  display_name: string;
+  email?: string; // Optional email
 }

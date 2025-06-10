@@ -6,15 +6,16 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/services/api';
 import type { UserInToken, AuthResponse } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import type { UserCreate } from '@/chirpchat-backend/app/auth/schemas';
+// Assuming BackendUserCreate is the Pydantic model from your backend for user creation
+import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
 
 interface AuthContextType {
   currentUser: UserInToken | null;
   token: string | null;
   isLoading: boolean;
-  login: (username_email: string, password_plaintext: string) => Promise<void>;
-  register: (userData: UserCreate) => Promise<void>;
+  login: (phone: string, password_plaintext: string) => Promise<void>; // Changed from username_email
+  register: (userData: BackendUserCreate) => Promise<void>; // Use backend's UserCreate
   logout: () => void;
   fetchAndUpdateUser: () => Promise<void>;
   isAuthenticated: boolean;
@@ -25,25 +26,22 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<UserInToken | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Start true to check token on load
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
 
   const loadUserFromToken = useCallback(async (storedToken: string) => {
     setIsLoading(true);
     try {
-      // No direct "validate token" endpoint, so we fetch user profile
-      // If token is invalid, getCurrentUserProfile will fail
-      const userProfile = await api.getCurrentUserProfile(); // Uses token from localStorage via api helper
+      const userProfile = await api.getCurrentUserProfile(); 
       setCurrentUser(userProfile);
       setToken(storedToken);
     } catch (error) {
       console.error("Failed to load user from token", error);
       localStorage.removeItem('chirpChatToken');
-      localStorage.removeItem('chirpChatUser'); // Clear legacy user if exists
+      localStorage.removeItem('chirpChatUser'); 
       setToken(null);
       setCurrentUser(null);
-      // router.push('/'); // Optionally force redirect
     } finally {
       setIsLoading(false);
     }
@@ -55,29 +53,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (storedToken) {
       loadUserFromToken(storedToken);
     } else {
-      setIsLoading(false); // No token, not loading
+      setIsLoading(false); 
     }
   }, [loadUserFromToken]);
 
-  const login = async (username_email: string, password_plaintext: string) => {
+  const login = async (phone: string, password_plaintext: string) => { // Changed from username_email
     setIsLoading(true);
     try {
-      const data: AuthResponse = await api.login(username_email, password_plaintext);
+      const data: AuthResponse = await api.login(phone, password_plaintext); // Use phone
       localStorage.setItem('chirpChatToken', data.access_token);
-      // Storing user might be redundant if fetched on load, but can be useful for immediate UI update
       localStorage.setItem('chirpChatUser', JSON.stringify(data.user));
       setCurrentUser(data.user);
       setToken(data.access_token);
       router.push('/chat');
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Login Failed', description: error.message || 'Please check your credentials.' });
-      throw error; // Re-throw for form to handle
+      throw error; 
     } finally {
       setIsLoading(false);
     }
   };
   
-  const register = async (userData: UserCreate) => {
+  const register = async (userData: BackendUserCreate) => { // userData matches backend schema
     setIsLoading(true);
     try {
       const data: AuthResponse = await api.register(userData);
@@ -89,7 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
        toast({ title: 'Registration Successful!', description: 'Welcome to ChirpChat.' });
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Registration Failed', description: error.message || 'Please try again.' });
-      throw error; // Re-throw for form to handle
+      throw error; 
     } finally {
       setIsLoading(false);
     }
@@ -101,7 +98,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     localStorage.removeItem('chirpChatToken');
     localStorage.removeItem('chirpChatUser');
-    localStorage.removeItem('chirpChatActiveUsername'); // Clear legacy item
     // Also clear other app-specific localStorage items if needed
     router.push('/');
     toast({ title: 'Logged Out', description: "You've been successfully logged out." });
@@ -112,10 +108,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userProfile = await api.getCurrentUserProfile();
       setCurrentUser(userProfile);
-      localStorage.setItem('chirpChatUser', JSON.stringify(userProfile)); // Update stored user
+      localStorage.setItem('chirpChatUser', JSON.stringify(userProfile)); 
     } catch (error) {
       console.error("Failed to refresh user profile", error);
-      // Potentially handle token expiry here by logging out
       logout();
     }
   }, [token, logout]);
