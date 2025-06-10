@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -107,5 +108,27 @@ body {
   body {
     @apply bg-background text-foreground;
     min-height: 100vh;
+  }
+}
+
+/* Dynamic Mood Backgrounds - Phase 3 */
+@layer utilities {
+  .bg-mood-happy-happy {
+    background-image: linear-gradient(to bottom right, #fff1cc, #ffe0b3); /* Light yellow to light orange */
+  }
+  .bg-mood-calm-calm {
+    background-image: linear-gradient(to bottom right, #e0f7fa, #d1e9fc); /* Light cyan to light blue */
+  }
+  .bg-mood-thoughtful-thoughtful {
+    background-image: linear-gradient(to bottom right, #ede7f6, #e1d8f1); /* Light purple to softer purple */
+  }
+  .bg-mood-sad-sad {
+    background-image: linear-gradient(to bottom right, #e3f2fd, #d4e8f8); /* Very light blue to slightly grayer blue */
+  }
+  .bg-mood-excited-excited {
+    background-image: linear-gradient(to bottom right, #ffebcc, #ffd8a8); /* Light orange to peachy orange */
+  }
+  .bg-mood-default-chat-area {
+    @apply bg-background; /* Default background for message area */
   }
 }

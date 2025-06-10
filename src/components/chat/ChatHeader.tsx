@@ -10,6 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from '@/lib/utils';
 
 interface ChatHeaderProps {
   currentUser: User;
@@ -23,14 +24,28 @@ export default function ChatHeader({ currentUser, otherUser, onProfileClick, onS
   return (
     <header className="flex items-center justify-between p-4 border-b border-border bg-card rounded-t-lg">
       <div className="flex items-center space-x-3">
-        <Image 
-          src={otherUser.avatar} 
-          alt={otherUser.name} 
-          width={40} 
-          height={40} 
-          className="rounded-full object-cover"
-          data-ai-hint={otherUser['data-ai-hint'] || "person portrait"}
-        />
+        <div className="relative">
+          <Image 
+            src={otherUser.avatar} 
+            alt={otherUser.name} 
+            width={40} 
+            height={40} 
+            className="rounded-full object-cover"
+            data-ai-hint={otherUser['data-ai-hint'] || "person portrait"}
+          />
+          {otherUser.isOnline && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-green-500 border-2 border-card ring-1 ring-green-500" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{otherUser.name} is online</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
         <div>
           <div className="flex items-center space-x-2">
             <h2 className="font-semibold text-foreground font-headline">{otherUser.name}</h2>

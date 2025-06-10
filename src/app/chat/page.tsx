@@ -3,33 +3,35 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User, Message as MessageType } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji } from '@/types';
 import { mockUsers, mockMessages } from '@/lib/mock-data';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
-import { useToast, toast as globalToast } from '@/hooks/use-toast'; // Renamed to avoid conflict
+import { useToast, toast as globalToast } from '@/hooks/use-toast'; 
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { THINKING_OF_YOU_DURATION } from '@/config/app-config';
+import { cn } from '@/lib/utils';
 
 export default function ChatPage() {
   const router = useRouter();
-  // const { toast } = useToast(); // useToast hook for local context if needed, globalToast for direct calls
   
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [otherUser, setOtherUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<MessageType[]>([]);
+  const [messages, setMessages] = useState<MessageType[]>(mockMessages); // Initialize with mockMessages
   const [allUsers, setAllUsers] = useState<User[]>(mockUsers);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
+
 
   const { 
     activeTargetId: activeThoughtNotificationFor, 
     initiateThoughtNotification 
   } = useThoughtNotification({ 
     duration: THINKING_OF_YOU_DURATION, 
-    toast: globalToast // Pass the global toast function
+    toast: globalToast 
   });
 
 
@@ -63,11 +65,15 @@ export default function ChatPage() {
           name: activeUsername,
           avatar: `https://placehold.co/100x100.png?text=${activeUsername.charAt(0).toUpperCase()}`,
           mood: 'Neutral',
+          isOnline: true,
+          lastSeen: Date.now(),
           "data-ai-hint": `letter ${activeUsername.charAt(0).toUpperCase()}`,
         };
       }
-      localStorage.setItem(userProfileKey, JSON.stringify(userToSet));
     }
+    // Ensure isOnline status is set for the current session
+    userToSet = { ...userToSet, isOnline: true, lastSeen: Date.now() };
+    localStorage.setItem(userProfileKey, JSON.stringify(userToSet)); // Save updated status
     
     setCurrentUser(userToSet);
 
@@ -97,6 +103,8 @@ export default function ChatPage() {
                 name: 'Virtual Friend', 
                 avatar: 'https://placehold.co/100x100.png?text=V', 
                 mood: 'Neutral', 
+                isOnline: true, // Simulate online
+                lastSeen: Date.now(),
                 "data-ai-hint": "person letter V" 
             };
             setAllUsers(prev => {
@@ -109,11 +117,11 @@ export default function ChatPage() {
         setOtherUser(assignedOtherUser);
     }
     
-    setMessages(mockMessages);
+    // Messages are initialized from mockMessages directly in useState
     setIsLoading(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [router]); // Removed allUsers from deps to avoid loop, manage it separately
 
 
   useEffect(() => {
@@ -131,6 +139,8 @@ export default function ChatPage() {
                 name: 'Virtual Friend', 
                 avatar: 'https://placehold.co/100x100.png?text=V', 
                 mood: 'Neutral', 
+                isOnline: true,
+                lastSeen: Date.now(),
                 "data-ai-hint": "person letter V" 
             };
              setAllUsers(prev => { 
@@ -143,7 +153,6 @@ export default function ChatPage() {
            newOtherUser = allUsers.find(u => u.id === 'other_dummy')!;
         }
 
-
         if (newOtherUser && newOtherUser.id !== otherUser?.id) {
             setOtherUser(newOtherUser);
         } else if (newOtherUser && newOtherUser.id === otherUser?.id) {
@@ -153,7 +162,7 @@ export default function ChatPage() {
             }
         }
     }
-  }, [currentUser, allUsers, otherUser]);
+  }, [currentUser, allUsers, otherUser?.id, otherUser]);
 
 
   const handleSendMessage = (text: string) => {
@@ -163,18 +172,44 @@ export default function ChatPage() {
       userId: currentUser.id,
       text,
       timestamp: Date.now(),
+      reactions: {},
     };
     setMessages(prevMessages => [...prevMessages, newMessage]);
   };
 
+  const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
+    if (!currentUser) return;
+    setMessages(prevMessages => 
+      prevMessages.map(msg => {
+        if (msg.id === messageId) {
+          const updatedReactions = { ...(msg.reactions || {}) };
+          const existingReactors = updatedReactions[emoji] || [];
+          
+          if (existingReactors.includes(currentUser.id)) {
+            // User already reacted, remove reaction
+            updatedReactions[emoji] = existingReactors.filter(uid => uid !== currentUser.id);
+            if (updatedReactions[emoji]?.length === 0) {
+              delete updatedReactions[emoji]; // Remove emoji if no one reacted
+            }
+          } else {
+            // User has not reacted, add reaction
+            updatedReactions[emoji] = [...existingReactors, currentUser.id];
+          }
+          return { ...msg, reactions: updatedReactions };
+        }
+        return msg;
+      })
+    );
+  }, [currentUser]);
+
   const handleSaveProfile = (updatedUser: User) => {
-    setCurrentUser(updatedUser);
-    setAllUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
+    const newCurrentUser = {...updatedUser, isOnline: true, lastSeen: Date.now()};
+    setCurrentUser(newCurrentUser);
+    setAllUsers(prevUsers => prevUsers.map(u => u.id === newCurrentUser.id ? newCurrentUser : u));
     
     const originalLoginUsername = localStorage.getItem('chirpChatActiveUsername');
     if (originalLoginUsername) {
-        // Use the original login username to key the profile, even if the display name changes
-        localStorage.setItem(`chirpChatUserProfile_${originalLoginUsername}`, JSON.stringify(updatedUser));
+        localStorage.setItem(`chirpChatUserProfile_${originalLoginUsername}`, JSON.stringify(newCurrentUser));
     }
   };
 
@@ -182,6 +217,37 @@ export default function ChatPage() {
     if (!currentUser || !otherUser) return;
     initiateThoughtNotification(targetUserId, otherUser.name, currentUser.name);
   }, [currentUser, otherUser, initiateThoughtNotification]);
+
+  const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
+    if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
+    
+    const sortedMoods = [mood1, mood2].sort().join('-');
+
+    if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
+    if (mood1 === 'Excited' && mood2 === 'Excited') return 'bg-mood-excited-excited';
+    if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful') &&
+         (mood2 === 'Chilling' || mood2 === 'Neutral' || mood2 === 'Thoughtful') ) {
+      if (sortedMoods === 'Chilling-Chilling' || sortedMoods === 'Neutral-Neutral' || sortedMoods === 'Thoughtful-Thoughtful' ||
+          sortedMoods === 'Chilling-Neutral' || sortedMoods === 'Chilling-Thoughtful' || sortedMoods === 'Neutral-Thoughtful') {
+        return 'bg-mood-calm-calm';
+      }
+    }
+    if (mood1 === 'Sad' && mood2 === 'Sad') return 'bg-mood-sad-sad';
+    
+    // Add more specific combinations or fallbacks as needed
+    // Example: One happy, one sad
+    if ((mood1 === 'Happy' && mood2 === 'Sad') || (mood1 === 'Sad' && mood2 === 'Happy')) return 'bg-mood-thoughtful-thoughtful'; // Or a more contrasting one
+
+    return 'bg-mood-default-chat-area'; // Default if no specific combo matches
+  }, []);
+
+  useEffect(() => {
+    if (currentUser?.mood && otherUser?.mood) {
+      setDynamicBgClass(getDynamicBackgroundClass(currentUser.mood, otherUser.mood));
+    } else {
+      setDynamicBgClass('bg-mood-default-chat-area');
+    }
+  }, [currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
 
 
   if (isLoading || !currentUser || !otherUser) {
@@ -193,7 +259,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-2 sm:p-4">
+    <div className={cn("flex flex-col items-center justify-center min-h-screen p-2 sm:p-4 transition-colors duration-500", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
       <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden">
         <ChatHeader
           currentUser={currentUser}
@@ -202,7 +268,12 @@ export default function ChatPage() {
           onSendThinkingOfYou={handleSendThought}
           isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
         />
-        <MessageArea messages={messages} currentUser={currentUser} users={allUsers} />
+        <MessageArea 
+          messages={messages} 
+          currentUser={currentUser} 
+          users={allUsers}
+          onToggleReaction={handleToggleReaction} 
+        />
         <InputBar onSendMessage={handleSendMessage} />
       </div>
       {isProfileModalOpen && currentUser && (

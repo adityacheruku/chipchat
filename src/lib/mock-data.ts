@@ -1,5 +1,5 @@
 
-import type { User, Message } from '@/types';
+import type { User, Message, SupportedEmoji } from '@/types';
 
 export const mockUsers: User[] = [
   {
@@ -8,6 +8,8 @@ export const mockUsers: User[] = [
     avatar: 'https://placehold.co/100x100.png?text=A',
     mood: 'Happy',
     'data-ai-hint': 'letter A',
+    isOnline: true,
+    lastSeen: Date.now(),
   },
   {
     id: 'user2',
@@ -15,6 +17,8 @@ export const mockUsers: User[] = [
     avatar: 'https://placehold.co/100x100.png?text=B',
     mood: 'Thoughtful',
     'data-ai-hint': 'letter B',
+    isOnline: true, // Simulate Bob is online too
+    lastSeen: Date.now() - 1000 * 60 * 2, // 2 minutes ago
   },
   {
     id: 'user3',
@@ -22,6 +26,8 @@ export const mockUsers: User[] = [
     avatar: 'https://placehold.co/100x100.png?text=C',
     mood: 'Chilling',
     'data-ai-hint': 'letter C',
+    isOnline: false,
+    lastSeen: Date.now() - 1000 * 60 * 60 * 3, // 3 hours ago
   },
 ];
 
@@ -33,6 +39,9 @@ export const mockMessages: Message[] = [
     userId: 'user1',
     text: 'Hey Bob, how are you doing today?',
     timestamp: now - 1000 * 60 * 5, // 5 minutes ago
+    reactions: {
+      '👍': ['user2']
+    }
   },
   {
     id: 'msg2',
@@ -45,12 +54,18 @@ export const mockMessages: Message[] = [
     userId: 'user1',
     text: 'Oh, that sounds exciting! What kind of project?',
     timestamp: now - 1000 * 60 * 3, // 3 minutes ago
+    reactions: {
+      '😮': ['user2']
+    }
   },
   {
     id: 'msg4',
     userId: 'user2',
     text: "It's a chat application, actually. Trying to make something cool and user-friendly.",
     timestamp: now - 1000 * 60 * 2, // 2 minutes ago
+    reactions: {
+      '❤️': ['user1']
+    }
   },
   {
     id: 'msg5',
