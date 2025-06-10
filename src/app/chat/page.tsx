@@ -1,19 +1,19 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData } from '@/types';
-// import { mockUsers, mockMessages } from '@/lib/mock-data'; // No longer primary source
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
 import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal';
+import MoodEntryModal from '@/components/chat/MoodEntryModal'; // Added
+import { Button } from '@/components/ui/button'; // Added Button
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useAvatar } from '@/hooks/useAvatar';
-import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx'; // Corrected path
+import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
 import { THINKING_OF_YOU_DURATION, MAX_AVATAR_SIZE_KB, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -31,14 +31,16 @@ export default function ChatPage() {
   const [otherUser, setOtherUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isChatLoading, setIsChatLoading] = useState(true); // For initial chat data load
+  const [isChatLoading, setIsChatLoading] = useState(true);
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
-  const [appEvents, setAppEvents] = useState<AppEvent[]>([]); // Kept for local event logging
+  const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
 
   const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
   const [fullScreenUserData, setFullScreenUserData] = useState<User | null>(null);
   const [typingUsers, setTypingUsers] = useState<Record<string, { userId: string; isTyping: boolean }>>({});
 
+  const [isMoodModalOpen, setIsMoodModalOpen] = useState(false); // For mood entry modal
+  const [initialMoodOnLoad, setInitialMoodOnLoad] = useState<Mood | null>(null); // To pass to modal
 
   const lastReactionToggleTimes = useRef<Record<string, number>>({});
   const lastMessageTextRef = useRef<string>("");
@@ -54,7 +56,6 @@ export default function ChatPage() {
         userName,
         metadata,
       };
-      // console.log("App Event:", newEvent);
       return [newEvent, ...prevEvents].slice(0, 50);
     });
   }, []);
@@ -77,7 +78,7 @@ export default function ChatPage() {
     if (currentUser) {
       try {
         await api.updateUserProfile({ mood: newMood });
-        fetchAndUpdateUser(); // Refresh currentUser from AuthContext
+        await fetchAndUpdateUser(); // Refresh currentUser from AuthContext
         addAppEvent('moodChange', `${currentUser.display_name} updated mood to ${newMood} via AI suggestion.`, currentUser.id, currentUser.display_name);
       } catch (error: any) {
         toast({ variant: 'destructive', title: 'Mood Update Failed', description: error.message });
@@ -95,18 +96,15 @@ export default function ChatPage() {
     currentMessageTextRef: lastMessageTextRef,
   });
 
-
   // WebSocket Handlers
   const handleWSMessageReceived = useCallback((newMessage: MessageType) => {
     setMessages(prevMessages => {
-      // Prevent duplicates if message also came via HTTP (optimistic UI + WS)
       if (prevMessages.find(m => m.id === newMessage.id || (newMessage.client_temp_id && m.client_temp_id === newMessage.client_temp_id))) {
-        // If it's an update to a temp message, replace it
         return prevMessages.map(m => (m.client_temp_id === newMessage.client_temp_id ? newMessage : m));
       }
       return [...prevMessages, newMessage].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
-    if (activeChat) { // Mark as read or update last seen message in chat list (future)
+    if (activeChat) {
         setActiveChat(prev => prev ? ({...prev, last_message: newMessage, updated_at: newMessage.updated_at }) : null);
     }
   }, [activeChat]);
@@ -124,7 +122,7 @@ export default function ChatPage() {
       setOtherUser(prev => prev ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : null);
     }
      if (currentUser && data.user_id === currentUser.id) {
-      fetchAndUpdateUser(); // Current user's presence updated by another session
+      fetchAndUpdateUser(); 
     }
   }, [otherUser, currentUser, fetchAndUpdateUser]);
   
@@ -133,10 +131,9 @@ export default function ChatPage() {
         setOtherUser(prev => prev ? { ...prev, ...data } : null);
     }
     if (currentUser && data.user_id === currentUser.id) {
-        fetchAndUpdateUser(); // Current user's profile updated from another session
+        fetchAndUpdateUser();
     }
   }, [currentUser, otherUser, fetchAndUpdateUser]);
-
 
   const handleWSTypingUpdate = useCallback((data: TypingIndicatorEventData) => {
     if (activeChat && data.chat_id === activeChat.id) {
@@ -154,10 +151,8 @@ export default function ChatPage() {
         description: `${otherUser.display_name} is thinking of you.`,
         duration: THINKING_OF_YOU_DURATION
       });
-      // Optionally, trigger visual effect for `isTargetUserBeingThoughtOf` on ChatHeader for current user
     }
   }, [otherUser, toast]);
-
 
   const { isConnected: isWsConnected, sendMessage: sendWsMessage } = useWebSocket({
     token,
@@ -171,8 +166,6 @@ export default function ChatPage() {
     onClose: (event) => addAppEvent('apiError', `WebSocket disconnected: ${event.reason}`, currentUser?.id, currentUser?.display_name, {code: event.code}),
   });
 
-
-  // Effect for initial data loading when currentUser is available
   useEffect(() => {
     if (!isAuthenticated && !isAuthLoading) {
       router.push('/');
@@ -183,35 +176,38 @@ export default function ChatPage() {
       setIsChatLoading(true);
       const loadChatData = async () => {
         try {
-          // 1. Fetch default chat partner
           const partner = await api.getDefaultChatPartner();
           if (!partner) {
-            toast({ variant: 'destructive', title: "Chat Setup Error", description: "Could not find a chat partner. Please ensure two users are registered." });
+            toast({ variant: 'destructive', title: "Chat Setup Error", description: "Could not find a chat partner. Ensure two users are registered." });
             setIsChatLoading(false);
-            // For a 2-user system, this means the other user is not registered or DB is empty.
-            // Logout or show an error message.
-            logout(); // Simple solution for now
+            logout();
             return;
           }
           
-          // Fetch full profile of other user
           const otherUserDetails = await api.getUserProfile(partner.user_id);
           setOtherUser(otherUserDetails);
-          setAvatarPreview(currentUser.avatar_url); // Initialize avatar for profile modal
+          setAvatarPreview(currentUser.avatar_url);
 
-          // 2. Create or get the chat session with this partner
           const chatSession = await api.createOrGetChat(partner.user_id);
           setActiveChat(chatSession);
 
-          // 3. Fetch messages for this chat
           if (chatSession) {
             const messagesData = await api.getMessages(chatSession.id);
             setMessages(messagesData.messages.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
           }
+          
+          // Mood prompt logic
+          if (typeof window !== 'undefined' && currentUser.mood) {
+            const moodPrompted = sessionStorage.getItem('moodPromptedThisSession');
+            if (moodPrompted !== 'true') {
+              setInitialMoodOnLoad(currentUser.mood);
+              setIsMoodModalOpen(true);
+            }
+          }
+
         } catch (error: any) {
           toast({ variant: 'destructive', title: 'Failed to load chat data', description: error.message });
           addAppEvent('apiError', 'Failed to load initial chat data', currentUser?.id, currentUser?.display_name, { error: error.message });
-          // Potentially logout or redirect
         } finally {
           setIsChatLoading(false);
         }
@@ -219,7 +215,7 @@ export default function ChatPage() {
       loadChatData();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, token, isAuthenticated, isAuthLoading, router, toast, logout]); // Removed addAppEvent, setAvatarPreview from deps
+  }, [currentUser, token, isAuthenticated, isAuthLoading, router, toast, logout]);
 
 
   const handleSendMessage = (text: string) => {
@@ -227,7 +223,7 @@ export default function ChatPage() {
 
     const clientTempId = `temp_${Date.now()}`;
     const optimisticMessage: MessageType = {
-      id: clientTempId, // Temporary ID
+      id: clientTempId,
       user_id: currentUser.id,
       chat_id: activeChat.id,
       text,
@@ -236,7 +232,6 @@ export default function ChatPage() {
       reactions: {},
       client_temp_id: clientTempId,
     };
-    // Optimistic UI update
     setMessages(prev => [...prev, optimisticMessage]);
 
     sendWsMessage({
@@ -276,11 +271,9 @@ export default function ChatPage() {
     }
   };
 
-
   const handleToggleReaction = (messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat || !isWsConnected) return;
-
-    const RATE_LIMIT_MS = 1000; // Kept client-side rate limiting
+    const RATE_LIMIT_MS = 1000;
     const key = `${messageId}_${emoji}`;
     const now = Date.now();
     if (lastReactionToggleTimes.current[key] && (now - lastReactionToggleTimes.current[key] < RATE_LIMIT_MS)) {
@@ -295,30 +288,26 @@ export default function ChatPage() {
       chat_id: activeChat.id,
       emoji: emoji,
     });
-    // Optimistic UI update can be tricky with reactions if not careful.
-    // The WS response will update the state via handleWSReactionUpdate.
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, {messageId});
   };
 
-  const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone'>>, newAvatarFile?: File) => {
+  const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
     if (!currentUser) return;
     try {
       let finalProfileData = { ...updatedProfileData };
       if (newAvatarFile) {
         toast({title: "Uploading avatar..."});
         const avatarUploadResponse = await api.uploadAvatar(newAvatarFile);
-        // The backend /users/me/avatar endpoint directly updates and returns the user,
-        // so we might not need to merge avatar_url manually if updateProfile is called after,
-        // or if uploadAvatar returns the full updated user. For now, assuming direct update.
-        setAvatarPreview(avatarUploadResponse.avatar_url); // Update local preview
-        finalProfileData.avatar_url = avatarUploadResponse.avatar_url; // ensure its part of the profile data if not already by backend
+        setAvatarPreview(avatarUploadResponse.avatar_url);
+        // Backend /users/me/avatar now handles DB update, so no need to merge avatar_url here
       }
       
-      if (Object.keys(updatedProfileData).length > 0) { // Only call update if other fields changed
+      // Only call update if there are other fields changed OR if no new avatar but other fields exist
+      if (Object.keys(updatedProfileData).length > 0) {
          await api.updateUserProfile(updatedProfileData);
       }
 
-      await fetchAndUpdateUser(); // Refresh currentUser from AuthContext to get latest from server
+      await fetchAndUpdateUser();
       toast({ title: "Profile Updated", description: "Your profile has been saved." });
       addAppEvent('profileUpdate', `${currentUser.display_name} updated profile.`, currentUser.id, currentUser.display_name);
       setIsProfileModalOpen(false);
@@ -330,7 +319,11 @@ export default function ChatPage() {
   const handleSendThought = async () => {
     if (!currentUser || !otherUser || !isWsConnected) return;
     try {
-      await api.sendThinkingOfYouPing(otherUser.id);
+      // Frontend sends the WS message directly via useWebSocket hook's sendMessage
+      sendWsMessage({
+          event_type: "ping_thinking_of_you",
+          recipient_user_id: otherUser.id,
+      });
       initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
       addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
     } catch (error: any) {
@@ -375,7 +368,6 @@ export default function ChatPage() {
     }
   }, [otherUser]);
 
-  // Typing indicator logic
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const handleTyping = useCallback((isTyping: boolean) => {
     if (!activeChat || !isWsConnected) return;
@@ -391,14 +383,32 @@ export default function ChatPage() {
 
     if (isTyping) {
         typingTimeoutRef.current = setTimeout(() => {
-            // Send stop_typing if no typing for a while
             sendWsMessage({
                 event_type: "stop_typing",
                 chat_id: activeChat.id,
             });
-        }, 3000); // Stop typing after 3 seconds of inactivity
+        }, 3000);
     }
   }, [activeChat, isWsConnected, sendWsMessage]);
+
+  const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
+    if (currentUser) {
+      try {
+        await api.updateUserProfile({ mood: newMood });
+        await fetchAndUpdateUser();
+        toast({ title: "Mood Updated!", description: `Your mood is now ${newMood}.` });
+      } catch (error: any) {
+        toast({ variant: 'destructive', title: 'Mood Update Failed', description: error.message });
+      }
+    }
+    if (typeof window !== 'undefined') sessionStorage.setItem('moodPromptedThisSession', 'true');
+    setIsMoodModalOpen(false);
+  }, [currentUser, fetchAndUpdateUser, toast]);
+
+  const handleContinueWithCurrentMood = useCallback(() => {
+    if (typeof window !== 'undefined') sessionStorage.setItem('moodPromptedThisSession', 'true');
+    setIsMoodModalOpen(false);
+  }, []);
 
 
   if (isAuthLoading || isChatLoading) {
@@ -411,9 +421,6 @@ export default function ChatPage() {
   }
 
   if (!currentUser || !otherUser || !activeChat) {
-     // This state might occur if default chat partner couldn't be established or user was logged out.
-     // AuthContext useEffect should redirect to '/' if not authenticated.
-     // If authenticated but otherUser/activeChat is null, it's an error state.
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
         <div>
@@ -449,8 +456,8 @@ export default function ChatPage() {
               />
               <InputBar
                 onSendMessage={handleSendMessage}
-                onSendMoodClip={handleSendMoodClip} // Will need modification to handle file
-                isSending={isLoadingAISuggestion} // Or other sending states
+                onSendMoodClip={handleSendMoodClip}
+                isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
               />
             </div>
@@ -463,7 +470,7 @@ export default function ChatPage() {
           user={currentUser}
           onSave={handleSaveProfile}
           avatarPreview={avatarPreview || currentUser.avatar_url}
-          onAvatarFileChange={handleAvatarFileChangeHook} // Use the hook's handler
+          onAvatarFileChange={handleAvatarFileChangeHook}
         />
       )}
       {fullScreenUserData && (
@@ -471,6 +478,15 @@ export default function ChatPage() {
           isOpen={isFullScreenAvatarOpen}
           onClose={() => setIsFullScreenAvatarOpen(false)}
           user={fullScreenUserData}
+        />
+      )}
+      {currentUser && initialMoodOnLoad && (
+        <MoodEntryModal
+          isOpen={isMoodModalOpen}
+          onClose={() => setIsMoodModalOpen(false)} // Should typically be handled by onContinueWithCurrentMood
+          onSetMood={handleSetMoodFromModal}
+          currentMood={initialMoodOnLoad}
+          onContinueWithCurrent={handleContinueWithCurrentMood}
         />
       )}
       <ReasoningDialog />
