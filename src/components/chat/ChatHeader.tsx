@@ -2,7 +2,7 @@
 import type { User } from '@/types';
 import MoodIndicator from './MoodIndicator';
 import { Button } from '@/components/ui/button';
-import { Settings, Heart, PanelLeftOpen } from 'lucide-react'; // PanelLeftOpen might be removed if sidebar is removed
+import { Settings, Heart, PanelLeftOpen, Phone } from 'lucide-react';
 import Image from 'next/image';
 import {
   Tooltip,
@@ -19,7 +19,8 @@ interface ChatHeaderProps {
   onProfileClick: () => void;
   onSendThinkingOfYou: (targetUserId: string) => void;
   isTargetUserBeingThoughtOf: boolean;
-  onToggleSidebar?: () => void; // Made optional as sidebar might be removed
+  onOtherUserAvatarClick: () => void; // New prop for avatar click
+  onToggleSidebar?: () => void;
 }
 
 export default function ChatHeader({ 
@@ -28,6 +29,7 @@ export default function ChatHeader({
   onProfileClick, 
   onSendThinkingOfYou, 
   isTargetUserBeingThoughtOf,
+  onOtherUserAvatarClick,
   onToggleSidebar 
 }: ChatHeaderProps) {
   let presenceStatusText = `${otherUser.name} is offline.`;
@@ -53,7 +55,7 @@ export default function ChatHeader({
   return (
     <header className="flex items-center justify-between p-4 border-b border-border bg-card rounded-t-lg">
       <div className="flex items-center space-x-3">
-        {onToggleSidebar && ( // Conditionally render sidebar toggle if function is provided
+        {onToggleSidebar && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -61,7 +63,7 @@ export default function ChatHeader({
                         variant="ghost" 
                         size="icon" 
                         onClick={onToggleSidebar} 
-                        className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full mr-2 md:hidden" // Example: show on mobile, or always if needed
+                        className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full mr-2 md:hidden"
                         aria-label="Toggle Event Timeline"
                     >
                         <PanelLeftOpen size={20} />
@@ -73,7 +75,11 @@ export default function ChatHeader({
               </Tooltip>
             </TooltipProvider>
         )}
-        <div className="relative">
+        <button
+          onClick={onOtherUserAvatarClick}
+          aria-label={`View ${otherUser.name}'s avatar`}
+          className="relative rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card transition-all hover:scale-105 active:scale-95"
+        >
           <Image 
             src={otherUser.avatar} 
             alt={otherUser.name} 
@@ -86,7 +92,7 @@ export default function ChatHeader({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span
+                <span // This span is not clickable, just an indicator. The button around Image is clickable.
                   className={cn(
                     "absolute bottom-0 right-0 block h-3 w-3 rounded-full border-2 border-card ring-1",
                     otherUser.isOnline ? "bg-green-500 ring-green-500" : "bg-gray-400 ring-gray-400"
@@ -99,8 +105,8 @@ export default function ChatHeader({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        </button>
            <span className="sr-only">{srPresenceText}</span>
-        </div>
         <div>
           <div className="flex items-center space-x-2">
             <h2 className="font-semibold text-foreground font-headline">{otherUser.name}</h2>
@@ -120,7 +126,28 @@ export default function ChatHeader({
           <MoodIndicator mood={otherUser.mood} />
         </div>
       </div>
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1 sm:space-x-2">
+        {otherUser.phone && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={`tel:${otherUser.phone.replace(/\s|-/g, "")}`} // Sanitize phone number for tel link
+                  className={cn(
+                    buttonVariants({ variant: "ghost", size: "icon" }),
+                    "text-muted-foreground hover:text-green-600 hover:bg-green-600/10 active:bg-green-600/20 rounded-full"
+                  )}
+                  aria-label={`Call ${otherUser.name}`}
+                >
+                  <Phone size={20} />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Call {otherUser.name} ({otherUser.phone})</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -155,4 +182,3 @@ export default function ChatHeader({
     </header>
   );
 }
-

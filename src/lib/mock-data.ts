@@ -11,6 +11,7 @@ export const mockUsers: User[] = [
     name: 'Alice',
     avatar: 'https://placehold.co/100x100.png?text=A',
     mood: getRandomMood(),
+    phone: '+15551234567',
     'data-ai-hint': 'letter A',
     isOnline: true,
     lastSeen: Date.now() - 1000 * 60 * 1, 
@@ -20,6 +21,7 @@ export const mockUsers: User[] = [
     name: 'Bob',
     avatar: 'https://placehold.co/100x100.png?text=B',
     mood: getRandomMood(),
+    phone: '+15557654321',
     'data-ai-hint': 'letter B',
     isOnline: true, 
     lastSeen: Date.now() - 1000 * 60 * 2, 
@@ -29,6 +31,7 @@ export const mockUsers: User[] = [
     name: 'Charlie',
     avatar: 'https://placehold.co/100x100.png?text=C',
     mood: getRandomMood(),
+    // Charlie has no phone number
     'data-ai-hint': 'letter C',
     isOnline: false,
     lastSeen: Date.now() - 1000 * 60 * 60 * 3, 

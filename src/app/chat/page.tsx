@@ -9,14 +9,14 @@ import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
+import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal'; // Added import
 import { useToast } from '@/hooks/use-toast'; 
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useAvatar } from '@/hooks/useAvatar';
-import { useMoodSuggestion } from '@/hooks/useMoodSuggestion';
+import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx'; // Ensure .tsx if it contains JSX
 import { THINKING_OF_YOU_DURATION, MAX_AVATAR_SIZE_KB, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
-// import { Button } from '@/components/ui/button'; // No longer directly used for AI toast action
 import { formatDistanceToNowStrict } from 'date-fns';
 
 
@@ -33,8 +33,12 @@ export default function ChatPage() {
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
   const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
 
+  // State for FullScreenAvatarModal
+  const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
+  const [fullScreenAvatarData, setFullScreenAvatarData] = useState<{url: string, name: string, hint?: string} | null>(null);
+
   const lastReactionToggleTimes = useRef<Record<string, number>>({}); 
-  const lastMessageTextRef = useRef<string>(""); // For AI mood suggestion retry
+  const lastMessageTextRef = useRef<string>("");
 
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string) => {
     setAppEvents(prevEvents => {
@@ -46,7 +50,6 @@ export default function ChatPage() {
         userId,
         userName,
       };
-      // Keep only the last N events, e.g., 50
       return [newEvent, ...prevEvents].slice(0, 50);
     });
   }, []);
@@ -70,7 +73,7 @@ export default function ChatPage() {
   const handleMoodChangeForAISuggestion = useCallback((newMood: Mood) => {
     if (currentUser) {
       const updatedUser = { ...currentUser, mood: newMood };
-      handleSaveProfile(updatedUser, false); // Save profile without adding a separate event for mood change
+      handleSaveProfile(updatedUser, false);
       addAppEvent('moodChange', `${currentUser.name} updated mood to ${newMood} via AI suggestion.`, currentUser.id, currentUser.name);
     }
   }, [currentUser, addAppEvent]);
@@ -117,6 +120,7 @@ export default function ChatPage() {
           mood: 'Neutral',
           isOnline: true,
           lastSeen: Date.now(),
+          phone: undefined, // New users start without a phone
           "data-ai-hint": `letter ${activeUsername.charAt(0).toUpperCase()}`,
         };
       }
@@ -149,7 +153,7 @@ export default function ChatPage() {
       const potentialOtherUsers = allUsers.filter(u => u.id !== currentUser.id);
       let newOtherUser = potentialOtherUsers.length > 0 ? potentialOtherUsers[0] : null;
 
-      if (!newOtherUser) {
+      if (!newOtherUser && allUsers.length === 1 && allUsers[0].id === currentUser.id) { // Only current user exists
         const fallbackOther: User = { 
             id: 'other_dummy_user', 
             name: 'Virtual Friend', 
@@ -157,9 +161,25 @@ export default function ChatPage() {
             mood: 'Neutral', 
             isOnline: true, 
             lastSeen: Date.now(),
+            phone: '+15550001111',
             "data-ai-hint": "person letter V" 
         };
         if (!allUsers.find(u => u.id === fallbackOther.id)) {
+             setAllUsers(prev => [...prev, fallbackOther].filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)));
+        }
+        newOtherUser = fallbackOther;
+      } else if (!newOtherUser) { // No other users at all from mock, create fallback
+         const fallbackOther: User = { 
+            id: 'other_dummy_user_2', 
+            name: 'Support Bot', 
+            avatar: 'https://placehold.co/100x100.png?text=S', 
+            mood: 'Helpful' as Mood, // Custom mood, ensure 'Helpful' is in ALL_MOODS or handle appropriately
+            isOnline: true, 
+            lastSeen: Date.now(),
+            phone: '+15552223333',
+            "data-ai-hint": "letter S" 
+        };
+         if (!allUsers.find(u => u.id === fallbackOther.id)) {
              setAllUsers(prev => [...prev, fallbackOther].filter((user, index, self) => index === self.findIndex((t) => t.id === user.id)));
         }
         newOtherUser = fallbackOther;
@@ -185,16 +205,14 @@ export default function ChatPage() {
     addAppEvent('messageSent', `${currentUser.name} sent a message: "${text.substring(0,30)}..."`, currentUser.id, currentUser.name);
 
     if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) {
-      lastMessageTextRef.current = text; // Store for potential retry
+      lastMessageTextRef.current = text;
       aiSuggestMood(text);
     }
   };
 
   const handleSendMoodClip = (clipType: MessageClipType) => {
     if (!currentUser) return;
-
-    // Simulate permission check
-    const hasPermission = Math.random() > 0.2; // 80% chance of having permission (for testing)
+    const hasPermission = Math.random() > 0.2; 
     if (!hasPermission) {
         toast({
             variant: 'destructive',
@@ -257,7 +275,7 @@ export default function ChatPage() {
             }
           } else {
             updatedReactions[emoji] = [...existingReactors, currentUser.id];
-            reactionAdded = true; // Reaction was added, not removed
+            reactionAdded = true;
           }
           return { ...msg, reactions: updatedReactions };
         }
@@ -329,6 +347,17 @@ export default function ChatPage() {
     }
   }, [currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
 
+  const handleOtherUserAvatarClick = useCallback(() => {
+    if (otherUser) {
+      setFullScreenAvatarData({ 
+        url: otherUser.avatar, 
+        name: otherUser.name, 
+        hint: otherUser['data-ai-hint'] 
+      });
+      setIsFullScreenAvatarOpen(true);
+    }
+  }, [otherUser]);
+
 
   if (isLoading || !currentUser || !otherUser) {
     return (
@@ -349,7 +378,8 @@ export default function ChatPage() {
                 onProfileClick={() => setIsProfileModalOpen(true)}
                 onSendThinkingOfYou={handleSendThought}
                 isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
-                onToggleSidebar={() => { /* Sidebar removed, this can be removed if not used elsewhere */ }} 
+                onOtherUserAvatarClick={handleOtherUserAvatarClick} // Pass handler to ChatHeader
+                onToggleSidebar={() => { /* Sidebar removed */ }} 
               />
               <MessageArea 
                 messages={messages} 
@@ -360,7 +390,7 @@ export default function ChatPage() {
               <InputBar 
                 onSendMessage={handleSendMessage} 
                 onSendMoodClip={handleSendMoodClip}
-                isSending={isLoadingAISuggestion} // Pass loading state to InputBar
+                isSending={isLoadingAISuggestion}
               />
             </div>
           </ErrorBoundary>
@@ -373,6 +403,15 @@ export default function ChatPage() {
           onSave={handleSaveProfile}
           avatarPreview={avatarPreview}
           onAvatarFileChange={handleAvatarFileChange}
+        />
+      )}
+      {fullScreenAvatarData && (
+        <FullScreenAvatarModal
+          isOpen={isFullScreenAvatarOpen}
+          onClose={() => setIsFullScreenAvatarOpen(false)}
+          avatarUrl={fullScreenAvatarData.url}
+          userName={fullScreenAvatarData.name}
+          dataAiHint={fullScreenAvatarData.hint}
         />
       )}
       <ReasoningDialog />

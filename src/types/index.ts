@@ -13,6 +13,7 @@ export interface User {
   name: string;
   avatar: string; 
   mood: Mood;
+  phone?: string; // Added phone field
   "data-ai-hint"?: string; 
   isOnline?: boolean; 
   lastSeen?: number; 
