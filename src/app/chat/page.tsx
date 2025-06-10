@@ -21,6 +21,12 @@ import { SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarHeader
 import { PanelLeftOpen, History } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNowStrict } from 'date-fns';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 
 export default function ChatPage() {
@@ -56,7 +62,7 @@ export default function ChatPage() {
 
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, eventUserId?: string, eventUserName?: string) => {
     setAppEvents(prevEvents => [
-      { id: `event_${Date.now()}_${Math.random()}`, timestamp: Date.now(), type, description, userId: eventUserId, userName: eventUserName },
+      { id: `event_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, timestamp: Date.now(), type, description, userId: eventUserId, userName: eventUserName },
       ...prevEvents,
     ].slice(0, 50)); // Keep last 50 events
   }, []);
@@ -103,7 +109,7 @@ export default function ChatPage() {
     localStorage.setItem(userProfileKey, JSON.stringify(userToSet)); 
     
     setCurrentUser(userToSet);
-    setAvatarPreview(userToSet.avatar); // Initialize avatar preview for the modal
+    setAvatarPreview(userToSet.avatar); 
 
     setAllUsers(prevUsers => {
         let users = [...prevUsers];
@@ -168,7 +174,7 @@ export default function ChatPage() {
                     const updatedUser = { ...currentUser, mood: newMood };
                     handleSaveProfile(updatedUser);
                     toast({ title: "Mood Updated!", description: `Your mood is now ${newMood}.` });
-                    addAppEvent('moodChange', `${currentUser.name} mood updated to ${newMood} (AI Suggestion)`, currentUser.id, currentUser.name);
+                    // Event logged in handleSaveProfile
                   }
                 }}
               >
@@ -178,7 +184,7 @@ export default function ChatPage() {
           ),
         });
       } else if (result.reasoning) {
-        console.log("AI mood analysis:", result.reasoning);
+        // console.log("AI mood analysis:", result.reasoning); // Optionally log neutral suggestions
       }
     } catch (error) {
       console.error("Error suggesting mood:", error);
@@ -269,7 +275,8 @@ export default function ChatPage() {
   }, [currentUser, toast, addAppEvent]);
 
   const handleSaveProfile = (updatedUser: User) => {
-    const oldMood = currentUser?.mood;
+    if (!currentUser) return;
+    const oldMood = currentUser.mood;
     const newCurrentUser = {...updatedUser, isOnline: true, lastSeen: Date.now()};
     setCurrentUser(newCurrentUser);
     setAllUsers(prevUsers => 
@@ -283,6 +290,10 @@ export default function ChatPage() {
     }
     if (oldMood !== newCurrentUser.mood && newCurrentUser.name) {
         addAppEvent('moodChange', `${newCurrentUser.name} changed mood to ${newCurrentUser.mood}.`, newCurrentUser.id, newCurrentUser.name);
+    } else if (oldMood === newCurrentUser.mood && newCurrentUser.name) {
+        // If mood didn't change but profile was saved, it could be an avatar or name change.
+        // For simplicity, we don't log an event for just avatar/name change here,
+        // but it could be added if needed.
     }
   };
 
@@ -295,8 +306,6 @@ export default function ChatPage() {
   const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
     if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
     
-    // const sortedMoods = [mood1, mood2].sort().join('-'); // Not used currently, direct mapping
-
     if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
     if (mood1 === 'Excited' && mood2 === 'Excited') return 'bg-mood-excited-excited';
     if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful' || mood1 === 'Content') &&
@@ -413,3 +422,4 @@ export default function ChatPage() {
     </SidebarProvider>
   );
 }
+

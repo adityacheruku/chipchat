@@ -2,7 +2,7 @@
 import type { User } from '@/types';
 import MoodIndicator from './MoodIndicator';
 import { Button } from '@/components/ui/button';
-import { Settings, Heart, PanelLeftOpen } from 'lucide-react'; // Added PanelLeftOpen
+import { Settings, Heart, PanelLeftOpen } from 'lucide-react';
 import Image from 'next/image';
 import {
   Tooltip,
@@ -11,7 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, formatDistanceToNowStrict } from 'date-fns';
 
 interface ChatHeaderProps {
   currentUser: User;
@@ -19,7 +19,7 @@ interface ChatHeaderProps {
   onProfileClick: () => void;
   onSendThinkingOfYou: (targetUserId: string) => void;
   isTargetUserBeingThoughtOf: boolean;
-  onToggleSidebar: () => void; // New prop
+  onToggleSidebar: () => void;
 }
 
 export default function ChatHeader({ 
@@ -32,20 +32,24 @@ export default function ChatHeader({
 }: ChatHeaderProps) {
   let presenceStatusText = `${otherUser.name} is offline.`;
   let formattedLastSeen = "Last seen: N/A";
+  let srPresenceText = `${otherUser.name} is offline.`;
 
   if (otherUser.isOnline) {
     presenceStatusText = `${otherUser.name} is online.`;
     formattedLastSeen = "Currently online";
+    srPresenceText = `${otherUser.name} is online.`;
   } else if (otherUser.lastSeen) {
     const lastSeenDate = new Date(otherUser.lastSeen);
     if (differenceInDays(new Date(), lastSeenDate) > 7) {
       formattedLastSeen = "Last seen a while ago";
     } else {
-      formattedLastSeen = `Last seen: ${lastSeenDate.toLocaleDateString()} at ${lastSeenDate.toLocaleTimeString()}`;
+      formattedLastSeen = `Last seen: ${formatDistanceToNowStrict(lastSeenDate, { addSuffix: true })}`;
     }
     presenceStatusText = `${otherUser.name} is offline. ${formattedLastSeen}`;
+    srPresenceText = presenceStatusText;
   } else {
      presenceStatusText = `${otherUser.name} is offline. Last seen: N/A`;
+     srPresenceText = presenceStatusText;
   }
 
 
@@ -97,7 +101,7 @@ export default function ChatHeader({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-           <span className="sr-only">{presenceStatusText}</span>
+           <span className="sr-only">{srPresenceText}</span>
         </div>
         <div>
           <div className="flex items-center space-x-2">
@@ -153,3 +157,4 @@ export default function ChatHeader({
     </header>
   );
 }
+
