@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { suggestMood, type SuggestMoodInput, type SuggestMoodOutput } from '@/ai/flows/suggestMoodFlow';
 import type { Mood } from '@/types';
@@ -19,9 +19,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ToastAction } from "@/components/ui/toast";
-import React from 'react'; // Ensure React is imported for JSX and useId
 
-const DEBOUNCE_DELAY = 1500; // 1.5 seconds
+const DEBOUNCE_DELAY = 1500;
 const DONT_SUGGEST_AGAIN_KEY = 'chirpChat_dontSuggestMoodAgain';
 
 interface UseMoodSuggestionProps {
@@ -29,6 +28,60 @@ interface UseMoodSuggestionProps {
   onMoodChange: (newMood: Mood) => void;
   currentMessageTextRef: React.MutableRefObject<string>;
 }
+
+interface ToastDescriptionComponentProps {
+  newMood: Mood;
+  toastReasoningSnippet: string | null;
+  fullReasoning: string | null;
+  checkboxId: string;
+  isDontSuggestAgainChecked: boolean;
+  onCheckboxChange: (checked: boolean) => void;
+  onShowDetailsClick: () => void;
+}
+
+// Changed component definition style
+function ToastDescriptionComponent(props: ToastDescriptionComponentProps) {
+  const {
+    newMood,
+    toastReasoningSnippet,
+    fullReasoning,
+    checkboxId,
+    isDontSuggestAgainChecked,
+    onCheckboxChange,
+    onShowDetailsClick,
+  } = props;
+
+  return (
+    <div className="space-y-2">
+      <p>AI thinks your message sounds {newMood}. Update mood?</p>
+      {toastReasoningSnippet && (
+        <p className="text-xs text-muted-foreground">
+          Reasoning: {toastReasoningSnippet}
+        </p>
+      )}
+      {fullReasoning && (
+        <Button
+          variant="link"
+          size="sm"
+          className="p-0 h-auto text-xs mt-1 text-accent-foreground hover:text-accent-foreground/80"
+          onClick={onShowDetailsClick}
+        >
+          Show Details
+        </Button>
+      )}
+      <div className="flex items-center space-x-2 mt-2">
+        <Checkbox
+          id={checkboxId}
+          checked={isDontSuggestAgainChecked}
+          onCheckedChange={(checkedState) => onCheckboxChange(Boolean(checkedState))}
+          aria-label="Don't suggest mood changes again"
+        />
+        <Label htmlFor={checkboxId} className="text-xs">Don't suggest again</Label>
+      </div>
+    </div>
+  );
+}
+
 
 export function useMoodSuggestion({ currentUserMood, onMoodChange, currentMessageTextRef }: UseMoodSuggestionProps) {
   const { toast } = useToast();
@@ -58,7 +111,7 @@ export function useMoodSuggestion({ currentUserMood, onMoodChange, currentMessag
   }, [toast]);
 
   const triggerSuggestion = useCallback(async (messageText: string) => {
-    if (dontSuggestAgain) {
+    if (localStorage.getItem(DONT_SUGGEST_AGAIN_KEY) === 'true') {
       setIsLoading(false);
       return;
     }
@@ -71,48 +124,26 @@ export function useMoodSuggestion({ currentUserMood, onMoodChange, currentMessag
 
       if (result.suggestedMood && result.suggestedMood !== currentUserMood && ALL_MOODS.includes(result.suggestedMood as Mood)) {
         const newMood = result.suggestedMood as Mood;
-        const currentReasoning = result.reasoning || "No specific reasoning provided.";
-
-        const toastDescriptionContent = (
-          <React.Fragment>
-            <div className="space-y-2">
-              <p>AI thinks your message sounds {newMood}. Update mood?</p>
-              {currentReasoning && currentReasoning !== "No specific reasoning provided." && (
-                <p className="text-xs text-muted-foreground">
-                  Reasoning: {currentReasoning.length > 60 ? currentReasoning.substring(0, 60) + "..." : currentReasoning}
-                </p>
-              )}
-              {result.reasoning && currentReasoning !== "No specific reasoning provided." && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="p-0 h-auto text-xs mt-1 text-accent-foreground hover:text-accent-foreground/80"
-                  onClick={() => {
-                    setReasoningText(currentReasoning);
-                    setShowReasoningDialog(true);
-                  }}
-                >
-                  Show Details
-                </Button>
-              )}
-              <div className="flex items-center space-x-2 mt-2">
-                <Checkbox
-                  id={dontSuggestCheckboxId}
-                  checked={dontSuggestAgain}
-                  onCheckedChange={(checked) => handleSetDontSuggestAgain(Boolean(checked))}
-                  aria-label="Don't suggest mood changes again"
-                />
-                <Label htmlFor={dontSuggestCheckboxId} className="text-xs">Don't suggest again</Label>
-              </div>
-            </div>
-          </React.Fragment>
+        const fullAIRasoning = result.reasoning || null;
+        const toastReasoningSnippet = fullAIRasoning ? (fullAIRasoning.length > 60 ? fullAIRasoning.substring(0, 60) + "..." : fullAIRasoning) : null;
+        
+        const descriptionElement = (
+          <ToastDescriptionComponent
+            newMood={newMood}
+            toastReasoningSnippet={toastReasoningSnippet}
+            fullReasoning={fullAIRasoning}
+            checkboxId={dontSuggestCheckboxId}
+            isDontSuggestAgainChecked={dontSuggestAgain}
+            onCheckboxChange={handleSetDontSuggestAgain}
+            onShowDetailsClick={() => {
+              setReasoningText(fullAIRasoning || "No detailed reasoning provided.");
+              setShowReasoningDialog(true);
+            }}
+          />
         );
-
+        
         const primaryToastAction = (
-          <ToastAction
-            altText={`Set mood to ${newMood}`}
-            asChild
-          >
+          <ToastAction altText={`Set mood to ${newMood}`} asChild>
             <Button
               variant="outline"
               size="sm"
@@ -128,13 +159,12 @@ export function useMoodSuggestion({ currentUserMood, onMoodChange, currentMessag
 
         toast({
           title: "Mood Suggestion",
-          description: toastDescriptionContent,
-          duration: 15000, // Increased duration for user to interact
+          description: descriptionElement,
+          duration: 15000,
           action: primaryToastAction,
         });
 
       } else if (result.reasoning && !result.suggestedMood) {
-        // AI provided reasoning but no suggestion
         // console.log("AI Reasoning (no suggestion):", result.reasoning);
       }
     } catch (error) {
@@ -155,25 +185,30 @@ export function useMoodSuggestion({ currentUserMood, onMoodChange, currentMessag
     } finally {
       setIsLoading(false);
     }
-  }, [currentUserMood, onMoodChange, toast, dontSuggestAgain, currentMessageTextRef, dontSuggestCheckboxId, handleSetDontSuggestAgain]);
+  }, [currentUserMood, onMoodChange, toast, dontSuggestAgain, currentMessageTextRef, dontSuggestCheckboxId, handleSetDontSuggestAgain, setReasoningText, setShowReasoningDialog, setIsLoading]);
 
 
   const debouncedSuggestMood = useCallback((messageText: string) => {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
     }
-    if (dontSuggestAgain) {
-       setIsLoading(false);
+    if (localStorage.getItem(DONT_SUGGEST_AGAIN_KEY) === 'true') {
+       setIsLoading(false); 
        return;
     }
 
-    setIsLoading(true);
+    setIsLoading(true); 
     debounceTimeoutRef.current = setTimeout(() => {
       triggerSuggestion(messageText);
     }, DEBOUNCE_DELAY);
-  }, [triggerSuggestion, dontSuggestAgain]);
+  }, [triggerSuggestion, setIsLoading]); 
 
   useEffect(() => {
+    // Load preference on mount
+    const storedPreference = localStorage.getItem(DONT_SUGGEST_AGAIN_KEY);
+    setDontSuggestAgain(storedPreference === 'true');
+
+    // Cleanup timeout on unmount
     return () => {
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
