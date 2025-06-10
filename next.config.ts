@@ -1,4 +1,17 @@
 import type {NextConfig} from 'next';
+import path from 'path';
+
+// Correctly import next-pwa
+const withPWAImport = require('next-pwa');
+const withPWA = withPWAImport({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+  // You can add more PWA options here if needed
+  // E.g., runtimeCaching: require('next-pwa/cache'),
+});
+
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -20,4 +33,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withPWA(nextConfig);

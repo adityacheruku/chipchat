@@ -2,9 +2,42 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
+const APP_NAME = "ChirpChat";
+const APP_DESCRIPTION = "A friendly chat application with PWA shortcuts.";
+
 export const metadata: Metadata = {
-  title: 'ChirpChat',
-  description: 'A friendly chat application.',
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: APP_NAME,
+    // startUpImage: [], // You can add startup images here
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  // Open Graph tags
+  openGraph: {
+    type: "website",
+    url: "https://your-app-url.com", // Replace with your actual URL
+    title: APP_NAME,
+    description: APP_DESCRIPTION,
+    siteName: APP_NAME,
+    images: [{
+      url: "https://your-app-url.com/icons/icon-512.png", // Replace with your actual URL
+    }],
+  },
+  // Twitter Card tags
+  twitter: {
+    card: "summary",
+    // creator: "@yourtwitterhandle", // Replace with your Twitter handle
+    // site: "@yourtwitterhandle", // Replace with your Twitter handle
+    title: APP_NAME,
+    description: APP_DESCRIPTION,
+    images: ["https://your-app-url.com/icons/icon-512.png"], // Replace with your actual URL
+  },
 };
 
 export default function RootLayout({
@@ -18,6 +51,14 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
+        <meta name="application-name" content={APP_NAME} />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content={APP_NAME} />
+        <meta name="description" content={APP_DESCRIPTION} />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="theme-color" content="#90AFC5" />
       </head>
       <body className="font-body antialiased">
         {children}
