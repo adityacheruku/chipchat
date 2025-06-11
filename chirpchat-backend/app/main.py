@@ -25,12 +25,32 @@ app = FastAPI(
 # CORS middleware for frontend integration
 # Ensure origins match your frontend development and deployed URLs
 origins = [
-    "http://localhost:3000", # Next.js frontend dev default
-    "http://localhost:9002", # As per user's package.json dev script
-    # Add your deployed frontend URL(s) here, e.g., "https://your-chirpchat-app.vercel.app"
+    "http://localhost:3000", # Next.js frontend dev default (often CRA)
+    "http://localhost:9002", # As per user's package.json dev script for Next.js
+    # Add your Vercel deployment preview and production URLs
+    # Example: "https://your-project-name.vercel.app",
+    # Example: "https://your-project-name-*.vercel.app" (for preview branches)
+    # Example: "https://yourcustomdomain.com"
+    # For development with ngrok or similar tunneling, you might need to add the dynamic URL
+    # or temporarily use a more permissive setting for DEBUG mode.
+    # Example: "https://<your-ngrok-id>.ngrok-free.app"
 ]
-if settings.ENVIRONMENT == "development": # Allow broader origins for local dev if needed
-    origins.append("http://localhost:9002") # Assuming frontend runs on this port
+
+# Add known Vercel patterns
+if settings.ENVIRONMENT != "development": # For production/preview Vercel deployments
+    # You'll need to replace 'your-vercel-project-name' and 'your-vercel-org-name'
+    # or add your custom domain if you use one.
+    # origins.append("https://your-vercel-project-name.vercel.app")
+    # origins.append("https://your-vercel-project-name-*.vercel.app") # For branch previews
+    pass # Add specific production/preview URLs here or manage via ENV var
+
+if settings.DEBUG: # More permissive for local development if DEBUG is true
+    origins.append("http://localhost:9002") # Ensure local dev is always there if DEBUG
+    # Consider adding "*" for extreme local dev flexibility, but be aware of implications.
+    # If using ngrok, it's best to add the specific ngrok URL when it's generated.
+    # Alternatively, for ngrok, you might check the Origin header or configure ngrok to rewrite it.
+    pass
+
 
 app.add_middleware(
     CORSMiddleware,
