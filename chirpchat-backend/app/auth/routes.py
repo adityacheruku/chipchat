@@ -11,8 +11,8 @@ from app.utils.security import get_password_hash, verify_password, create_access
 from app.database import db_manager
 from app.config import settings
 from app.utils.email_utils import send_login_notification_email
-from app.utils.logging import logger
-
+from app.utils.logging import logger # Ensure logger is imported
+from postgrest.exceptions import APIError # Import for specific PostgREST errors
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 user_router = APIRouter(prefix="/users", tags=["Users"])
@@ -31,23 +31,51 @@ async def register(user_create: UserCreate):
     
     new_user_data = {
         "id": str(user_id),
-        "phone": user_create.phone, # Store phone
-        "email": user_create.email, # Store optional email
+        "phone": user_create.phone,
+        "email": user_create.email, 
         "hashed_password": hashed_password,
         "display_name": user_create.display_name,
         "avatar_url": f"https://placehold.co/100x100.png?text={user_create.display_name[:1].upper()}",
-        "mood": "Neutral", # Default mood
+        "mood": "Neutral",
         "is_active": True,
         "is_online": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    
+    logger.info(f"Attempting to register new user with data: {new_user_data}") # Changed console.log to logger.info
 
-    insert_response = await db_manager.get_table("users").insert(new_user_data).execute()
-    if not insert_response.data or len(insert_response.data) == 0:
+    insert_response = None
+    try:
+        insert_response = await db_manager.get_table("users").insert(new_user_data).execute()
+    except APIError as e:
+        logger.error(f"PostgREST APIError during user insert. Status: {e.code}, Message: {e.message}, Details: {e.details}, Hint: {e.hint}")
+        logger.error(f"Payload that caused APIError: {new_user_data}")
+        # Try to parse the JSON error response if available
+        error_detail_json = "Could not parse error JSON from PostgREST."
+        try:
+            error_detail_json = e.json() # If the error response from PostgREST is JSON
+        except Exception:
+            pass # Keep the default message
+        logger.error(f"Full APIError JSON (if available): {error_detail_json}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not create user",
+            detail=f"Database error during user creation: {e.message}",
+        )
+    except Exception as e: # Catch any other unexpected errors during insert
+        logger.error(f"Unexpected error during user insert: {str(e)}")
+        logger.error(f"Payload that caused error: {new_user_data}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred during user creation: {str(e)}",
+        )
+
+    if not insert_response or not insert_response.data or len(insert_response.data) == 0:
+        logger.error(f"User insert operation returned no data or empty data. Payload: {new_user_data}. Response: {insert_response}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create user after database operation.",
         )
     
     created_user_raw = insert_response.data[0]
@@ -65,7 +93,7 @@ async def register(user_create: UserCreate):
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": created_user_raw["phone"], "user_id": str(created_user_raw["id"])}, # "sub" is now phone
+        data={"sub": created_user_raw["phone"], "user_id": str(created_user_raw["id"])},
         expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer", user=user_public_info)
@@ -75,7 +103,7 @@ async def register(user_create: UserCreate):
 async def login(
     request: Request,
     background_tasks: BackgroundTasks,
-    form_data: OAuth2PasswordRequestForm = Depends() # form_data.username will be phone number
+    form_data: OAuth2PasswordRequestForm = Depends() 
 ):
     user_response = await db_manager.get_table("users").select("*").eq("phone", form_data.username).maybe_single().execute()
     
@@ -110,7 +138,7 @@ async def login(
     
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user_in_db["phone"], "user_id": str(user_in_db["id"])}, # "sub" is now phone
+        data={"sub": user_in_db["phone"], "user_id": str(user_in_db["id"])},
         expires_delta=access_token_expires
     )
     
@@ -120,7 +148,7 @@ async def login(
         background_tasks.add_task(
             send_login_notification_email,
             logged_in_user_name=user_in_db["display_name"],
-            logged_in_user_phone=user_in_db.get("phone"), # Phone will always be present
+            logged_in_user_phone=user_in_db.get("phone"),
             login_time=login_time_utc,
             client_host=client_host
         )
@@ -138,7 +166,7 @@ async def read_users_me(current_user: UserPublic = Depends(get_current_active_us
 @user_router.get("/{user_id}", response_model=UserPublic)
 async def get_user(user_id: UUID, current_user_dep: UserPublic = Depends(get_current_user)):
     user_response = await db_manager.get_table("users").select(
-        "id, display_name, avatar_url, mood, phone, email, is_online, last_seen" # Added email
+        "id, display_name, avatar_url, mood, phone, email, is_online, last_seen"
     ).eq("id", str(user_id)).maybe_single().execute()
     
     if not user_response.data:
@@ -156,9 +184,7 @@ async def update_profile(
     
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    if "password" in update_data and update_data["password"]: # Password update not directly supported by UserUpdate now
-        # This part should be handled by a separate /change-password endpoint if needed
-        # For now, removing direct password update from this general profile update
+    if "password" in update_data and update_data["password"]:
         del update_data["password"] 
 
 
@@ -224,4 +250,3 @@ async def upload_avatar_route(
         is_online=refreshed_user_data["is_online"],
         last_seen=refreshed_user_data.get("last_seen")
     )
-
