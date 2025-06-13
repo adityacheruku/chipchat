@@ -7,22 +7,44 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-// Assuming UserCreate from backend will now use phone
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
 type AuthMode = 'login' | 'register';
+
+const countryCodes = [
+  { value: '+1', label: 'US (+1)' },
+  { value: '+44', label: 'UK (+44)' },
+  { value: '+91', label: 'India (+91)' },
+  { value: '+61', label: 'Australia (+61)' },
+  { value: '+49', label: 'Germany (+49)' },
+  { value: '+81', label: 'Japan (+81)' },
+  { value: '+33', label: 'France (+33)' },
+  { value: '+86', label: 'China (+86)' },
+  { value: '+55', label: 'Brazil (+55)' },
+  { value: '+27', label: 'South Africa (+27)' },
+  // For a production app, this list should be much more comprehensive
+  // or use a dedicated library for country code input.
+];
 
 export default function AuthPage() {
   const { login, register, isLoading: isAuthLoading } = useAuth();
   const { toast } = useToast();
 
   const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [phone, setPhone] = useState(''); // Changed from email to phone
+  
+  // For Login
+  const [loginPhone, setLoginPhone] = useState('');
+
+  // For Register
+  const [selectedCountryCode, setSelectedCountryCode] = useState(countryCodes[0].value); // Default to first in list
+  const [nationalPhone, setNationalPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState(''); // For registration
-  const [optionalEmail, setOptionalEmail] = useState(''); // Optional email for registration
+  const [displayName, setDisplayName] = useState('');
+  const [optionalEmail, setOptionalEmail] = useState('');
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
 
 
@@ -31,25 +53,23 @@ export default function AuthPage() {
     setIsSubmitting(true);
 
     if (authMode === 'login') {
-      if (!phone.trim() || !password.trim()) {
+      if (!loginPhone.trim() || !password.trim()) {
         toast({ variant: 'destructive', title: 'Missing Fields', description: 'Please enter both phone number and password.' });
         setIsSubmitting(false);
         return;
       }
       try {
-        await login(phone, password);
-        // Navigation is handled by AuthContext
+        // For login, we assume the user enters the full E.164 phone number directly.
+        // Or, if login also needs country code selection, its UI would need similar updates.
+        // For now, login expects full E.164 number.
+        await login(loginPhone, password);
       } catch (error: any) {
-        // Error toast is handled by AuthContext or api service
-        console.error("Login submission error (AuthPage):", error);
-        if (error.message) console.error("AuthPage - Login error message:", error.message);
-        if (error.name) console.error("AuthPage - Login error name:", error.name);
-        if (error.cause) console.error("AuthPage - Login error cause:", error.cause);
+        console.error("AuthPage - Login error:", error.message, error.name, error.cause);
       } finally {
         setIsSubmitting(false);
       }
     } else { // Register mode
-      if (!phone.trim() || !password.trim() || !displayName.trim()) {
+      if (!nationalPhone.trim() || !password.trim() || !displayName.trim()) {
         toast({ variant: 'destructive', title: 'Missing Fields', description: 'Phone, password, and display name are required.' });
         setIsSubmitting(false);
         return;
@@ -59,21 +79,26 @@ export default function AuthPage() {
          setIsSubmitting(false);
          return;
       }
-      // Construct userData according to backend's UserCreate schema (which now expects phone)
+      
+      const fullPhoneNumber = `${selectedCountryCode}${nationalPhone.replace(/\D/g, '')}`; // Combine and strip non-digits from national part
+
+      // Validate if the combined number looks like a plausible E.164 start (simple check)
+      if (!/^\+\d{8,15}$/.test(fullPhoneNumber)) {
+        toast({ variant: 'destructive', title: 'Invalid Phone Number', description: 'Please enter a valid phone number after selecting your country code.' });
+        setIsSubmitting(false);
+        return;
+      }
+
       const registerData: BackendUserCreate = {
-        phone,
+        phone: fullPhoneNumber,
         password,
         display_name: displayName,
-        ...(optionalEmail.trim() && { email: optionalEmail.trim() }) // Add email if provided
+        ...(optionalEmail.trim() && { email: optionalEmail.trim() })
       };
       try {
         await register(registerData);
-        // Navigation is handled by AuthContext
       } catch (error: any) {
-        console.error("Registration submission error (AuthPage):", error);
-        if (error.message) console.error("AuthPage - Registration error message:", error.message);
-        if (error.name) console.error("AuthPage - Registration error name:", error.name);
-        if (error.cause) console.error("AuthPage - Registration error cause:", error.cause);
+        console.error("AuthPage - Registration error:", error.message, error.name, error.cause);
       } finally {
         setIsSubmitting(false);
       }
@@ -82,7 +107,9 @@ export default function AuthPage() {
 
   const toggleAuthMode = () => {
     setAuthMode(prevMode => prevMode === 'login' ? 'register' : 'login');
-    setPhone('');
+    setLoginPhone('');
+    setSelectedCountryCode(countryCodes[0].value);
+    setNationalPhone('');
     setPassword('');
     setDisplayName('');
     setOptionalEmail('');
@@ -116,19 +143,51 @@ export default function AuthPage() {
                 />
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                type="tel" // Changed type to tel for phone numbers
-                placeholder="Enter your phone number (e.g., +12223334444)"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
-                className="bg-card focus-visible:ring-ring"
-                disabled={loading}
-              />
-            </div>
+
+            {authMode === 'login' && (
+              <div className="space-y-2">
+                <Label htmlFor="loginPhone">Phone Number (e.g., +12223334444)</Label>
+                <Input
+                  id="loginPhone"
+                  type="tel"
+                  placeholder="Enter your full phone number"
+                  value={loginPhone}
+                  onChange={(e) => setLoginPhone(e.target.value)}
+                  required
+                  className="bg-card focus-visible:ring-ring"
+                  disabled={loading}
+                />
+              </div>
+            )}
+
+            {authMode === 'register' && (
+              <div className="space-y-2">
+                <Label htmlFor="nationalPhone">Phone Number</Label>
+                <div className="flex space-x-2">
+                  <Select value={selectedCountryCode} onValueChange={setSelectedCountryCode} disabled={loading}>
+                    <SelectTrigger className="w-[120px] bg-card focus-visible:ring-ring">
+                      <SelectValue placeholder="Code" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countryCodes.map(cc => (
+                        <SelectItem key={cc.value} value={cc.value}>{cc.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    id="nationalPhone"
+                    type="tel"
+                    placeholder="Your national number"
+                    value={nationalPhone}
+                    onChange={(e) => setNationalPhone(e.target.value)}
+                    required
+                    className="flex-1 bg-card focus-visible:ring-ring"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            )}
+            
             {authMode === 'register' && (
               <div className="space-y-2">
                 <Label htmlFor="optionalEmail">Email (Optional)</Label>
@@ -143,6 +202,7 @@ export default function AuthPage() {
                 />
               </div>
             )}
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -154,6 +214,7 @@ export default function AuthPage() {
                 required
                 className="bg-card focus-visible:ring-ring"
                 disabled={loading}
+                minLength={authMode === 'register' ? 8 : undefined}
               />
             </div>
             <Button type="submit" className="w-full bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground transition-colors duration-200 focus-visible:ring-ring" disabled={loading}>

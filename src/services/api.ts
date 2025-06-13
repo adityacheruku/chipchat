@@ -71,6 +71,7 @@ export const api = {
 
   // Use the backend's UserCreate schema directly for the body
   register: async (userData: BackendUserCreate): Promise<AuthResponse> => {
+    console.log(userData)
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
