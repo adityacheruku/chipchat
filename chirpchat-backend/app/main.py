@@ -24,40 +24,36 @@ app = FastAPI(
 
 # CORS middleware for frontend integration
 # Ensure origins match your frontend development and deployed URLs
-origins = [
-    "http://localhost:3000", # Next.js frontend dev default (often CRA)
-    "http://localhost:9002", # As per user's package.json dev script for Next.js
-    # Add your Vercel deployment preview and production URLs
+base_origins = [
+    "http://localhost:3000", # Common CRA/Next.js dev port
+    "http://localhost:9002", # Your Next.js dev port from package.json
+    # Add your Vercel deployment preview and production URLs here eventually
     # Example: "https://your-project-name.vercel.app",
-    # Example: "https://your-project-name-*.vercel.app" (for preview branches)
-    # Example: "https://yourcustomdomain.com"
-    # For development with ngrok or similar tunneling, you might need to add the dynamic URL
-    # or temporarily use a more permissive setting for DEBUG mode.
-    # Example: "https://<your-ngrok-id>.ngrok-free.app"
+    # Example: "https://your-project-name-*.vercel.app"
 ]
 
-# Add known Vercel patterns
-if settings.ENVIRONMENT != "development": # For production/preview Vercel deployments
-    # You'll need to replace 'your-vercel-project-name' and 'your-vercel-org-name'
-    # or add your custom domain if you use one.
-    # origins.append("https://your-vercel-project-name.vercel.app")
-    # origins.append("https://your-vercel-project-name-*.vercel.app") # For branch previews
-    pass # Add specific production/preview URLs here or manage via ENV var
-
-if settings.DEBUG: # More permissive for local development if DEBUG is true
-    origins.append("http://localhost:9002") # Ensure local dev is always there if DEBUG
-    # Consider adding "*" for extreme local dev flexibility, but be aware of implications.
-    # If using ngrok, it's best to add the specific ngrok URL when it's generated.
-    # Alternatively, for ngrok, you might check the Origin header or configure ngrok to rewrite it.
-    pass
+if settings.DEBUG:
+    # For local development with DEBUG=true, allow all origins for easier testing.
+    # WARNING: Do NOT use ["*"] in production.
+    effective_origins = ["*"]
+    print("DEBUG mode is ON. Allowing all origins for CORS. THIS IS NOT SAFE FOR PRODUCTION.")
+else:
+    # For production, use a specific list. Add your deployed frontend URLs here.
+    # e.g., if your frontend is deployed to Vercel:
+    # production_origins = [
+    #     "https://your-app-name.vercel.app",
+    #     "https://your-custom-domain.com",
+    # ]
+    # effective_origins = base_origins + production_origins
+    effective_origins = base_origins # Default to base if no specific prod URLs yet
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins, # More specific origins
+    allow_origins=effective_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"], # Allows all methods
+    allow_headers=["*"], # Allows all headers
 )
 
 app.add_middleware(LoggingMiddleware)

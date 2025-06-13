@@ -112,7 +112,7 @@ async def login(
     # Consider if login should also use admin_client for user lookup.
     # For now, keeping it as is, assuming anon can at least read some identifying fields if needed for login checks.
     user_response = await db_manager.get_table("users").select("*").eq("phone", form_data.username).maybe_single().execute()
-    
+    console.log(form_data)
     if not user_response.data:
         logger.warning(f"Login attempt failed for phone: {form_data.username} - User not found")
         raise HTTPException(
