@@ -33,13 +33,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const loadUserFromToken = useCallback(async (storedToken: string) => {
     setIsLoading(true);
     try {
-      const userProfile = await api.getCurrentUserProfile(); 
+      const userProfile = await api.getCurrentUserProfile();
       setCurrentUser(userProfile);
       setToken(storedToken);
     } catch (error) {
       console.error("Failed to load user from token", error);
       localStorage.removeItem('chirpChatToken');
-      localStorage.removeItem('chirpChatUser'); 
+      localStorage.removeItem('chirpChatUser');
       setToken(null);
       setCurrentUser(null);
     } finally {
@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (storedToken) {
       loadUserFromToken(storedToken);
     } else {
-      setIsLoading(false); 
+      setIsLoading(false);
     }
   }, [loadUserFromToken]);
 
@@ -67,13 +67,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setToken(data.access_token);
       router.push('/chat');
     } catch (error: any) {
+      console.error("AuthContext.login - Error during login:", error);
+      if (error.message) console.error("AuthContext.login - Error message:", error.message);
+      if (error.name) console.error("AuthContext.login - Error name:", error.name); // e.g., TypeError for "Failed to fetch"
+      if (error.cause) console.error("AuthContext.login - Error cause:", error.cause);
       toast({ variant: 'destructive', title: 'Login Failed', description: error.message || 'Please check your credentials.' });
-      throw error; 
+      throw error;
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const register = async (userData: BackendUserCreate) => { // userData matches backend schema
     setIsLoading(true);
     try {
@@ -85,8 +89,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       router.push('/chat');
        toast({ title: 'Registration Successful!', description: 'Welcome to ChirpChat.' });
     } catch (error: any) {
+      console.error("AuthContext.register - Error during registration:", error);
+      if (error.message) console.error("AuthContext.register - Error message:", error.message);
+      if (error.name) console.error("AuthContext.register - Error name:", error.name); // e.g., TypeError for "Failed to fetch"
+      if (error.cause) console.error("AuthContext.register - Error cause:", error.cause);
       toast({ variant: 'destructive', title: 'Registration Failed', description: error.message || 'Please try again.' });
-      throw error; 
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +106,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     localStorage.removeItem('chirpChatToken');
     localStorage.removeItem('chirpChatUser');
-    // Also clear other app-specific localStorage items if needed
     router.push('/');
     toast({ title: 'Logged Out', description: "You've been successfully logged out." });
   }, [router, toast]);
@@ -108,7 +115,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userProfile = await api.getCurrentUserProfile();
       setCurrentUser(userProfile);
-      localStorage.setItem('chirpChatUser', JSON.stringify(userProfile)); 
+      localStorage.setItem('chirpChatUser', JSON.stringify(userProfile));
     } catch (error) {
       console.error("Failed to refresh user profile", error);
       logout();

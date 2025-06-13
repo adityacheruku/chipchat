@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 // Assuming UserCreate from backend will now use phone
-import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas'; 
+import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
 type AuthMode = 'login' | 'register';
 
@@ -39,9 +39,12 @@ export default function AuthPage() {
       try {
         await login(phone, password);
         // Navigation is handled by AuthContext
-      } catch (error) {
+      } catch (error: any) {
         // Error toast is handled by AuthContext or api service
-        console.error("Login submission error:", error);
+        console.error("Login submission error (AuthPage):", error);
+        if (error.message) console.error("AuthPage - Login error message:", error.message);
+        if (error.name) console.error("AuthPage - Login error name:", error.name);
+        if (error.cause) console.error("AuthPage - Login error cause:", error.cause);
       } finally {
         setIsSubmitting(false);
       }
@@ -57,17 +60,20 @@ export default function AuthPage() {
          return;
       }
       // Construct userData according to backend's UserCreate schema (which now expects phone)
-      const registerData: BackendUserCreate = { 
-        phone, 
-        password, 
+      const registerData: BackendUserCreate = {
+        phone,
+        password,
         display_name: displayName,
         ...(optionalEmail.trim() && { email: optionalEmail.trim() }) // Add email if provided
       };
       try {
         await register(registerData);
         // Navigation is handled by AuthContext
-      } catch (error) {
-        console.error("Registration submission error:", error);
+      } catch (error: any) {
+        console.error("Registration submission error (AuthPage):", error);
+        if (error.message) console.error("AuthPage - Registration error message:", error.message);
+        if (error.name) console.error("AuthPage - Registration error name:", error.name);
+        if (error.cause) console.error("AuthPage - Registration error cause:", error.cause);
       } finally {
         setIsSubmitting(false);
       }
