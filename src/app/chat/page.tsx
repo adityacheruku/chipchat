@@ -21,7 +21,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MessagesSquare } from 'lucide-react';
 
 export default function ChatPage() {
   const router = useRouter();
@@ -101,12 +101,23 @@ export default function ChatPage() {
 
   const handleWSMessageReceived = useCallback((newMessage: MessageType) => {
     setMessages(prevMessages => {
+      // If activeChat is not yet set, but we receive a message for a chat we *should* be in,
+      // we might need to initialize activeChat based on this message.
+      // This can happen if a new user receives a message before their initial partner/chat load finishes.
+      if (!activeChat && newMessage.chat_id) {
+         // Optimistically try to set activeChat if partner info might arrive soon.
+         // This is a simplification; a more robust solution might involve fetching chat details.
+         console.log("WS: Received message for a potentially new chat, attempting to set chat context.");
+      }
+
       if (prevMessages.find(m => m.id === newMessage.id || (newMessage.client_temp_id && m.client_temp_id === newMessage.client_temp_id))) {
         return prevMessages.map(m => (m.client_temp_id === newMessage.client_temp_id ? newMessage : m));
       }
       return [...prevMessages, newMessage].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
-    if (activeChat) {
+
+    // Update last message in activeChat if the message belongs to it
+    if (activeChat && newMessage.chat_id === activeChat.id) {
         setActiveChat(prev => prev ? ({...prev, last_message: newMessage, updated_at: newMessage.updated_at }) : null);
     }
   }, [activeChat]);
@@ -122,6 +133,11 @@ export default function ChatPage() {
   const handleWSPresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => {
     if (otherUser && data.user_id === otherUser.id) {
       setOtherUser(prev => prev ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : null);
+    } else if (!otherUser && currentUser && data.user_id !== currentUser.id) {
+        // If we don't have an otherUser yet, and a presence update comes for someone else,
+        // it could be our new chat partner. Trigger a reload of chat data.
+        console.log("WS: Presence update for a new user detected. Re-fetching chat data.");
+        performLoadChatData();
     }
      if (currentUser && data.user_id === currentUser.id) {
       fetchAndUpdateUser(); 
@@ -131,6 +147,10 @@ export default function ChatPage() {
   const handleWSUserProfileUpdate = useCallback((data: {user_id: string, mood?: Mood, display_name?: string, avatar_url?: string}) => {
     if (otherUser && data.user_id === otherUser.id) {
         setOtherUser(prev => prev ? { ...prev, ...data } : null);
+    } else if (!otherUser && currentUser && data.user_id !== currentUser.id) {
+        // Potentially a new partner's profile update
+        console.log("WS: Profile update for a new user detected. Re-fetching chat data.");
+        performLoadChatData();
     }
     if (currentUser && data.user_id === currentUser.id) {
         fetchAndUpdateUser();
@@ -182,13 +202,26 @@ export default function ChatPage() {
 
     try {
       const partner = await api.getDefaultChatPartner();
+      
       if (!partner) {
-        const noPartnerMsg = "Could not find a chat partner. Please ensure another user is registered and available, or try again later.";
-        toast({ variant: 'destructive', title: "Chat Setup Error", description: noPartnerMsg, duration: 7000 });
-        setChatSetupErrorMessage(noPartnerMsg);
-        return; 
+        // No other user in the system. This is a valid "alone" state.
+        setOtherUser(null);
+        setActiveChat(null);
+        setMessages([]);
+        if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
+        // Mood prompt can still run
+        if (typeof window !== 'undefined' && currentUser.mood) {
+            const moodPrompted = sessionStorage.getItem('moodPromptedThisSession');
+            if (moodPrompted !== 'true') {
+            setInitialMoodOnLoad(currentUser.mood);
+            setIsMoodModalOpen(true);
+            }
+        }
+        setIsChatLoading(false);
+        return; // Exit early, no chat to load messages from
       }
       
+      // Partner exists, proceed to get their details and the chat session
       const otherUserDetails = await api.getUserProfile(partner.user_id);
       setOtherUser(otherUserDetails);
       if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
@@ -200,7 +233,8 @@ export default function ChatPage() {
         const messagesData = await api.getMessages(chatSession.id);
         setMessages(messagesData.messages.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
       } else {
-        throw new Error("Failed to establish a chat session.");
+        // This case should ideally not happen if a partner was found, but as a fallback
+        throw new Error("Failed to establish a chat session even with a partner.");
       }
       
       if (typeof window !== 'undefined' && currentUser.mood) {
@@ -221,7 +255,8 @@ export default function ChatPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    currentUser, token, toast, addAppEvent, setAvatarPreview, isAuthLoading
+    currentUser, token, toast, addAppEvent, setAvatarPreview, isAuthLoading 
+    // Removed performLoadChatData from its own deps
   ]);
 
   useEffect(() => {
@@ -234,11 +269,11 @@ export default function ChatPage() {
       performLoadChatData();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAuthLoading, currentUser, token, performLoadChatData, router]);
+  }, [isAuthenticated, isAuthLoading, currentUser, token, router]); // Removed performLoadChatData to prevent loops, ensure it's stable
 
 
   const handleSendMessage = (text: string) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
 
     const clientTempId = `temp_${Date.now()}`;
     const optimisticMessage: MessageType = {
@@ -268,7 +303,7 @@ export default function ChatPage() {
   };
 
   const handleSendMoodClip = async (clipType: MessageClipType, file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
     toast({ title: "Uploading clip..."});
     try {
         const uploadResponse = await api.uploadMoodClip(file, clipType);
@@ -291,7 +326,7 @@ export default function ChatPage() {
   };
 
   const handleToggleReaction = (messageId: string, emoji: SupportedEmoji) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
     const RATE_LIMIT_MS = 1000;
     const key = `${messageId}_${emoji}`;
     const now = Date.now();
@@ -313,7 +348,7 @@ export default function ChatPage() {
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
     if (!currentUser) return;
     try {
-      let finalProfileData = { ...updatedProfileData };
+      // let finalProfileData = { ...updatedProfileData }; // Not used
       if (newAvatarFile) {
         toast({title: "Uploading avatar..."});
         const avatarUploadResponse = await api.uploadAvatar(newAvatarFile);
@@ -348,7 +383,7 @@ export default function ChatPage() {
   };
 
   const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
-    if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
+    if (!mood1 || !mood2) return 'bg-mood-default-chat-area'; // If one user isn't there, use default
     if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
     if (mood1 === 'Excited' && mood2 === 'Excited') return 'bg-mood-excited-excited';
     if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful' || mood1 === 'Content') &&
@@ -373,7 +408,7 @@ export default function ChatPage() {
     if (currentUser?.mood && otherUser?.mood) {
       setDynamicBgClass(getDynamicBackgroundClass(currentUser.mood, otherUser.mood));
     } else {
-      setDynamicBgClass('bg-mood-default-chat-area');
+      setDynamicBgClass('bg-mood-default-chat-area'); // Default if otherUser is null
     }
   }, [currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
 
@@ -386,7 +421,7 @@ export default function ChatPage() {
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const handleTyping = useCallback((isTyping: boolean) => {
-    if (!activeChat || !isWsConnected) return;
+    if (!activeChat || !isWsConnected || !otherUser) return;
     
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -405,7 +440,7 @@ export default function ChatPage() {
             });
         }, 3000);
     }
-  }, [activeChat, isWsConnected, sendWsMessage]);
+  }, [activeChat, isWsConnected, sendWsMessage, otherUser]);
 
   const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
     if (currentUser) {
@@ -427,7 +462,7 @@ export default function ChatPage() {
   }, []);
 
 
-  if (isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage)) {
+  if (isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !(!otherUser && !activeChat))) { // Adjusted loading condition
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -437,6 +472,7 @@ export default function ChatPage() {
   }
 
   if (!isAuthenticated && !isAuthLoading) {
+    // This redirect is handled by AuthContext, but as a fallback:
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
         <div>
@@ -462,24 +498,21 @@ export default function ChatPage() {
     );
   }
   
-  if (!currentUser || !otherUser || !activeChat) {
+  // This condition means we have a current user, but no error, and are ready to render the chat or "waiting" state.
+  if (!currentUser) { 
+    // Should be caught by AuthContext redirect, but as a failsafe
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
         <div>
-          <p className="text-destructive text-lg mb-4">Could not load chat environment.</p>
-          <p className="text-muted-foreground mb-4">
-            An unexpected issue occurred. Current user: {currentUser ? currentUser.display_name : 'Not available'}.
-          </p>
-          <Button onClick={() => router.push('/')} variant="outline" className="mr-2">Go to Login</Button>
-           <Button onClick={performLoadChatData} variant="default">
-            Try to Reload Chat
-          </Button>
+          <p className="text-destructive text-lg mb-4">User data not available.</p>
+          <Button onClick={() => router.push('/')} variant="outline">Go to Login</Button>
         </div>
       </div>
     );
   }
   
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
+  const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : (currentUser ? {[currentUser.id]: currentUser} : {});
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
@@ -488,24 +521,43 @@ export default function ChatPage() {
             <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden">
               <ChatHeader
                 currentUser={currentUser}
-                otherUser={otherUser}
+                otherUser={otherUser} // Can be null
                 onProfileClick={() => setIsProfileModalOpen(true)}
                 onSendThinkingOfYou={handleSendThought}
-                isTargetUserBeingThoughtOf={activeThoughtNotificationFor === otherUser.id}
+                isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)}
                 onOtherUserAvatarClick={handleOtherUserAvatarClick}
                 isOtherUserTyping={!!otherUserIsTyping}
               />
-              <MessageArea
-                messages={messages}
-                currentUser={currentUser}
-                allUsers={{[currentUser.id]: currentUser, [otherUser.id]: otherUser}}
-                onToggleReaction={handleToggleReaction}
-              />
+              {otherUser && activeChat ? (
+                <MessageArea
+                  messages={messages}
+                  currentUser={currentUser}
+                  allUsers={allUsersForMessageArea}
+                  onToggleReaction={handleToggleReaction}
+                />
+              ) : (
+                <div className="flex-grow flex flex-col items-center justify-center p-4 text-center bg-transparent">
+                    <MessagesSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
+                    <h3 className="text-xl font-semibold text-foreground mb-2">
+                        {isChatLoading ? "Looking for chats..." : "No one to chat with yet."}
+                    </h3>
+                    <p className="text-muted-foreground">
+                        {isChatLoading ? "Please wait a moment." : "When another user joins, your conversation will appear here."}
+                    </p>
+                     {!isChatLoading && (
+                        <Button onClick={performLoadChatData} variant="outline" className="mt-4">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" hidden={!isChatLoading} />
+                            Refresh Users
+                        </Button>
+                    )}
+                </div>
+              )}
               <InputBar
                 onSendMessage={handleSendMessage}
                 onSendMoodClip={handleSendMoodClip}
                 isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
+                disabled={!otherUser || !activeChat || !isWsConnected} // Disable if no active chat
               />
             </div>
           </ErrorBoundary>
@@ -520,7 +572,7 @@ export default function ChatPage() {
           onAvatarFileChange={handleAvatarFileChangeHook}
         />
       )}
-      {fullScreenUserData && (
+      {fullScreenUserData && ( // This implies otherUser was not null if this modal opens
         <FullScreenAvatarModal
           isOpen={isFullScreenAvatarOpen}
           onClose={() => setIsFullScreenAvatarOpen(false)}
@@ -540,4 +592,3 @@ export default function ChatPage() {
     </div>
   );
 }
-

@@ -15,12 +15,20 @@ import { useToast } from '@/hooks/use-toast';
 interface InputBarProps {
   onSendMessage: (text: string) => void;
   onSendMoodClip: (clipType: MessageClipType, file: File) => void;
-  onSendImage?: (file: File) => void; // Optional, if handled separately
+  onSendImage?: (file: File) => void; 
   isSending?: boolean;
   onTyping: (isTyping: boolean) => void;
+  disabled?: boolean; // New prop to disable the input bar
 }
 
-export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, isSending = false, onTyping }: InputBarProps) {
+export default function InputBar({ 
+  onSendMessage, 
+  onSendMoodClip, 
+  onSendImage, 
+  isSending = false, 
+  onTyping,
+  disabled = false // Default to enabled
+}: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -30,7 +38,7 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (messageText.trim() && !isSending) {
+    if (messageText.trim() && !isSending && !disabled) {
       onSendMessage(messageText.trim());
       setMessageText('');
       onTyping(false);
@@ -39,6 +47,7 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessageText(e.target.value);
+    if (disabled) return;
     if (e.target.value.trim() !== '') {
       onTyping(true);
     } else {
@@ -47,13 +56,14 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
   };
   
   const handleBlur = () => {
-    // Send stop_typing when input loses focus only if text is empty
+    if (disabled) return;
     if (messageText.trim() === '') {
         onTyping(false);
     }
   };
 
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, clipType: MessageClipType | 'image') => {
+    if (disabled) return;
     const file = event.target.files?.[0];
     if (file) {
         if (clipType === 'image' && onSendImage) {
@@ -74,8 +84,7 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
             onSendMoodClip(clipType, file);
         }
     }
-    setShowAttachmentOptions(false); // Close options after selection
-    // Reset file input value to allow selecting the same file again
+    setShowAttachmentOptions(false); 
     if(event.target) event.target.value = "";
   };
 
@@ -92,7 +101,7 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
                     type="button" 
                     className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full mr-2 focus-visible:ring-ring"
                     aria-label="Open emoji picker (coming soon)"
-                    disabled={isSending}
+                    disabled={isSending || disabled}
                     >
                     <Smile size={22} />
                     </Button>
@@ -105,16 +114,14 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
 
             <Input
                 type="text"
-                placeholder="Type a message..."
+                placeholder={disabled ? "Waiting for a chat partner..." : "Type a message..."}
                 value={messageText}
                 onChange={handleTextChange}
                 onBlur={handleBlur}
                 className="flex-grow bg-card border-input focus-visible:ring-ring mr-2"
                 autoComplete="off"
-                disabled={isSending}
+                disabled={isSending || disabled}
             />
-
-            {/* Attachment Button */}
              <TooltipProvider>
                 <Tooltip>
                 <TooltipTrigger asChild>
@@ -125,7 +132,7 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
                         onClick={() => setShowAttachmentOptions(!showAttachmentOptions)}
                         className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full mr-2 focus-visible:ring-ring"
                         aria-label="Attach file"
-                        disabled={isSending}
+                        disabled={isSending || disabled}
                         >
                         {showAttachmentOptions ? <X size={22} /> : <Paperclip size={22} />}
                     </Button>
@@ -135,13 +142,11 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
                 </TooltipContent>
                 </Tooltip>
             </TooltipProvider>
-
-
             <Button 
                 type="submit" 
                 size="icon" 
                 className="bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground rounded-full focus-visible:ring-ring"
-                disabled={isSending || !messageText.trim()}
+                disabled={isSending || !messageText.trim() || disabled}
                 aria-label={isSending ? "Sending message" : "Send message"}
             >
                 {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
@@ -149,18 +154,13 @@ export default function InputBar({ onSendMessage, onSendMoodClip, onSendImage, i
             </Button>
         </form>
 
-        {/* Attachment Options - Hidden inputs */}
-        {showAttachmentOptions && (
+        {showAttachmentOptions && !disabled && (
             <div className="flex justify-around p-2 border-t mt-2">
                 <Button variant="outline" size="sm" onClick={() => audioInputRef.current?.click()} className="flex-1 mx-1">
                     <Mic size={16} className="mr-2"/> Audio Clip
                 </Button>
                 <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileSelect(e, 'audio')} />
                 
-                {/* For simplicity, video clip button can be added similarly */}
-                {/* <Button variant="outline" size="sm" onClick={() => videoInputRef.current?.click()} className="flex-1 mx-1"> Video Clip </Button> */}
-                {/* <input type="file" ref={videoInputRef} accept="video/*" className="hidden" onChange={(e) => handleFileSelect(e, 'video')} /> */}
-
                 {onSendImage && (
                      <Button variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} className="flex-1 mx-1">
                         <Paperclip size={16} className="mr-2"/> Image
