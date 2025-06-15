@@ -34,7 +34,7 @@ async def create_chat(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot create chat with yourself")
 
     recipient_user_resp = await db_manager.get_table("users").select("id").eq("id", str(recipient_id)).maybe_single().execute()
-    if not recipient_user_resp.data:
+    if not recipient_user_resp or not recipient_user_resp.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipient user not found")
 
     # Find existing 2-person chat between current_user and recipient
@@ -258,8 +258,8 @@ async def get_default_chat_partner(
         
         all_users_resp = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").execute()
         
-        if not all_users_resp.data:
-            logger.warning(f"No users found in the database when fetching default chat partner for {current_user.id}.")
+        if not all_users_resp or not all_users_resp.data: # Refined check
+            logger.warning(f"No users found in the database (or DB response error) when fetching default chat partner for {current_user.id}.")
             return None
 
         logger.info(f"Found {len(all_users_resp.data)} users in total.")
