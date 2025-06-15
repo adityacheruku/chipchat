@@ -6,14 +6,11 @@ from datetime import datetime, timezone
 import json
 
 from app.websocket.manager import manager
-# Using the HTTP Auth dep for token validation
-from app.auth.dependencies import get_current_user 
-from app.auth.schemas import UserPublic, TokenData # For typing and token data
+from app.auth.schemas import UserPublic, TokenData
 from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, SupportedEmoji
-from app.database import db_manager # Using db_manager directly
-from app.utils.logging import logger # Ensure logger is imported
+from app.database import db_manager
+from app.utils.logging import logger
 
-# JWT and settings imports for get_user_from_token_for_ws
 from app.config import settings
 from jose import jwt, JWTError, ExpiredSignatureError, JWTClaimsError
 from pydantic import ValidationError
@@ -21,18 +18,15 @@ from pydantic import ValidationError
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
-async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> UserPublic:
+async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> Optional[UserPublic]:
     """
     Authenticates a user for WebSocket connection using a token passed as a query parameter.
+    Returns UserPublic if authentication is successful, None otherwise.
     """
     if not token:
         logger.warning("WS Auth: Token not provided in query parameters.")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token not provided")
+        return None
 
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, 
-        detail="Could not validate credentials for WebSocket",
-    )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         phone: Optional[str] = payload.get("sub")
@@ -40,23 +34,23 @@ async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> User
 
         if phone is None and user_id_str is None:
             logger.warning("WS Auth: Token missing both phone (sub) and user_id.")
-            raise credentials_exception
+            return None
         
         token_data = TokenData(phone=phone, user_id=UUID(user_id_str) if user_id_str else None)
         logger.info(f"WS Auth: Token decoded for user_id='{token_data.user_id}', phone='{token_data.phone}'")
 
     except ExpiredSignatureError:
         logger.warning("WS Auth: Token has expired.")
-        raise credentials_exception # Detail will be "Token has expired" from a higher level if needed
+        return None
     except JWTClaimsError:
         logger.warning("WS Auth: Token claims are invalid.")
-        raise credentials_exception
+        return None
     except JWTError as e:
         logger.warning(f"WS Auth: General JWT Error: {str(e)}")
-        raise credentials_exception
+        return None
     except ValidationError as e:
         logger.warning(f"WS Auth: Pydantic ValidationError for TokenData: {str(e)}")
-        raise credentials_exception
+        return None
     
     user_dict = None
     if token_data.user_id:
@@ -70,7 +64,7 @@ async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> User
     
     if user_dict is None:
         logger.warning(f"WS Auth: User not found in DB for token_data: user_id='{token_data.user_id}', phone='{token_data.phone}'")
-        raise credentials_exception
+        return None
     
     try:
         user_for_return = UserPublic(**user_dict)
@@ -78,31 +72,31 @@ async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> User
         return user_for_return
     except ValidationError as e:
         logger.error(f"WS Auth: Pydantic ValidationError creating UserPublic from DB for user ID '{user_dict.get('id')}': {str(e)}")
-        raise credentials_exception
+        return None
 
 
 @router.websocket("/connect") 
 async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
-    current_user: Optional[UserPublic] = None
-    try:
-        current_user = await get_user_from_token_for_ws(token=token)
-    except HTTPException as e: # Catch auth failures from get_user_from_token_for_ws
-        logger.warning(f"WS connection attempt failed authentication: {e.detail}")
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION) 
-        return
-    except Exception as e: # Catch any other unexpected errors during auth
-        logger.error(f"WS connection auth unexpected error: {str(e)}", exc_info=True)
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-        return
+    current_user: Optional[UserPublic] = await get_user_from_token_for_ws(token=token)
 
-    if not current_user: # Should be caught by above, but as a safeguard
-        logger.error("WS Auth: current_user is None after auth check, closing connection.")
+    if not current_user:
+        logger.warning("WS Auth: Authentication failed or user not found. Closing WebSocket with 1008.")
+        await websocket.accept() # Accept briefly to send a proper close code
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     user_id = current_user.id
-    await manager.connect(websocket, user_id)
-    
+    await manager.connect(websocket, user_id) # manager.connect calls websocket.accept() internally if not already accepted.
+                                            # For clarity, if we accepted above, manager.connect should ideally not accept again,
+                                            # but most WebSocket libraries handle redundant accepts gracefully.
+                                            # If manager.connect was changed not to accept, then the accept above is critical.
+                                            # Current manager.connect does `await websocket.accept()`.
+                                            # To avoid double accept, we can let manager.connect do it, or do it here and modify manager.
+                                            # For now, accepting here and letting manager.connect try again is usually safe.
+                                            # A cleaner way would be to pass `accepted=True` to manager.connect if we accept early.
+                                            # Let's assume manager.connect is robust. If issues arise, we can modify manager.connect
+                                            # to not call accept() if a flag is passed.
+
     now = datetime.now(timezone.utc)
     try:
         await db_manager.get_table("users").update({
@@ -110,13 +104,19 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
             "last_seen": now.isoformat()
         }).eq("id", str(user_id)).execute()
         
-        user_data_for_presence = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).single().execute()
-        current_mood = user_data_for_presence.data.get("mood", "Neutral")
+        user_data_for_presence_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
+        if not user_data_for_presence_resp.data:
+            logger.error(f"WS Connect: User {user_id} not found when fetching mood post-connection. This should not happen.")
+            raise Exception("User data dissapeared post-connection") # This will be caught below
 
+        current_mood = user_data_for_presence_resp.data.get("mood", "Neutral")
         await manager.broadcast_presence_update_to_relevant_users(user_id, True, now, current_mood, db_manager)
+
     except Exception as e:
         logger.error(f"Error during WS connect (DB update/broadcast) for user {user_id}: {str(e)}", exc_info=True)
-        # Continue with connection if DB update fails, but log it.
+        await manager.disconnect(user_id) # Ensure user is removed from active connections
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Server error during connection setup")
+        return # Important to return here to not proceed to the message loop
 
     try:
         while True:
@@ -185,8 +185,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         raise ValueError("Missing message_id, chat_id, or emoji for toggle_reaction")
                     
                     message_id = UUID(message_id_str)
-                    chat_id = UUID(chat_id_str) # Client should send chat_id for context
-                    emoji = SupportedEmoji(emoji_str) # Cast to type, Pydantic would do this if schema used
+                    chat_id = UUID(chat_id_str) 
+                    emoji = SupportedEmoji(emoji_str) 
 
                     msg_resp = await db_manager.get_table("messages").select("*").eq("id", str(message_id)).maybe_single().execute()
                     if not msg_resp.data:
@@ -261,7 +261,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         {
                             "event_type": "thinking_of_you_received",
                             "sender_id": str(user_id),
-                            "sender_name": current_user.display_name, # Use current_user from validated token
+                            "sender_name": current_user.display_name, 
                         },
                         recipient_user_id,
                     )
@@ -274,23 +274,35 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                 await websocket.send_json({"event_type": "error", "detail": f"Unknown event_type: {event_type}"})
 
     except WebSocketDisconnect:
-        logger.info(f"WS user {user_id} disconnected explicitly or due to error.")
+        logger.info(f"WS user {user_id} disconnected (WebSocketDisconnect received).")
     except Exception as e: 
         logger.error(f"Unexpected error in WebSocket loop for user {user_id}: {str(e)}", exc_info=True)
-        # Consider closing the WebSocket connection here if it's not already handled by WebSocketDisconnect
-        # await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        # Attempt to close gracefully if not already closed by WebSocketDisconnect
+        if websocket.client_state != WebSocketState.DISCONNECTED: # type: ignore
+             try:
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Unexpected server error in message loop")
+             except RuntimeError: # Already closing or closed
+                pass
     finally: 
-        await manager.disconnect(user_id)
+        logger.info(f"WS user {user_id} entering finally block. Cleaning up connection.")
+        await manager.disconnect(user_id) # Ensure user is removed from active connections list
         offline_now = datetime.now(timezone.utc)
         try:
+            # Update user status to offline in DB
             await db_manager.get_table("users").update({
                 "is_online": False, 
                 "last_seen": offline_now.isoformat()
             }).eq("id", str(user_id)).execute()
 
-            user_data_for_offline_presence = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).single().execute()
-            offline_mood = user_data_for_offline_presence.data.get("mood", "Neutral")
+            # Fetch mood for accurate presence update
+            user_data_for_offline_presence_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
+            offline_mood = "Neutral" # Default mood
+            if user_data_for_offline_presence_resp and user_data_for_offline_presence_resp.data:
+                 offline_mood = user_data_for_offline_presence_resp.data.get("mood", "Neutral")
+            
             await manager.broadcast_presence_update_to_relevant_users(user_id, False, offline_now, offline_mood, db_manager)
         except Exception as e:
-            logger.error(f"Error during WS disconnect (DB update/broadcast) for user {user_id}: {str(e)}", exc_info=True)
+            logger.error(f"Error during WS disconnect cleanup (DB update/broadcast) for user {user_id}: {str(e)}", exc_info=True)
 
+
+    
