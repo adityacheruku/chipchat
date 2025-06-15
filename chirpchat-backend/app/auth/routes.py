@@ -11,17 +11,34 @@ from app.utils.security import get_password_hash, verify_password, create_access
 from app.database import db_manager
 from app.config import settings
 from app.utils.email_utils import send_login_notification_email
-from app.utils.logging import logger # Ensure logger is imported
-from postgrest.exceptions import APIError # Import for specific PostgREST errors
+from app.utils.logging import logger 
+from postgrest.exceptions import APIError 
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 user_router = APIRouter(prefix="/users", tags=["Users"])
 
 @auth_router.post("/register", response_model=Token)
 async def register(user_create: UserCreate):
-    # Check for existing user using phone number (select is usually fine with anon key if RLS allows reading for existence checks)
-    existing_user_response = await db_manager.get_table("users").select("id").eq("phone", user_create.phone).maybe_single().execute()
-    if existing_user_response.data:
+    existing_user_data = None
+    try:
+        # Check for existing user using phone number
+        logger.info(f"Checking for existing user with phone: {user_create.phone}")
+        existing_user_response = await db_manager.get_table("users").select("id").eq("phone", user_create.phone).maybe_single().execute()
+        if existing_user_response and existing_user_response.data: # Ensure response object exists before checking data
+            existing_user_data = existing_user_response.data
+    except APIError as e:
+        if e.code == "204": # No user found with this phone, which is good for registration
+            logger.info(f"No user found with phone {user_create.phone}, proceeding with registration.")
+            existing_user_data = None 
+        else:
+            logger.error(f"APIError while checking for existing user with phone {user_create.phone}: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database error while checking for existing user.",
+            )
+    
+    if existing_user_data:
+        logger.warning(f"Registration attempt for already registered phone: {user_create.phone}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Phone number already registered",
@@ -48,10 +65,9 @@ async def register(user_create: UserCreate):
 
     insert_response = None
     try:
-        # CRITICAL CHANGE: Use admin_client for insert to bypass RLS issues for user creation
         insert_response = await db_manager.admin_client.table("users").insert(new_user_data).execute()
     except APIError as e:
-        logger.error(f"PostgREST APIError during user insert. Status: {e.code}, Message: {e.message}, Details: {e.details}, Hint: {e.hint}")
+        logger.error(f"PostgREST APIError during user insert. Status: {e.code}, Message: {e.message}, Details: {e.details}, Hint: {e.hint}", exc_info=True)
         logger.error(f"Payload that caused APIError: {new_user_data}")
         error_detail_json = "Could not parse error JSON from PostgREST."
         try:
@@ -65,7 +81,7 @@ async def register(user_create: UserCreate):
             detail=f"Database error during user creation: {e.message}",
         )
     except Exception as e: 
-        logger.error(f"Unexpected error during user insert: {str(e)}")
+        logger.error(f"Unexpected error during user insert: {str(e)}", exc_info=True)
         logger.error(f"Payload that caused error: {new_user_data}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -73,13 +89,14 @@ async def register(user_create: UserCreate):
         )
 
     if not insert_response or not insert_response.data or len(insert_response.data) == 0:
-        logger.error(f"User insert operation returned no data or empty data even with admin client. Payload: {new_user_data}. Response: {insert_response}")
+        logger.error(f"User insert operation returned no data or empty data. Payload: {new_user_data}. Response: {insert_response}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not create user after database operation (no data returned).",
         )
     
     created_user_raw = insert_response.data[0]
+    logger.info(f"User successfully created with ID: {created_user_raw['id']}")
     
     user_public_info = UserPublic(
         id=created_user_raw["id"],
@@ -106,13 +123,11 @@ async def login(
     background_tasks: BackgroundTasks,
     form_data: OAuth2PasswordRequestForm = Depends() 
 ):
-    # Login can use the default db_manager (anon key for initial SELECT, or could also use admin_client for consistency)
-    # For SELECT, RLS policies for 'anon' would determine if the user row can be found.
-    # If 'anon' cannot read 'users' table, this SELECT will fail. 
-    # Consider if login should also use admin_client for user lookup.
-    # For now, keeping it as is, assuming anon can at least read some identifying fields if needed for login checks.
+    logger.info(f"Login attempt for phone: {form_data.username}")
+    # logger.info(f"Raw form data for login: {form_data}") # For debugging if needed
+
     user_response = await db_manager.get_table("users").select("*").eq("phone", form_data.username).maybe_single().execute()
-    console.log(form_data)
+    
     if not user_response.data:
         logger.warning(f"Login attempt failed for phone: {form_data.username} - User not found")
         raise HTTPException(
@@ -130,6 +145,8 @@ async def login(
             detail="Incorrect phone number or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    logger.info(f"User {form_data.username} successfully logged in.")
 
     user_public_info = UserPublic(
         id=user_in_db["id"],
@@ -171,8 +188,6 @@ async def read_users_me(current_user: UserPublic = Depends(get_current_active_us
 
 @user_router.get("/{user_id}", response_model=UserPublic)
 async def get_user(user_id: UUID, current_user_dep: UserPublic = Depends(get_current_user)):
-    # This SELECT should be fine with default client if authenticated user has rights to see other users
-    # or if specific RLS policies allow it.
     user_response = await db_manager.get_table("users").select(
         "id, display_name, avatar_url, mood, phone, email, is_online, last_seen"
     ).eq("id", str(user_id)).maybe_single().execute()
@@ -193,26 +208,25 @@ async def update_profile(
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     if "password" in update_data and update_data["password"]:
-        del update_data["password"] # Password changes should be a separate, more secure endpoint
+        del update_data["password"] 
 
-    # Profile updates should be done by the authenticated user on their own record.
-    # The default db_manager.client (using user's token via RLS) should be appropriate here.
-    # If RLS prevents user from updating their own row, then admin_client would be needed,
-    # but ideally RLS is set up to allow users to update their own profiles.
+    logger.info(f"User {current_user.id} updating profile with data: {update_data}")
     updated_user_response = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).execute()
     
     if not updated_user_response.data or len(updated_user_response.data) == 0:
+        logger.error(f"Profile update failed for user {current_user.id} or user not found.")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or update failed")
 
     refreshed_user_data = updated_user_response.data[0]
+    logger.info(f"User {current_user.id} profile updated successfully.")
     
-    # If mood changed, broadcast this update
-    if "mood" in update_data and "mood" in refreshed_user_data:
-        from app.websocket.manager import manager # Local import to avoid circular dependency issues
+    if "mood" in update_data and "mood" in refreshed_user_data and updated_data["mood"] != current_user.mood :
+        from app.websocket.manager import manager 
+        logger.info(f"Mood changed for user {current_user.id} from {current_user.mood} to {refreshed_user_data['mood']}. Broadcasting update.")
         await manager.broadcast_user_update_for_profile_change(
             user_id=current_user.id,
             updated_data={"mood": refreshed_user_data["mood"]},
-            db_manager_instance=db_manager # Pass db_manager for WS manager to use
+            db_manager_instance=db_manager 
         )
 
     return UserPublic(
@@ -232,31 +246,32 @@ async def upload_avatar_route(
     file: UploadFile = File(...), 
     current_user: UserPublic = Depends(get_current_active_user)
 ):
-    from app.routers.uploads import upload_avatar_to_cloudinary # Local import is fine
+    from app.routers.uploads import upload_avatar_to_cloudinary 
     
     try:
         file_url = await upload_avatar_to_cloudinary(file) 
     except HTTPException as e:
-        # Re-raise HTTPExceptions from the upload helper directly
         raise e 
     except Exception as e:
-        logger.error(f"Avatar upload processing failed for user {current_user.id}: {str(e)}")
+        logger.error(f"Avatar upload processing failed for user {current_user.id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Avatar upload processing failed.")
 
     update_data = {
         "avatar_url": file_url,
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
-    # Similar to profile update, RLS should allow user to update their own avatar_url
+    logger.info(f"User {current_user.id} updating avatar. New URL: {file_url}")
     updated_user_response = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).execute()
     
     if not updated_user_response.data or len(updated_user_response.data) == 0:
+        logger.error(f"Avatar URL update in DB failed for user {current_user.id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or avatar update failed")
     
     refreshed_user_data = updated_user_response.data[0]
+    logger.info(f"User {current_user.id} avatar updated successfully in DB.")
 
-    # Broadcast avatar change
     from app.websocket.manager import manager
+    logger.info(f"Broadcasting avatar update for user {current_user.id}")
     await manager.broadcast_user_update_for_profile_change(
         user_id=current_user.id,
         updated_data={"avatar_url": refreshed_user_data["avatar_url"]},
@@ -273,6 +288,3 @@ async def upload_avatar_route(
         is_online=refreshed_user_data["is_online"],
         last_seen=refreshed_user_data.get("last_seen")
     )
-
-
-    

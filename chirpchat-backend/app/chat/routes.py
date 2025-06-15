@@ -15,10 +15,11 @@ from app.chat.schemas import (
     ChatParticipant,
     DefaultChatPartnerResponse,
 )
-from app.auth.dependencies import get_current_active_user
+from app.auth.dependencies import get_current_active_user, get_current_user
 from app.auth.schemas import UserPublic
 from app.database import db_manager
 from app.websocket.manager import manager
+from app.utils.logging import logger # Ensure logger is imported
 import uuid # For new message_id
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
@@ -45,7 +46,7 @@ async def create_chat(
         for chat_id_uuid_val in user_chat_ids:
             chat_id_str = str(chat_id_uuid_val)
             participants_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).execute()
-            participant_ids_in_chat = [row["user_id"] for row in participants_resp.data]
+            participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_resp.data] # Cast to UUID
             
             # Ensure it's a 2-person chat AND the other participant is the recipient
             if len(participant_ids_in_chat) == 2 and recipient_id in participant_ids_in_chat:
@@ -117,7 +118,7 @@ async def list_chats(
         chat_data = chat_detail_resp.data
         
         participants_in_chat_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).execute()
-        participant_ids_in_chat = [row["user_id"] for row in participants_in_chat_resp.data]
+        participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_in_chat_resp.data] # Cast to UUID
         
         participant_details_list = []
         for p_id_uuid in participant_ids_in_chat:
@@ -252,27 +253,40 @@ async def react_to_message(
 async def get_default_chat_partner(
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    # In a strict 2-user system, the "default chat partner" is simply the *other* user.
-    # We fetch all users, then filter out the current_user.
-    # This assumes there are exactly two users in the system for this simplified model.
-    all_users_resp = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").execute()
-    if not all_users_resp.data or len(all_users_resp.data) < 2:
-        # This case implies the system doesn't have the expected two users.
-        # The frontend would need to handle this (e.g., prompt for second user setup).
-        return None
+    try:
+        logger.info(f"Fetching default chat partner for user: {current_user.id} ({current_user.display_name})")
+        
+        all_users_resp = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").execute()
+        
+        if not all_users_resp.data:
+            logger.warning(f"No users found in the database when fetching default chat partner for {current_user.id}.")
+            return None
 
-    other_partner_data = None
-    for user_data in all_users_resp.data:
-        if UUID(user_data["id"]) != current_user.id:
-            other_partner_data = user_data
-            break
-            
-    if not other_partner_data:
-        # Should not happen if there are >= 2 users and current_user is one of them.
-        return None
+        logger.info(f"Found {len(all_users_resp.data)} users in total.")
 
-    return DefaultChatPartnerResponse(
-        user_id=other_partner_data["id"], # Changed from id to user_id to match schema
-        display_name=other_partner_data["display_name"],
-        avatar_url=other_partner_data["avatar_url"]
-    )
+        # Filter out the current user to find the other partner(s)
+        other_partners_data = [
+            user_data for user_data in all_users_resp.data 
+            if UUID(user_data["id"]) != current_user.id
+        ]
+
+        if not other_partners_data:
+            logger.warning(f"No other users found for {current_user.id} to be a default chat partner.")
+            return None
+        
+        # In a 2-user system, there should be exactly one other partner.
+        # If more than one, this simplified logic just picks the first one.
+        # For a multi-user system, the concept of a "default" partner would need re-evaluation.
+        default_partner_data = other_partners_data[0]
+        logger.info(f"Default chat partner found for {current_user.id}: {default_partner_data['id']} ({default_partner_data['display_name']})")
+        
+        return DefaultChatPartnerResponse(
+            user_id=default_partner_data["id"],
+            display_name=default_partner_data["display_name"],
+            avatar_url=default_partner_data["avatar_url"]
+        )
+    except Exception as e:
+        logger.error(f"Error in get_default_chat_partner for user {current_user.id}: {str(e)}", exc_info=True)
+        # Log the full traceback with exc_info=True
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not determine default chat partner.")
+
