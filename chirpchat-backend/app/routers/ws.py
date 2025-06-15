@@ -14,15 +14,11 @@ from app.utils.logging import logger
 from app.config import settings
 from jose import jwt, JWTError, ExpiredSignatureError, JWTClaimsError
 from pydantic import ValidationError
-
+from starlette.websockets import WebSocketState # For checking WebSocketState
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> Optional[UserPublic]:
-    """
-    Authenticates a user for WebSocket connection using a token passed as a query parameter.
-    Returns UserPublic if authentication is successful, None otherwise.
-    """
     if not token:
         logger.warning("WS Auth: Token not provided in query parameters.")
         return None
@@ -53,14 +49,18 @@ async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> Opti
         return None
     
     user_dict = None
-    if token_data.user_id:
-        logger.info(f"WS Auth: Attempting to fetch user by ID: {token_data.user_id}")
-        response = await db_manager.get_table("users").select("*").eq("id", str(token_data.user_id)).maybe_single().execute()
-        user_dict = response.data
-    elif token_data.phone:
-        logger.info(f"WS Auth: Attempting to fetch user by phone: {token_data.phone}")
-        response = await db_manager.get_table("users").select("*").eq("phone", token_data.phone).maybe_single().execute()
-        user_dict = response.data
+    try:
+        if token_data.user_id:
+            logger.info(f"WS Auth: Attempting to fetch user by ID: {token_data.user_id}")
+            response = await db_manager.get_table("users").select("*").eq("id", str(token_data.user_id)).maybe_single().execute()
+            user_dict = response.data
+        elif token_data.phone:
+            logger.info(f"WS Auth: Attempting to fetch user by phone: {token_data.phone}")
+            response = await db_manager.get_table("users").select("*").eq("phone", token_data.phone).maybe_single().execute()
+            user_dict = response.data
+    except Exception as e:
+        logger.error(f"WS Auth: Database error while fetching user: {e}", exc_info=True)
+        return None # Treat DB error during auth lookup as auth failure for simplicity here
     
     if user_dict is None:
         logger.warning(f"WS Auth: User not found in DB for token_data: user_id='{token_data.user_id}', phone='{token_data.phone}'")
@@ -80,23 +80,14 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
     current_user: Optional[UserPublic] = await get_user_from_token_for_ws(token=token)
 
     if not current_user:
-        logger.warning("WS Auth: Authentication failed or user not found. Closing WebSocket with 1008.")
-        await websocket.accept() # Accept briefly to send a proper close code
+        logger.warning("WS Auth: Authentication failed or user not found. Accepting and closing WebSocket with 1008.")
+        await websocket.accept() 
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     user_id = current_user.id
-    await manager.connect(websocket, user_id) # manager.connect calls websocket.accept() internally if not already accepted.
-                                            # For clarity, if we accepted above, manager.connect should ideally not accept again,
-                                            # but most WebSocket libraries handle redundant accepts gracefully.
-                                            # If manager.connect was changed not to accept, then the accept above is critical.
-                                            # Current manager.connect does `await websocket.accept()`.
-                                            # To avoid double accept, we can let manager.connect do it, or do it here and modify manager.
-                                            # For now, accepting here and letting manager.connect try again is usually safe.
-                                            # A cleaner way would be to pass `accepted=True` to manager.connect if we accept early.
-                                            # Let's assume manager.connect is robust. If issues arise, we can modify manager.connect
-                                            # to not call accept() if a flag is passed.
-
+    await manager.connect(websocket, user_id)
+    
     now = datetime.now(timezone.utc)
     try:
         await db_manager.get_table("users").update({
@@ -107,16 +98,18 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
         user_data_for_presence_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
         if not user_data_for_presence_resp.data:
             logger.error(f"WS Connect: User {user_id} not found when fetching mood post-connection. This should not happen.")
-            raise Exception("User data dissapeared post-connection") # This will be caught below
+            # This is a server-side issue, not a client policy violation
+            raise Exception("User data disappeared post-connection which is unexpected.")
 
         current_mood = user_data_for_presence_resp.data.get("mood", "Neutral")
         await manager.broadcast_presence_update_to_relevant_users(user_id, True, now, current_mood, db_manager)
 
     except Exception as e:
         logger.error(f"Error during WS connect (DB update/broadcast) for user {user_id}: {str(e)}", exc_info=True)
-        await manager.disconnect(user_id) # Ensure user is removed from active connections
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Server error during connection setup")
-        return # Important to return here to not proceed to the message loop
+        await manager.disconnect(user_id) 
+        if websocket.client_state != WebSocketState.DISCONNECTED:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Server error during connection setup")
+        return 
 
     try:
         while True:
@@ -131,9 +124,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
             event_type = data.get("event_type")
             logger.info(f"WS user {user_id}: Received event_type '{event_type}' with data: {data}")
 
-
-            if event_type == "send_message":
-                try:
+            try: # Encapsulate each event's logic for better error isolation
+                if event_type == "send_message":
                     chat_id_str = data.get("chat_id")
                     if not chat_id_str: raise ValueError("Missing chat_id")
                     chat_id = UUID(chat_id_str)
@@ -145,8 +137,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     image_url = data.get("image_url")
                     client_temp_id = data.get("client_temp_id")
 
-                    participant_check = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
-                    if not participant_check.data:
+                    participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
+                    if not participant_check_resp.data:
                         logger.warning(f"WS user {user_id} tried to send message to chat {chat_id} but is not a participant.")
                         await websocket.send_json({"event_type": "error", "detail": "Not a participant of this chat"})
                         continue
@@ -170,14 +162,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     message_out = MessageInDB(**insert_result.data[0])
                     await manager.broadcast_chat_message(str(chat_id), message_out, db_manager)
 
-                except (TypeError, ValueError, KeyError) as e:
-                    logger.warning(f"WS user {user_id}: Invalid payload for send_message: {str(e)}. Data: {data}")
-                    await websocket.send_json({"event_type": "error", "detail": f"Invalid payload for send_message: {str(e)}"})
-                    continue
-
-
-            elif event_type == "toggle_reaction":
-                try:
+                elif event_type == "toggle_reaction":
                     message_id_str = data.get("message_id")
                     chat_id_str = data.get("chat_id")
                     emoji_str = data.get("emoji")
@@ -200,8 +185,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         await websocket.send_json({"event_type": "error", "detail": "Message does not belong to the specified chat"})
                         continue
 
-                    participant_check = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
-                    if not participant_check.data:
+                    participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
+                    if not participant_check_resp.data:
                         logger.warning(f"WS user {user_id} tried to react in chat {chat_id} but is not a participant.")
                         await websocket.send_json({"event_type": "error", "detail": "Not a participant of this chat"})
                         continue
@@ -226,33 +211,20 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     updated_message_out = MessageInDB(**update_reaction_result.data[0])
                     await manager.broadcast_reaction_update(str(chat_id), updated_message_out, db_manager)
 
-                except (TypeError, ValueError, KeyError) as e:
-                    logger.warning(f"WS user {user_id}: Invalid payload for toggle_reaction: {str(e)}. Data: {data}")
-                    await websocket.send_json({"event_type": "error", "detail": f"Invalid payload for toggle_reaction: {str(e)}"})
-                    continue
-
-
-            elif event_type in ["start_typing", "stop_typing"]:
-                try:
+                elif event_type in ["start_typing", "stop_typing"]:
                     chat_id_str = data.get("chat_id")
                     if not chat_id_str: raise ValueError("Missing chat_id for typing indicator")
                     chat_id = UUID(chat_id_str)
                     is_typing = event_type == "start_typing"
                     await manager.broadcast_typing_indicator(str(chat_id), user_id, is_typing, db_manager)
-                except (TypeError, ValueError, KeyError) as e:
-                    logger.warning(f"WS user {user_id}: Invalid payload for typing indicator: {str(e)}. Data: {data}")
-                    await websocket.send_json({"event_type": "error", "detail": f"Invalid chat_id for typing indicator: {str(e)}"})
-                    continue
                 
-
-            elif event_type == "ping_thinking_of_you":
-                try:
+                elif event_type == "ping_thinking_of_you":
                     recipient_user_id_str = data.get("recipient_user_id")
                     if not recipient_user_id_str: raise ValueError("Missing recipient_user_id for ping")
                     recipient_user_id = UUID(recipient_user_id_str)
                     
-                    recipient_check = await db_manager.get_table("users").select("id, display_name").eq("id", str(recipient_user_id)).maybe_single().execute()
-                    if not recipient_check.data:
+                    recipient_check_resp = await db_manager.get_table("users").select("id, display_name").eq("id", str(recipient_user_id)).maybe_single().execute()
+                    if not recipient_check_resp.data:
                         logger.warning(f"WS user {user_id}: Recipient user {recipient_user_id} not found for ping.")
                         await websocket.send_json({"event_type": "error", "detail": "Recipient user not found"})
                         continue
@@ -265,44 +237,43 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         },
                         recipient_user_id,
                     )
-                except (TypeError, ValueError, KeyError) as e:
-                     logger.warning(f"WS user {user_id}: Invalid payload for ping_thinking_of_you: {str(e)}. Data: {data}")
-                     await websocket.send_json({"event_type": "error", "detail": f"Invalid recipient_user_id for ping: {str(e)}"})
-                     continue
-            else:
-                logger.warning(f"WS user {user_id}: Unknown event_type received: {event_type}")
-                await websocket.send_json({"event_type": "error", "detail": f"Unknown event_type: {event_type}"})
+                else:
+                    logger.warning(f"WS user {user_id}: Unknown event_type received: {event_type}")
+                    await websocket.send_json({"event_type": "error", "detail": f"Unknown event_type: {event_type}"})
+            
+            except (TypeError, ValueError, KeyError) as e_payload: # Catch payload/validation errors
+                logger.warning(f"WS user {user_id}: Invalid payload for {event_type}: {str(e_payload)}. Data: {data}", exc_info=True)
+                await websocket.send_json({"event_type": "error", "detail": f"Invalid payload for {event_type}: {str(e_payload)}"})
+            except Exception as e_general: # Catch other unexpected errors (DB, manager calls etc.)
+                logger.error(f"WS user {user_id}: Error processing event {event_type}: {str(e_general)}", exc_info=True)
+                await websocket.send_json({"event_type": "error", "detail": f"Server error processing your request for {event_type}."})
+
 
     except WebSocketDisconnect:
         logger.info(f"WS user {user_id} disconnected (WebSocketDisconnect received).")
     except Exception as e: 
         logger.error(f"Unexpected error in WebSocket loop for user {user_id}: {str(e)}", exc_info=True)
-        # Attempt to close gracefully if not already closed by WebSocketDisconnect
-        if websocket.client_state != WebSocketState.DISCONNECTED: # type: ignore
+        if websocket.client_state != WebSocketState.DISCONNECTED:
              try:
                 await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Unexpected server error in message loop")
-             except RuntimeError: # Already closing or closed
+             except RuntimeError: 
+                logger.warning(f"WS user {user_id}: Tried to close WebSocket during error, but it was already closing/closed.")
                 pass
     finally: 
         logger.info(f"WS user {user_id} entering finally block. Cleaning up connection.")
-        await manager.disconnect(user_id) # Ensure user is removed from active connections list
+        await manager.disconnect(user_id) 
         offline_now = datetime.now(timezone.utc)
         try:
-            # Update user status to offline in DB
             await db_manager.get_table("users").update({
                 "is_online": False, 
                 "last_seen": offline_now.isoformat()
             }).eq("id", str(user_id)).execute()
 
-            # Fetch mood for accurate presence update
             user_data_for_offline_presence_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
-            offline_mood = "Neutral" # Default mood
+            offline_mood = "Neutral" 
             if user_data_for_offline_presence_resp and user_data_for_offline_presence_resp.data:
                  offline_mood = user_data_for_offline_presence_resp.data.get("mood", "Neutral")
             
             await manager.broadcast_presence_update_to_relevant_users(user_id, False, offline_now, offline_mood, db_manager)
-        except Exception as e:
-            logger.error(f"Error during WS disconnect cleanup (DB update/broadcast) for user {user_id}: {str(e)}", exc_info=True)
-
-
-    
+        except Exception as e_cleanup:
+            logger.error(f"Error during WS disconnect cleanup (DB update/broadcast) for user {user_id}: {str(e_cleanup)}", exc_info=True)
