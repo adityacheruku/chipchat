@@ -21,13 +21,12 @@ user_router = APIRouter(prefix="/users", tags=["Users"])
 async def register(user_create: UserCreate):
     existing_user_data = None
     try:
-        # Check for existing user using phone number
         logger.info(f"Checking for existing user with phone: {user_create.phone}")
         existing_user_response = await db_manager.get_table("users").select("id").eq("phone", user_create.phone).maybe_single().execute()
-        if existing_user_response and existing_user_response.data: # Ensure response object exists before checking data
+        if existing_user_response and existing_user_response.data:
             existing_user_data = existing_user_response.data
     except APIError as e:
-        if e.code == "204": # No user found with this phone, which is good for registration
+        if e.code == "204": 
             logger.info(f"No user found with phone {user_create.phone}, proceeding with registration.")
             existing_user_data = None 
         else:
@@ -65,6 +64,7 @@ async def register(user_create: UserCreate):
 
     insert_response = None
     try:
+        # Use admin_client for user creation to bypass RLS if necessary for returning representation
         insert_response = await db_manager.admin_client.table("users").insert(new_user_data).execute()
     except APIError as e:
         logger.error(f"PostgREST APIError during user insert. Status: {e.code}, Message: {e.message}, Details: {e.details}, Hint: {e.hint}", exc_info=True)
@@ -124,19 +124,18 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends() 
 ):
     logger.info(f"Login attempt for phone: {form_data.username}")
-    # logger.info(f"Raw form data for login: {form_data}") # For debugging if needed
 
     user_response = await db_manager.get_table("users").select("*").eq("phone", form_data.username).maybe_single().execute()
     
-    if not user_response.data:
-        logger.warning(f"Login attempt failed for phone: {form_data.username} - User not found")
+    if user_response is None or not user_response.data:
+        logger.warning(f"Login attempt failed for phone: {form_data.username} - User not found or API response error.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Incorrect phone number or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    user_in_db = user_response.data
+    user_in_db = user_response.data # At this point, user_response.data is guaranteed to exist
     
     if not verify_password(form_data.password, user_in_db["hashed_password"]):
         logger.warning(f"Login attempt failed for phone: {form_data.username} - Incorrect password")
@@ -146,7 +145,7 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    logger.info(f"User {form_data.username} successfully logged in.")
+    logger.info(f"User {form_data.username} ({user_in_db['display_name']}) successfully logged in.")
 
     user_public_info = UserPublic(
         id=user_in_db["id"],
@@ -192,7 +191,7 @@ async def get_user(user_id: UUID, current_user_dep: UserPublic = Depends(get_cur
         "id, display_name, avatar_url, mood, phone, email, is_online, last_seen"
     ).eq("id", str(user_id)).maybe_single().execute()
     
-    if not user_response.data:
+    if not user_response or not user_response.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return UserPublic(**user_response.data)
 
@@ -225,7 +224,7 @@ async def update_profile(
         logger.info(f"Mood changed for user {current_user.id} from {current_user.mood} to {refreshed_user_data['mood']}. Broadcasting update.")
         await manager.broadcast_user_update_for_profile_change(
             user_id=current_user.id,
-            updated_data={"mood": refreshed_user_data["mood"]},
+            updated_data={"mood": refreshed_user_data['mood']},
             db_manager_instance=db_manager 
         )
 
@@ -288,3 +287,4 @@ async def upload_avatar_route(
         is_online=refreshed_user_data["is_online"],
         last_seen=refreshed_user_data.get("last_seen")
     )
+
