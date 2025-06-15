@@ -33,33 +33,47 @@ async def create_chat(
     if recipient_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot create chat with yourself")
 
-    recipient_user_resp = await db_manager.get_table("users").select("id").eq("id", str(recipient_id)).maybe_single().execute()
-    if not recipient_user_resp or not recipient_user_resp.data:
+    recipient_user_resp_obj = await db_manager.get_table("users").select("id").eq("id", str(recipient_id)).maybe_single().execute()
+    if not recipient_user_resp_obj or not recipient_user_resp_obj.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipient user not found")
 
     # Find existing 2-person chat between current_user and recipient
     # Query chat_participants for chats involving current_user
-    user_chats_resp = await db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(current_user.id)).execute()
-    user_chat_ids = [row["chat_id"] for row in user_chats_resp.data]
+    user_chats_resp_obj = await db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(current_user.id)).execute()
+    if not user_chats_resp_obj or not user_chats_resp_obj.data:
+        user_chat_ids = []
+    else:
+        user_chat_ids = [row["chat_id"] for row in user_chats_resp_obj.data]
+
 
     if user_chat_ids:
         for chat_id_uuid_val in user_chat_ids:
             chat_id_str = str(chat_id_uuid_val)
-            participants_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).execute()
-            participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_resp.data] # Cast to UUID
+            participants_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).execute()
+            if not participants_resp_obj or not participants_resp_obj.data:
+                continue # Should not happen if chat_id came from user_chats
             
-            # Ensure it's a 2-person chat AND the other participant is the recipient
+            participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_resp_obj.data] 
+            
             if len(participant_ids_in_chat) == 2 and recipient_id in participant_ids_in_chat:
-                chat_detail_resp = await db_manager.get_table("chats").select("*").eq("id", chat_id_str).single().execute()
-                chat_data = chat_detail_resp.data
+                chat_detail_resp_obj = await db_manager.get_table("chats").select("*").eq("id", chat_id_str).single().execute()
+                if not chat_detail_resp_obj or not chat_detail_resp_obj.data: # single() should error if not found or raise PostgrestAPIError for other issues
+                    logger.error(f"Chat details not found for presumably existing chat ID: {chat_id_str}")
+                    continue # Or raise 500
+
+                chat_data = chat_detail_resp_obj.data
                 
                 participant_details_list = []
                 for p_id_uuid in participant_ids_in_chat:
-                    user_resp = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).single().execute()
-                    participant_details_list.append(ChatParticipant(**user_resp.data))
+                    user_resp_obj_inner = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).single().execute()
+                    if not user_resp_obj_inner or not user_resp_obj_inner.data:
+                         logger.error(f"Participant user details not found for ID: {p_id_uuid} in chat {chat_id_str}")
+                         continue # Or raise 500 / skip this chat if inconsistent
+                    participant_details_list.append(ChatParticipant(**user_resp_obj_inner.data))
                 
-                last_msg_resp = await db_manager.get_table("messages").select("*").eq("chat_id", chat_id_str).order("created_at", desc=True).limit(1).maybe_single().execute()
-                last_message = MessageInDB(**last_msg_resp.data) if last_msg_resp.data else None
+                last_msg_resp_obj = await db_manager.get_table("messages").select("*").eq("chat_id", chat_id_str).order("created_at", desc=True).limit(1).maybe_single().execute()
+                last_message_data = last_msg_resp_obj.data if last_msg_resp_obj else None
+                last_message = MessageInDB(**last_message_data) if last_message_data else None
 
                 return ChatResponse(
                     id=chat_data["id"],
@@ -76,22 +90,26 @@ async def create_chat(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    new_chat_insert_resp = await db_manager.get_table("chats").insert(new_chat_data).execute()
-    if not new_chat_insert_resp.data:
+    new_chat_insert_resp_obj = await db_manager.get_table("chats").insert(new_chat_data).execute()
+    if not new_chat_insert_resp_obj or not new_chat_insert_resp_obj.data:
         raise HTTPException(status_code=500, detail="Failed to create chat")
     
-    created_chat_data = new_chat_insert_resp.data[0]
+    created_chat_data = new_chat_insert_resp_obj.data[0]
 
     participants_to_add = [
         {"chat_id": str(created_chat_data["id"]), "user_id": str(current_user.id), "joined_at": datetime.now(timezone.utc).isoformat()},
         {"chat_id": str(created_chat_data["id"]), "user_id": str(recipient_id), "joined_at": datetime.now(timezone.utc).isoformat()},
     ]
-    await db_manager.get_table("chat_participants").insert(participants_to_add).execute()
+    await db_manager.get_table("chat_participants").insert(participants_to_add).execute() # Assume this is fine or add error check
 
     final_participant_details = []
     for user_uuid_to_fetch in [current_user.id, recipient_id]:
-        user_resp = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(user_uuid_to_fetch)).single().execute()
-        final_participant_details.append(ChatParticipant(**user_resp.data))
+        user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(user_uuid_to_fetch)).single().execute()
+        if not user_resp_obj_final or not user_resp_obj_final.data:
+             logger.error(f"Participant user details for new chat not found for ID: {user_uuid_to_fetch}")
+             # This would indicate a serious issue if users just involved in creation aren't found
+             raise HTTPException(status_code=500, detail="Error fetching participant details for new chat.")
+        final_participant_details.append(ChatParticipant(**user_resp_obj_final.data))
     
     return ChatResponse(
         id=created_chat_data["id"],
@@ -105,28 +123,45 @@ async def create_chat(
 async def list_chats(
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    user_chats_resp = await db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(current_user.id)).execute()
-    user_chat_ids = list(set([row["chat_id"] for row in user_chats_resp.data]))
+    user_chats_resp_obj = await db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(current_user.id)).execute()
+    if not user_chats_resp_obj or not user_chats_resp_obj.data:
+        user_chat_ids = []
+    else:
+        user_chat_ids = list(set([row["chat_id"] for row in user_chats_resp_obj.data]))
 
     chat_responses = []
     for chat_id_uuid_val in user_chat_ids:
         chat_id_str = str(chat_id_uuid_val)
-        chat_detail_resp = await db_manager.get_table("chats").select("*").eq("id", chat_id_str).maybe_single().execute()
-        if not chat_detail_resp.data:
+        chat_detail_resp_obj = await db_manager.get_table("chats").select("*").eq("id", chat_id_str).maybe_single().execute()
+        if not chat_detail_resp_obj or not chat_detail_resp_obj.data:
+            logger.warning(f"Chat details not found for chat ID: {chat_id_str} during list_chats for user {current_user.id}. Skipping.")
             continue
         
-        chat_data = chat_detail_resp.data
+        chat_data = chat_detail_resp_obj.data
         
-        participants_in_chat_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).execute()
-        participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_in_chat_resp.data] # Cast to UUID
+        participants_in_chat_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).execute()
+        if not participants_in_chat_resp_obj or not participants_in_chat_resp_obj.data:
+            logger.warning(f"No participants found for chat ID: {chat_id_str} during list_chats. Skipping.")
+            continue # Should not happen if chat_id came from user_chats
+
+        participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_in_chat_resp_obj.data] 
         
         participant_details_list = []
+        valid_chat = True
         for p_id_uuid in participant_ids_in_chat:
-            user_resp = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).single().execute()
-            participant_details_list.append(ChatParticipant(**user_resp.data))
+            user_resp_obj_list = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).single().execute()
+            if not user_resp_obj_list or not user_resp_obj_list.data:
+                logger.error(f"Participant user details not found for ID: {p_id_uuid} in chat {chat_id_str} during list_chats. Skipping chat.")
+                valid_chat = False
+                break
+            participant_details_list.append(ChatParticipant(**user_resp_obj_list.data))
         
-        last_msg_resp = await db_manager.get_table("messages").select("*").eq("chat_id", chat_id_str).order("created_at", desc=True).limit(1).maybe_single().execute()
-        last_message = MessageInDB(**last_msg_resp.data) if last_msg_resp.data else None
+        if not valid_chat:
+            continue
+
+        last_msg_resp_obj = await db_manager.get_table("messages").select("*").eq("chat_id", chat_id_str).order("created_at", desc=True).limit(1).maybe_single().execute()
+        last_message_data = last_msg_resp_obj.data if last_msg_resp_obj else None
+        last_message = MessageInDB(**last_message_data) if last_message_data else None
         
         chat_responses.append(
             ChatResponse(
@@ -148,18 +183,19 @@ async def get_messages(
     before_timestamp: Optional[datetime] = None,
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
-    if not participant_check_resp.data:
+    participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
+    if not participant_check_resp_obj or not participant_check_resp_obj.data:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
 
     query = db_manager.get_table("messages").select("*").eq("chat_id", str(chat_id))
     if before_timestamp:
         query = query.lt("created_at", before_timestamp.isoformat())
     
-    messages_resp = await query.order("created_at", desc=True).limit(limit).execute()
+    messages_resp_obj = await query.order("created_at", desc=True).limit(limit).execute()
     
-    messages_data = [MessageInDB(**m) for m in messages_resp.data] if messages_resp.data else []
-    return MessageListResponse(messages=messages_data)
+    messages_data_list = messages_resp_obj.data if messages_resp_obj and messages_resp_obj.data else []
+    messages_domain_list = [MessageInDB(**m) for m in messages_data_list]
+    return MessageListResponse(messages=messages_domain_list)
 
 @router.post("/{chat_id}/messages", response_model=MessageInDB)
 async def send_message_http(
@@ -167,8 +203,8 @@ async def send_message_http(
     message_create: MessageCreate,
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
-    if not participant_check_resp.data:
+    participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
+    if not participant_check_resp_obj or not participant_check_resp_obj.data:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
 
     message_id = uuid.uuid4()
@@ -189,13 +225,13 @@ async def send_message_http(
         "reactions": {},
     }
     
-    insert_resp = await db_manager.get_table("messages").insert(message_data_to_insert).execute()
-    if not insert_resp.data:
+    insert_resp_obj = await db_manager.get_table("messages").insert(message_data_to_insert).execute()
+    if not insert_resp_obj or not insert_resp_obj.data:
         raise HTTPException(status_code=500, detail="Failed to send message")
         
-    new_message_db = insert_resp.data[0]
+    new_message_db = insert_resp_obj.data[0]
 
-    await db_manager.get_table("chats").update({
+    await db_manager.get_table("chats").update({ # Assume this is fine or add error check
         "updated_at": now.isoformat(),
     }).eq("id", str(chat_id)).execute()
 
@@ -212,15 +248,15 @@ async def react_to_message(
     reaction_toggle: ReactionToggle,
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    message_resp = await db_manager.get_table("messages").select("*").eq("id", str(message_id)).maybe_single().execute()
-    if not message_resp.data:
+    message_resp_obj = await db_manager.get_table("messages").select("*").eq("id", str(message_id)).maybe_single().execute()
+    if not message_resp_obj or not message_resp_obj.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
     
-    message_db = message_resp.data
+    message_db = message_resp_obj.data # This is the dictionary
     chat_id_str = str(message_db["chat_id"])
 
-    participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).eq("user_id", str(current_user.id)).maybe_single().execute()
-    if not participant_check_resp.data:
+    participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).eq("user_id", str(current_user.id)).maybe_single().execute()
+    if not participant_check_resp_obj or not participant_check_resp_obj.data:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
 
     reactions = message_db.get("reactions") or {}
@@ -237,11 +273,11 @@ async def react_to_message(
     else:
         reactions[emoji].append(user_id_str)
     
-    update_reactions_resp = await db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
-    if not update_reactions_resp.data:
+    update_reactions_resp_obj = await db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
+    if not update_reactions_resp_obj or not update_reactions_resp_obj.data:
         raise HTTPException(status_code=500, detail="Failed to update reaction")
         
-    updated_message_db = update_reactions_resp.data[0]
+    updated_message_db = update_reactions_resp_obj.data[0]
     message_for_response = MessageInDB(**updated_message_db)
 
     await manager.broadcast_reaction_update(chat_id_str, message_for_response, db_manager)
@@ -256,17 +292,16 @@ async def get_default_chat_partner(
     try:
         logger.info(f"Fetching default chat partner for user: {current_user.id} ({current_user.display_name})")
         
-        all_users_resp = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").execute()
+        all_users_resp_obj = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").execute()
         
-        if not all_users_resp or not all_users_resp.data: # Refined check
+        if not all_users_resp_obj or not all_users_resp_obj.data: 
             logger.warning(f"No users found in the database (or DB response error) when fetching default chat partner for {current_user.id}.")
             return None
 
-        logger.info(f"Found {len(all_users_resp.data)} users in total.")
+        logger.info(f"Found {len(all_users_resp_obj.data)} users in total.")
 
-        # Filter out the current user to find the other partner(s)
         other_partners_data = [
-            user_data for user_data in all_users_resp.data 
+            user_data for user_data in all_users_resp_obj.data 
             if UUID(user_data["id"]) != current_user.id
         ]
 
@@ -274,9 +309,6 @@ async def get_default_chat_partner(
             logger.warning(f"No other users found for {current_user.id} to be a default chat partner.")
             return None
         
-        # In a 2-user system, there should be exactly one other partner.
-        # If more than one, this simplified logic just picks the first one.
-        # For a multi-user system, the concept of a "default" partner would need re-evaluation.
         default_partner_data = other_partners_data[0]
         logger.info(f"Default chat partner found for {current_user.id}: {default_partner_data['id']} ({default_partner_data['display_name']})")
         
@@ -287,6 +319,7 @@ async def get_default_chat_partner(
         )
     except Exception as e:
         logger.error(f"Error in get_default_chat_partner for user {current_user.id}: {str(e)}", exc_info=True)
-        # Log the full traceback with exc_info=True
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not determine default chat partner.")
 
+
+    
