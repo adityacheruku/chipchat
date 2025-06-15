@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -8,8 +9,8 @@ import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
 import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal';
-import MoodEntryModal from '@/components/chat/MoodEntryModal'; // Added
-import { Button } from '@/components/ui/button'; // Added Button
+import MoodEntryModal from '@/components/chat/MoodEntryModal';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useAvatar } from '@/hooks/useAvatar';
@@ -34,13 +35,15 @@ export default function ChatPage() {
   const [isChatLoading, setIsChatLoading] = useState(true);
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
   const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
+  const [chatSetupErrorMessage, setChatSetupErrorMessage] = useState<string | null>(null);
+
 
   const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
   const [fullScreenUserData, setFullScreenUserData] = useState<User | null>(null);
   const [typingUsers, setTypingUsers] = useState<Record<string, { userId: string; isTyping: boolean }>>({});
 
-  const [isMoodModalOpen, setIsMoodModalOpen] = useState(false); // For mood entry modal
-  const [initialMoodOnLoad, setInitialMoodOnLoad] = useState<Mood | null>(null); // To pass to modal
+  const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
+  const [initialMoodOnLoad, setInitialMoodOnLoad] = useState<Mood | null>(null);
 
   const lastReactionToggleTimes = useRef<Record<string, number>>({});
   const lastMessageTextRef = useRef<string>("");
@@ -78,7 +81,7 @@ export default function ChatPage() {
     if (currentUser) {
       try {
         await api.updateUserProfile({ mood: newMood });
-        await fetchAndUpdateUser(); // Refresh currentUser from AuthContext
+        await fetchAndUpdateUser();
         addAppEvent('moodChange', `${currentUser.display_name} updated mood to ${newMood} via AI suggestion.`, currentUser.id, currentUser.display_name);
       } catch (error: any) {
         toast({ variant: 'destructive', title: 'Mood Update Failed', description: error.message });
@@ -96,7 +99,6 @@ export default function ChatPage() {
     currentMessageTextRef: lastMessageTextRef,
   });
 
-  // WebSocket Handlers
   const handleWSMessageReceived = useCallback((newMessage: MessageType) => {
     setMessages(prevMessages => {
       if (prevMessages.find(m => m.id === newMessage.id || (newMessage.client_temp_id && m.client_temp_id === newMessage.client_temp_id))) {
@@ -166,56 +168,73 @@ export default function ChatPage() {
     onClose: (event) => addAppEvent('apiError', `WebSocket disconnected: ${event.reason}`, currentUser?.id, currentUser?.display_name, {code: event.code}),
   });
 
+  const performLoadChatData = useCallback(async () => {
+    if (!currentUser || !token) {
+        if (!isAuthLoading) {
+             setChatSetupErrorMessage("User authentication data is missing. Please try logging in again.");
+             setIsChatLoading(false);
+        }
+        return;
+    }
+
+    setIsChatLoading(true);
+    setChatSetupErrorMessage(null); 
+
+    try {
+      const partner = await api.getDefaultChatPartner();
+      if (!partner) {
+        const noPartnerMsg = "Could not find a chat partner. Please ensure another user is registered and available, or try again later.";
+        toast({ variant: 'destructive', title: "Chat Setup Error", description: noPartnerMsg, duration: 7000 });
+        setChatSetupErrorMessage(noPartnerMsg);
+        return; 
+      }
+      
+      const otherUserDetails = await api.getUserProfile(partner.user_id);
+      setOtherUser(otherUserDetails);
+      if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
+
+      const chatSession = await api.createOrGetChat(partner.user_id);
+      setActiveChat(chatSession);
+
+      if (chatSession) {
+        const messagesData = await api.getMessages(chatSession.id);
+        setMessages(messagesData.messages.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+      } else {
+        throw new Error("Failed to establish a chat session.");
+      }
+      
+      if (typeof window !== 'undefined' && currentUser.mood) {
+        const moodPrompted = sessionStorage.getItem('moodPromptedThisSession');
+        if (moodPrompted !== 'true') {
+          setInitialMoodOnLoad(currentUser.mood);
+          setIsMoodModalOpen(true);
+        }
+      }
+
+    } catch (error: any) {
+      const apiErrorMsg = `Failed to load chat data: ${error.message}`;
+      toast({ variant: 'destructive', title: 'API Error', description: apiErrorMsg, duration: 7000 });
+      addAppEvent('apiError', 'Failed to load initial chat data', currentUser?.id, currentUser?.display_name, { error: error.message });
+      setChatSetupErrorMessage(apiErrorMsg);
+    } finally {
+      setIsChatLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentUser, token, toast, addAppEvent, setAvatarPreview, isAuthLoading
+  ]);
+
   useEffect(() => {
     if (!isAuthenticated && !isAuthLoading) {
       router.push('/');
       return;
     }
 
-    if (currentUser && token) {
-      setIsChatLoading(true);
-      const loadChatData = async () => {
-        try {
-          const partner = await api.getDefaultChatPartner();
-          if (!partner) {
-            toast({ variant: 'destructive', title: "Chat Setup Error", description: "Could not find a chat partner. Ensure two users are registered." });
-            setIsChatLoading(false);
-            logout();
-            return;
-          }
-          
-          const otherUserDetails = await api.getUserProfile(partner.user_id);
-          setOtherUser(otherUserDetails);
-          setAvatarPreview(currentUser.avatar_url);
-
-          const chatSession = await api.createOrGetChat(partner.user_id);
-          setActiveChat(chatSession);
-
-          if (chatSession) {
-            const messagesData = await api.getMessages(chatSession.id);
-            setMessages(messagesData.messages.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
-          }
-          
-          // Mood prompt logic
-          if (typeof window !== 'undefined' && currentUser.mood) {
-            const moodPrompted = sessionStorage.getItem('moodPromptedThisSession');
-            if (moodPrompted !== 'true') {
-              setInitialMoodOnLoad(currentUser.mood);
-              setIsMoodModalOpen(true);
-            }
-          }
-
-        } catch (error: any) {
-          toast({ variant: 'destructive', title: 'Failed to load chat data', description: error.message });
-          addAppEvent('apiError', 'Failed to load initial chat data', currentUser?.id, currentUser?.display_name, { error: error.message });
-        } finally {
-          setIsChatLoading(false);
-        }
-      };
-      loadChatData();
+    if (isAuthenticated && currentUser && token) {
+      performLoadChatData();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, token, isAuthenticated, isAuthLoading, router, toast, logout]);
+  }, [isAuthenticated, isAuthLoading, currentUser, token, performLoadChatData, router]);
 
 
   const handleSendMessage = (text: string) => {
@@ -299,10 +318,8 @@ export default function ChatPage() {
         toast({title: "Uploading avatar..."});
         const avatarUploadResponse = await api.uploadAvatar(newAvatarFile);
         setAvatarPreview(avatarUploadResponse.avatar_url);
-        // Backend /users/me/avatar now handles DB update, so no need to merge avatar_url here
       }
       
-      // Only call update if there are other fields changed OR if no new avatar but other fields exist
       if (Object.keys(updatedProfileData).length > 0) {
          await api.updateUserProfile(updatedProfileData);
       }
@@ -319,7 +336,6 @@ export default function ChatPage() {
   const handleSendThought = async () => {
     if (!currentUser || !otherUser || !isWsConnected) return;
     try {
-      // Frontend sends the WS message directly via useWebSocket hook's sendMessage
       sendWsMessage({
           event_type: "ping_thinking_of_you",
           recipient_user_id: otherUser.id,
@@ -411,7 +427,7 @@ export default function ChatPage() {
   }, []);
 
 
-  if (isAuthLoading || isChatLoading) {
+  if (isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -420,13 +436,44 @@ export default function ChatPage() {
     );
   }
 
+  if (!isAuthenticated && !isAuthLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
+        <div>
+          <p className="text-destructive text-lg mb-4">Authentication required.</p>
+          <Button onClick={() => router.push('/')} variant="outline">Go to Login</Button>
+        </div>
+      </div>
+    );
+  }
+  
+  if (chatSetupErrorMessage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
+        <div>
+          <p className="text-destructive text-lg mb-4">Chat Setup Problem</p>
+          <p className="text-muted-foreground mb-4">{chatSetupErrorMessage}</p>
+          <Button onClick={() => router.push('/')} variant="outline" className="mr-2">Go to Login Page</Button>
+          <Button onClick={performLoadChatData} variant="default">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  
   if (!currentUser || !otherUser || !activeChat) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
         <div>
           <p className="text-destructive text-lg mb-4">Could not load chat environment.</p>
-          <p className="text-muted-foreground mb-4">This might be due to a missing chat partner or a server issue.</p>
-          <Button onClick={() => router.push('/')} variant="outline">Go to Login</Button>
+          <p className="text-muted-foreground mb-4">
+            An unexpected issue occurred. Current user: {currentUser ? currentUser.display_name : 'Not available'}.
+          </p>
+          <Button onClick={() => router.push('/')} variant="outline" className="mr-2">Go to Login</Button>
+           <Button onClick={performLoadChatData} variant="default">
+            Try to Reload Chat
+          </Button>
         </div>
       </div>
     );
@@ -483,7 +530,7 @@ export default function ChatPage() {
       {currentUser && initialMoodOnLoad && (
         <MoodEntryModal
           isOpen={isMoodModalOpen}
-          onClose={() => setIsMoodModalOpen(false)} // Should typically be handled by onContinueWithCurrentMood
+          onClose={() => setIsMoodModalOpen(false)}
           onSetMood={handleSetMoodFromModal}
           currentMood={initialMoodOnLoad}
           onContinueWithCurrent={handleContinueWithCurrentMood}
@@ -493,3 +540,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
