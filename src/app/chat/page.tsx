@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageStatus } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -172,15 +172,32 @@ export default function ChatPage() {
   }, [ currentUser, token, toast, addAppEvent, setAvatarPreview, isAuthLoading ]);
 
 
-  const handleWSMessageReceived = useCallback((newMessage: MessageType) => {
+  const handleWSMessageReceived = useCallback((newMessageFromServer: MessageType) => {
     setMessages(prevMessages => {
-      if (prevMessages.find(m => m.id === newMessage.id || (newMessage.client_temp_id && m.client_temp_id === newMessage.client_temp_id))) {
-        return prevMessages.map(m => (m.client_temp_id === newMessage.client_temp_id ? newMessage : m));
+      // Check if this message (by client_temp_id) was already optimistically added
+      const optimisticMessageIndex = newMessageFromServer.client_temp_id 
+        ? prevMessages.findIndex(m => m.client_temp_id === newMessageFromServer.client_temp_id && m.status === "sending")
+        : -1;
+
+      let updatedMessages;
+      if (optimisticMessageIndex > -1) {
+        // If found, replace the optimistic message with the confirmed one from server
+        updatedMessages = [...prevMessages];
+        updatedMessages[optimisticMessageIndex] = newMessageFromServer; // newMessageFromServer includes server ID, status, etc.
+      } else {
+        // If not found (or no client_temp_id), or if it's a message from another user, just add it
+        // Also prevent adding a message if it somehow already exists by its permanent ID
+        if (prevMessages.find(m => m.id === newMessageFromServer.id)) {
+            return prevMessages; 
+        }
+        updatedMessages = [...prevMessages, newMessageFromServer];
       }
-      return [...prevMessages, newMessage].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      // Sort messages by creation date to maintain order
+      return updatedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
-    if (activeChat && newMessage.chat_id === activeChat.id) {
-        setActiveChat(prev => prev ? ({...prev, last_message: newMessage, updated_at: newMessage.updated_at }) : null);
+
+    if (activeChat && newMessageFromServer.chat_id === activeChat.id) {
+        setActiveChat(prev => prev ? ({...prev, last_message: newMessageFromServer, updated_at: newMessageFromServer.updated_at }) : null);
     }
   }, [activeChat]);
 
@@ -197,7 +214,7 @@ export default function ChatPage() {
       setOtherUser(prev => prev ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : null);
     }
      if (currentUser && data.user_id === currentUser.id) {
-      fetchAndUpdateUser();
+      fetchAndUpdateUser(); // Current user's presence might have changed from another device
     }
   }, [otherUser, currentUser, fetchAndUpdateUser]);
 
@@ -206,7 +223,7 @@ export default function ChatPage() {
         setOtherUser(prev => prev ? { ...prev, ...data } : null);
     }
     if (currentUser && data.user_id === currentUser.id) {
-        fetchAndUpdateUser();
+        fetchAndUpdateUser(); // Current user's profile might have been updated from another device/session
     }
   }, [currentUser, otherUser, fetchAndUpdateUser]);
 
@@ -245,6 +262,7 @@ export default function ChatPage() {
  useEffect(() => {
     if (!isAuthenticated && !isAuthLoading) {
       router.push('/');
+      // Clear all chat-related state immediately on logout/auth failure
       setOtherUser(null);
       setActiveChat(null);
       setMessages([]);
@@ -255,6 +273,7 @@ export default function ChatPage() {
 
     if (isAuthenticated && currentUser && token) {
       console.log('[ChatPage] useEffect[auth]: User changed or authenticated. CurrentUser ID:', currentUser.id);
+      // Clear previous chat state before loading new data
       setOtherUser(null);
       setActiveChat(null);
       setMessages([]);
@@ -263,6 +282,7 @@ export default function ChatPage() {
 
       performLoadChatData();
     } else if (!isAuthLoading && !currentUser) {
+      // This case handles when user logs out or if initial auth check finds no user
       console.log('[ChatPage] useEffect[auth]: User logged out or no current user.');
       setOtherUser(null);
       setActiveChat(null);
@@ -271,14 +291,14 @@ export default function ChatPage() {
       setChatSetupErrorMessage(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAuthLoading, currentUser, token, router]);
+  }, [isAuthenticated, isAuthLoading, currentUser, token, router]); // router is stable, performLoadChatData is useCallback
 
   const handleSendMessage = (text: string) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
 
-    const clientTempId = `temp_${Date.now()}`;
+    const clientTempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const optimisticMessage: MessageType = {
-      id: clientTempId,
+      id: clientTempId, // Use temp ID as primary ID for optimistic message
       user_id: currentUser.id,
       chat_id: activeChat.id,
       text,
@@ -286,14 +306,16 @@ export default function ChatPage() {
       updated_at: new Date().toISOString(),
       reactions: {},
       client_temp_id: clientTempId,
+      status: "sending" as MessageStatus, // Optimistic status
     };
-    setMessages(prev => [...prev, optimisticMessage]);
+    setMessages(prev => [...prev, optimisticMessage].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+
 
     sendWsMessage({
       event_type: "send_message",
       chat_id: activeChat.id,
       text,
-      client_temp_id: clientTempId,
+      client_temp_id: clientTempId, // Send temp ID to server
     });
     addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0,30)}"`, currentUser.id, currentUser.display_name);
 
@@ -306,11 +328,15 @@ export default function ChatPage() {
   const handleSendMoodClip = async (clipType: MessageClipType, file: File) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
     toast({ title: "Uploading clip..."});
+    const clientTempId = `temp_clip_${Date.now()}`;
     try {
         const uploadResponse = await api.uploadMoodClip(file, clipType);
         const placeholderText = clipType === 'audio'
             ? `${currentUser.display_name} sent an audio mood clip.`
             : `${currentUser.display_name} sent a video mood clip.`;
+
+        // Optimistically add clip message (optional, more complex for files)
+        // For simplicity, we'll rely on server confirmation for clips.
 
         sendWsMessage({
             event_type: "send_message",
@@ -318,6 +344,7 @@ export default function ChatPage() {
             clip_type: clipType,
             clip_url: uploadResponse.file_url,
             clip_placeholder_text: placeholderText,
+            client_temp_id: clientTempId,
         });
         addAppEvent('moodClipSent', `${currentUser.display_name} sent a ${clipType} clip.`, currentUser.id, currentUser.display_name);
         toast({ title: "Mood Clip Sent!" });
@@ -351,15 +378,18 @@ export default function ChatPage() {
     try {
       if (newAvatarFile) {
         toast({title: "Uploading avatar..."});
-        const avatarUploadResponse = await api.uploadAvatar(newAvatarFile);
-        setAvatarPreview(avatarUploadResponse.avatar_url);
+        const avatarUploadResponse = await api.uploadAvatar(newAvatarFile); // This already updates DB and returns user
+        setAvatarPreview(avatarUploadResponse.avatar_url); // Update preview based on successful upload from API
+        // No need to call api.updateUserProfile for avatar_url again if uploadAvatar handles it.
       }
 
-      if (Object.keys(updatedProfileData).length > 0) {
-         await api.updateUserProfile(updatedProfileData);
+      // Only call updateUserProfile if there are other textual changes
+      const textUpdates = { ...updatedProfileData };
+      if (Object.keys(textUpdates).length > 0) {
+         await api.updateUserProfile(textUpdates);
       }
 
-      await fetchAndUpdateUser();
+      await fetchAndUpdateUser(); // Refresh currentUser state from backend
       toast({ title: "Profile Updated", description: "Your profile has been saved." });
       addAppEvent('profileUpdate', `${currentUser.display_name} updated profile.`, currentUser.id, currentUser.display_name);
       setIsProfileModalOpen(false);
@@ -591,3 +621,4 @@ export default function ChatPage() {
     </div>
   );
 }
+

@@ -14,6 +14,7 @@ from app.chat.schemas import (
     ReactionToggle,
     ChatParticipant,
     DefaultChatPartnerResponse,
+    MessageStatusEnum,
 )
 from app.auth.dependencies import get_current_active_user, get_current_user
 from app.auth.schemas import UserPublic
@@ -219,7 +220,8 @@ async def send_message_http(
         "clip_placeholder_text": message_create.clip_placeholder_text,
         "clip_url": message_create.clip_url,
         "image_url": message_create.image_url,
-        "client_temp_id": message_create.client_temp_id,
+        "client_temp_id": message_create.client_temp_id, # Save client_temp_id
+        "status": MessageStatusEnum.SENT_TO_SERVER.value, # Set initial status
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "reactions": {},
@@ -345,3 +347,4 @@ async def get_default_chat_partner(
     finally:
         logger.info(f"END: get_default_chat_partner for user: {current_user.id} ({current_user.display_name})")
     
+

@@ -22,6 +22,8 @@ export interface UserInToken extends User {}
 
 
 export type MessageClipType = 'audio' | 'video';
+export type MessageStatus = "sending" | "sent_to_server" | "delivered_to_recipient" | "read_by_recipient" | "failed";
+
 
 export interface Message {
   id: string; 
@@ -35,7 +37,8 @@ export interface Message {
   clip_placeholder_text?: string | null;
   clip_url?: string | null;
   image_url?: string | null;
-  client_temp_id?: string | null; 
+  client_temp_id?: string | null; // Client-generated temporary ID
+  status?: MessageStatus | null; // Message status
 }
 
 export interface ChatParticipant extends User {}
@@ -77,7 +80,7 @@ export interface WebSocketMessagePayload {
 
 export interface NewMessageEventData {
   event_type: "new_message";
-  message: Message;
+  message: Message; // Should now include client_temp_id and status from server
   chat_id: string;
 }
 
@@ -144,3 +147,4 @@ export interface UserCreateFrontend {
   display_name: string;
   email?: string; // Optional email
 }
+

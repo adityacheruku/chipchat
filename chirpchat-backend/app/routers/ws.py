@@ -7,7 +7,7 @@ import json
 
 from app.websocket.manager import manager
 from app.auth.schemas import UserPublic, TokenData
-from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, SupportedEmoji
+from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, SupportedEmoji, MessageStatusEnum
 from app.database import db_manager
 from app.utils.logging import logger
 
@@ -112,7 +112,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
         }).eq("id", str(user_id)).execute()
         
         user_data_for_presence_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
-        if not user_data_for_presence_resp.data: # Should not happen if user just authenticated
+        if not user_data_for_presence_resp or not user_data_for_presence_resp.data: # Check response obj and its data
             logger.error(f"WS Connect: User {user_id} not found when fetching mood post-connection. This is unexpected.")
             # This indicates a server-side data consistency issue.
             raise Exception("User data disappeared post-connection which is unexpected.")
@@ -170,8 +170,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         continue # Skip processing this message
                     # --- End Rate Limiting Check ---
                     
-                    participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
-                    if not participant_check_resp.data:
+                    participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
+                    if not participant_check_resp_obj or not participant_check_resp_obj.data:
                         logger.warning(f"WS user {user_id} tried to send message to chat {chat_id} but is not a participant.")
                         await websocket.send_json({"event_type": "error", "detail": "You are not a participant of this chat."})
                         continue
@@ -181,18 +181,20 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     clip_placeholder_text = data.get("clip_placeholder_text")
                     clip_url = data.get("clip_url")
                     image_url = data.get("image_url")
-                    client_temp_id = data.get("client_temp_id")
+                    client_temp_id = data.get("client_temp_id") # Get client_temp_id
                     message_db_id = uuid4()
                     msg_now = datetime.now(timezone.utc)
                     new_message_payload = {
                         "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
                         "text": text, "clip_type": clip_type, "clip_placeholder_text": clip_placeholder_text,
-                        "clip_url": clip_url, "image_url": image_url, "client_temp_id": client_temp_id,
+                        "clip_url": clip_url, "image_url": image_url, 
+                        "client_temp_id": client_temp_id, # Store client_temp_id
+                        "status": MessageStatusEnum.SENT_TO_SERVER.value, # Set initial status
                         "created_at": msg_now.isoformat(), "updated_at": msg_now.isoformat(), "reactions": {},
                     }
-                    insert_result = await db_manager.get_table("messages").insert(new_message_payload).execute()
+                    insert_result_obj = await db_manager.get_table("messages").insert(new_message_payload).execute()
                     
-                    if not insert_result.data: 
+                    if not insert_result_obj or not insert_result_obj.data: 
                         logger.error(f"WS user {user_id}: Failed to save message to DB. Payload: {new_message_payload}")
                         await websocket.send_json({"event_type": "error", "detail": "Failed to save your message to the database."})
                         continue
@@ -200,7 +202,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     user_message_timestamps[user_id].append(current_time_for_rate_limit) # Add timestamp after successful save
 
                     await db_manager.get_table("chats").update({"updated_at": msg_now.isoformat()}).eq("id", str(chat_id)).execute()
-                    message_out = MessageInDB(**insert_result.data[0])
+                    message_out = MessageInDB(**insert_result_obj.data[0])
                     await manager.broadcast_chat_message(str(chat_id), message_out, db_manager)
 
                 elif event_type == "toggle_reaction":
@@ -214,19 +216,19 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     chat_id = UUID(chat_id_str) 
                     emoji = SupportedEmoji(emoji_str) 
 
-                    participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
-                    if not participant_check_resp.data:
+                    participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
+                    if not participant_check_resp_obj or not participant_check_resp_obj.data:
                         logger.warning(f"WS user {user_id} tried to react in chat {chat_id} but is not a participant.")
                         await websocket.send_json({"event_type": "error", "detail": "You cannot react in a chat you are not part of."})
                         continue
                     
-                    msg_resp = await db_manager.get_table("messages").select("*").eq("id", str(message_id)).maybe_single().execute()
-                    if not msg_resp.data:
+                    msg_resp_obj = await db_manager.get_table("messages").select("*").eq("id", str(message_id)).maybe_single().execute()
+                    if not msg_resp_obj or not msg_resp_obj.data:
                         logger.warning(f"WS user {user_id}: Message {message_id} not found for reaction.")
                         await websocket.send_json({"event_type": "error", "detail": "Message not found."})
                         continue
                     
-                    message_db = msg_resp.data
+                    message_db = msg_resp_obj.data
                     if str(message_db["chat_id"]) != str(chat_id):
                         logger.warning(f"WS user {user_id}: Message {message_id} (chat {message_db['chat_id']}) does not belong to specified chat {chat_id} for reaction.")
                         await websocket.send_json({"event_type": "error", "detail": "Message does not belong to the specified chat."})
@@ -243,13 +245,13 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     else:
                         reactions[emoji].append(user_id_str_for_reaction)
                     
-                    update_reaction_result = await db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
-                    if not update_reaction_result.data: 
+                    update_reaction_result_obj = await db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
+                    if not update_reaction_result_obj or not update_reaction_result_obj.data: 
                         logger.error(f"WS user {user_id}: Failed to update reaction for message {message_id}. Reactions: {reactions}")
                         await websocket.send_json({"event_type": "error", "detail": "Failed to save your reaction."})
                         continue
                     
-                    updated_message_out = MessageInDB(**update_reaction_result.data[0])
+                    updated_message_out = MessageInDB(**update_reaction_result_obj.data[0])
                     await manager.broadcast_reaction_update(str(chat_id), updated_message_out, db_manager)
 
                 elif event_type in ["start_typing", "stop_typing"]:
@@ -264,8 +266,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     if not recipient_user_id_str: raise ValueError("Missing recipient_user_id for ping")
                     recipient_user_id = UUID(recipient_user_id_str) 
                     
-                    recipient_check_resp = await db_manager.get_table("users").select("id, display_name").eq("id", str(recipient_user_id)).maybe_single().execute()
-                    if not recipient_check_resp.data:
+                    recipient_check_resp_obj = await db_manager.get_table("users").select("id, display_name").eq("id", str(recipient_user_id)).maybe_single().execute()
+                    if not recipient_check_resp_obj or not recipient_check_resp_obj.data:
                         logger.warning(f"WS user {user_id}: Recipient user {recipient_user_id} not found for ping.")
                         await websocket.send_json({"event_type": "error", "detail": "Recipient user not found."})
                         continue

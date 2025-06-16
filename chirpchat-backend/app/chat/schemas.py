@@ -12,6 +12,13 @@ class ClipTypeEnum(str, enum.Enum): # Using enum.Enum for proper value access
 SUPPORTED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢'] 
 SupportedEmoji = str # Use Pydantic enum or validator for stricter check
 
+class MessageStatusEnum(str, enum.Enum):
+    SENDING = "sending" # Client-side status before server confirmation
+    SENT_TO_SERVER = "sent_to_server" # Server has persisted it
+    DELIVERED_TO_RECIPIENT = "delivered_to_recipient" # Future: Confirmed delivery to recipient's device
+    READ_BY_RECIPIENT = "read_by_recipient" # Future: Confirmed read by recipient
+    FAILED = "failed" # If sending failed
+
 class MessageBase(BaseModel):
     text: Optional[str] = None
     clip_type: Optional[ClipTypeEnum] = None
@@ -20,8 +27,8 @@ class MessageBase(BaseModel):
     image_url: Optional[str] = None
 
 class MessageCreate(MessageBase):
-    recipient_id: Optional[UUID] = None
-    client_temp_id: Optional[str] = None
+    recipient_id: Optional[UUID] = None # For HTTP creation, if directly targeting a user to start a chat
+    client_temp_id: Optional[str] = None # Client-generated temporary ID for deduplication and optimistic UI
 
 class MessageInDB(MessageBase):
     id: UUID
@@ -30,6 +37,8 @@ class MessageInDB(MessageBase):
     created_at: datetime
     updated_at: datetime
     reactions: Optional[Dict[SupportedEmoji, List[UUID]]] = Field(default_factory=dict)
+    status: Optional[MessageStatusEnum] = MessageStatusEnum.SENT_TO_SERVER # Default status when fetched/created by server
+    client_temp_id: Optional[str] = None # Store the client's temporary ID
 
     class Config:
         from_attributes = True
@@ -80,3 +89,4 @@ class DefaultChatPartnerResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
