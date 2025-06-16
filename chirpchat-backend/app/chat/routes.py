@@ -65,7 +65,7 @@ async def create_chat(
                 
                 participant_details_list = []
                 for p_id_uuid in participant_ids_in_chat:
-                    user_resp_obj_inner = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).maybe_single().execute() # Changed to maybe_single
+                    user_resp_obj_inner = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen").eq("id", str(p_id_uuid)).maybe_single().execute() # Changed to maybe_single
                     if not user_resp_obj_inner or not user_resp_obj_inner.data:
                          logger.error(f"Participant user details not found for ID: {p_id_uuid} in chat {chat_id_str}")
                          continue # Or raise 500 / skip this chat if inconsistent
@@ -104,7 +104,7 @@ async def create_chat(
 
     final_participant_details = []
     for user_uuid_to_fetch in [current_user.id, recipient_id]:
-        user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(user_uuid_to_fetch)).maybe_single().execute() # Changed to maybe_single
+        user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen").eq("id", str(user_uuid_to_fetch)).maybe_single().execute() # Changed to maybe_single
         if not user_resp_obj_final or not user_resp_obj_final.data:
              logger.error(f"Participant user details for new chat not found for ID: {user_uuid_to_fetch}")
              # This would indicate a serious issue if users just involved in creation aren't found
@@ -149,7 +149,7 @@ async def list_chats(
         participant_details_list = []
         valid_chat = True
         for p_id_uuid in participant_ids_in_chat:
-            user_resp_obj_list = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).maybe_single().execute() # Changed to maybe_single
+            user_resp_obj_list = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen").eq("id", str(p_id_uuid)).maybe_single().execute() # Changed to maybe_single
             if not user_resp_obj_list or not user_resp_obj_list.data:
                 logger.error(f"Participant user details not found for ID: {p_id_uuid} in chat {chat_id_str} during list_chats. Skipping chat.")
                 valid_chat = False
@@ -290,7 +290,7 @@ async def get_default_chat_partner(
     current_user: UserPublic = Depends(get_current_active_user),
 ):
     try:
-        logger.info(f"BEGIN: get_default_chat_partner for user: {current_user.id} ({current_user.display_name})")
+        logger.info(f"BEGIN: get_default_chat_partner for user: ID '{current_user.id}' (Name: '{current_user.display_name}')")
         
         all_users_resp_obj = await db_manager.get_table("users").select("id, display_name, avatar_url").execute()
         
@@ -300,19 +300,26 @@ async def get_default_chat_partner(
 
         all_users_from_db = all_users_resp_obj.data
         logger.info(f"Total users fetched from DB: {len(all_users_from_db)}")
-        for i, u_data in enumerate(all_users_from_db):
-            logger.info(f"  DB User {i}: ID '{u_data['id']}' (type: {type(u_data['id'])}), Name: '{u_data['display_name']}'")
-
-        current_user_id_str_lower = str(current_user.id).lower()
-        logger.info(f"Current User ID (for filtering, as lowercase string): '{current_user_id_str_lower}'")
+        
+        current_user_uuid = current_user.id # This is already a UUID object from UserPublic
+        logger.info(f"Current User UUID (type: {type(current_user_uuid)}): {current_user_uuid}")
 
         other_partners_data = []
         for user_data_from_db in all_users_from_db:
-            db_user_id_str_lower = str(user_data_from_db["id"]).lower()
+            # Ensure 'id' from DB is treated as UUID for comparison
+            try:
+                db_user_uuid = UUID(str(user_data_from_db["id"]))
+            except ValueError:
+                logger.error(f"  Could not parse DB User ID '{user_data_from_db['id']}' as UUID. Skipping this user.")
+                continue
+
+            logger.info(f"  Processing DB User: ID (str) '{str(user_data_from_db['id'])}', Name: '{user_data_from_db['display_name']}'")
+            logger.info(f"    DB User UUID (type: {type(db_user_uuid)}): {db_user_uuid}")
             
-            logger.info(f"  Comparing: DB User '{user_data_from_db['display_name']}' (ID string: '{db_user_id_str_lower}') with Current User ID string: '{current_user_id_str_lower}'")
+            are_different = db_user_uuid != current_user_uuid
+            logger.info(f"    Comparing with Current User UUID ({current_user_uuid}). Are they different? {are_different}")
             
-            if db_user_id_str_lower != current_user_id_str_lower:
+            if are_different:
                 logger.info(f"    -> NOT current user. Adding '{user_data_from_db['display_name']}' to potential partners.")
                 other_partners_data.append(user_data_from_db)
             else:
@@ -324,21 +331,17 @@ async def get_default_chat_partner(
             logger.warning(f"No OTHER users found for {current_user.id} ({current_user.display_name}) to be a default chat partner.")
             return None 
         
-        # For a 2-user system, there should be exactly one other partner.
-        # If more than 2 users, this picks the first one from the list.
-        default_partner_data = other_partners_data[0]
+        default_partner_data = other_partners_data[0] # Pick the first other user
         logger.info(f"Default chat partner selected for {current_user.id} ({current_user.display_name}): ID {default_partner_data['id']} ({default_partner_data['display_name']})")
         
         return DefaultChatPartnerResponse(
-            user_id=UUID(str(default_partner_data["id"])), # Ensure it's a UUID object
+            user_id=UUID(str(default_partner_data["id"])), 
             display_name=default_partner_data["display_name"],
-            avatar_url=default_partner_data.get("avatar_url") # Use .get for safety
+            avatar_url=default_partner_data.get("avatar_url") 
         )
     except Exception as e:
         logger.error(f"Error in get_default_chat_partner for user {current_user.id}: {str(e)}", exc_info=True)
-        return None
+        return None # Return None to indicate failure or no partner found
     finally:
         logger.info(f"END: get_default_chat_partner for user: {current_user.id} ({current_user.display_name})")
-    
-
     
