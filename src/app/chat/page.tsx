@@ -110,11 +110,15 @@ export default function ChatPage() {
 
     setIsChatLoading(true);
     setChatSetupErrorMessage(null);
+    console.log('[ChatPage] performLoadChatData: Starting. CurrentUser ID:', currentUser?.id, 'DisplayName:', currentUser?.display_name);
 
     try {
       const partner = await api.getDefaultChatPartner();
+      console.log('[ChatPage] performLoadChatData: Default partner response:', partner);
+
 
       if (!partner) {
+        console.log('[ChatPage] performLoadChatData: No default partner found. Setting up for solo/waiting state.');
         setOtherUser(null);
         setActiveChat(null);
         setMessages([]);
@@ -131,10 +135,12 @@ export default function ChatPage() {
       }
 
       const otherUserDetails = await api.getUserProfile(partner.user_id);
+      console.log('[ChatPage] performLoadChatData: Fetched otherUser details:', otherUserDetails);
       setOtherUser(otherUserDetails);
       if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
 
       const chatSession = await api.createOrGetChat(partner.user_id);
+      console.log('[ChatPage] performLoadChatData: Created/Got chat session:', chatSession);
       setActiveChat(chatSession);
 
       if (chatSession) {
@@ -154,11 +160,12 @@ export default function ChatPage() {
 
     } catch (error: any) {
       const apiErrorMsg = `Failed to load chat data: ${error.message}`;
+      console.error('[ChatPage] performLoadChatData: Error -', apiErrorMsg, error);
       toast({ variant: 'destructive', title: 'API Error', description: apiErrorMsg, duration: 7000 });
       addAppEvent('apiError', 'Failed to load initial chat data', currentUser?.id, currentUser?.display_name, { error: error.message });
       setChatSetupErrorMessage(apiErrorMsg);
-      setOtherUser(null); // Ensure otherUser is cleared on error
-      setActiveChat(null); // Ensure activeChat is cleared on error
+      setOtherUser(null);
+      setActiveChat(null);
     } finally {
       setIsChatLoading(false);
     }
@@ -189,7 +196,6 @@ export default function ChatPage() {
     if (otherUser && data.user_id === otherUser.id) {
       setOtherUser(prev => prev ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : null);
     }
-    // Removed "else if (!otherUser)" block to prevent interference with performLoadChatData on user switch
      if (currentUser && data.user_id === currentUser.id) {
       fetchAndUpdateUser();
     }
@@ -199,7 +205,6 @@ export default function ChatPage() {
     if (otherUser && data.user_id === otherUser.id) {
         setOtherUser(prev => prev ? { ...prev, ...data } : null);
     }
-    // Removed "else if (!otherUser)" block
     if (currentUser && data.user_id === currentUser.id) {
         fetchAndUpdateUser();
     }
@@ -240,7 +245,6 @@ export default function ChatPage() {
  useEffect(() => {
     if (!isAuthenticated && !isAuthLoading) {
       router.push('/');
-      // Clear all chat-related state when redirecting to login
       setOtherUser(null);
       setActiveChat(null);
       setMessages([]);
@@ -250,17 +254,16 @@ export default function ChatPage() {
     }
 
     if (isAuthenticated && currentUser && token) {
-      // Explicitly reset chat-related state when currentUser changes or becomes available
-      // This is crucial to ensure a clean slate before performLoadChatData runs.
+      console.log('[ChatPage] useEffect[auth]: User changed or authenticated. CurrentUser ID:', currentUser.id);
       setOtherUser(null);
       setActiveChat(null);
       setMessages([]);
       setTypingUsers({});
-      setChatSetupErrorMessage(null); // Clear any previous errors
+      setChatSetupErrorMessage(null);
 
       performLoadChatData();
     } else if (!isAuthLoading && !currentUser) {
-      // This handles the case where the user logs out
+      console.log('[ChatPage] useEffect[auth]: User logged out or no current user.');
       setOtherUser(null);
       setActiveChat(null);
       setMessages([]);
@@ -268,7 +271,7 @@ export default function ChatPage() {
       setChatSetupErrorMessage(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAuthLoading, currentUser, token, router]); // performLoadChatData is stable via useCallback
+  }, [isAuthenticated, isAuthLoading, currentUser, token, router]);
 
   const handleSendMessage = (text: string) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
@@ -460,8 +463,6 @@ export default function ChatPage() {
 
 
   if (isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !otherUser && !activeChat)) {
-    // More specific loading: show if auth is loading OR if auth is done but chat is loading AND no specific setup error has occurred yet,
-    // AND we don't have an otherUser or activeChat (which might be the case for a user who is alone).
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
