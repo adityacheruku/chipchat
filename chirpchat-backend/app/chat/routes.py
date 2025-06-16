@@ -56,7 +56,7 @@ async def create_chat(
             participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_resp_obj.data] 
             
             if len(participant_ids_in_chat) == 2 and recipient_id in participant_ids_in_chat:
-                chat_detail_resp_obj = await db_manager.get_table("chats").select("*").eq("id", chat_id_str).single().execute()
+                chat_detail_resp_obj = await db_manager.get_table("chats").select("*").eq("id", chat_id_str).maybe_single().execute()
                 if not chat_detail_resp_obj or not chat_detail_resp_obj.data: # single() should error if not found or raise PostgrestAPIError for other issues
                     logger.error(f"Chat details not found for presumably existing chat ID: {chat_id_str}")
                     continue # Or raise 500
@@ -65,7 +65,7 @@ async def create_chat(
                 
                 participant_details_list = []
                 for p_id_uuid in participant_ids_in_chat:
-                    user_resp_obj_inner = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).single().execute()
+                    user_resp_obj_inner = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).maybe_single().execute() # Changed to maybe_single
                     if not user_resp_obj_inner or not user_resp_obj_inner.data:
                          logger.error(f"Participant user details not found for ID: {p_id_uuid} in chat {chat_id_str}")
                          continue # Or raise 500 / skip this chat if inconsistent
@@ -104,7 +104,7 @@ async def create_chat(
 
     final_participant_details = []
     for user_uuid_to_fetch in [current_user.id, recipient_id]:
-        user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(user_uuid_to_fetch)).single().execute()
+        user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(user_uuid_to_fetch)).maybe_single().execute() # Changed to maybe_single
         if not user_resp_obj_final or not user_resp_obj_final.data:
              logger.error(f"Participant user details for new chat not found for ID: {user_uuid_to_fetch}")
              # This would indicate a serious issue if users just involved in creation aren't found
@@ -149,7 +149,7 @@ async def list_chats(
         participant_details_list = []
         valid_chat = True
         for p_id_uuid in participant_ids_in_chat:
-            user_resp_obj_list = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).single().execute()
+            user_resp_obj_list = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").eq("id", str(p_id_uuid)).maybe_single().execute() # Changed to maybe_single
             if not user_resp_obj_list or not user_resp_obj_list.data:
                 logger.error(f"Participant user details not found for ID: {p_id_uuid} in chat {chat_id_str} during list_chats. Skipping chat.")
                 valid_chat = False
@@ -296,21 +296,26 @@ async def get_default_chat_partner(
         
         if not all_users_resp_obj or not all_users_resp_obj.data: 
             logger.warning(f"No users found in the database (or DB response error) when fetching default chat partner for {current_user.id}.")
-            return None
+            return None # FastAPI will return 200 with null body or 204 if response_model=None
 
-        logger.info(f"Found {len(all_users_resp_obj.data)} users in total.")
+        logger.info(f"Found {len(all_users_resp_obj.data)} users in total for default partner search for user {current_user.display_name} ({current_user.id}).")
+        for u_idx, u_data_log in enumerate(all_users_resp_obj.data): # Log all users fetched
+            logger.info(f"User {u_idx} from DB query: ID {u_data_log['id']}, Name: {u_data_log['display_name']}")
 
         other_partners_data = [
             user_data for user_data in all_users_resp_obj.data 
-            if UUID(user_data["id"]) != current_user.id
+            if str(user_data["id"]) != str(current_user.id) # Robust UUID comparison
         ]
+        logger.info(f"After filtering current user ({current_user.id} - {current_user.display_name}), found {len(other_partners_data)} other potential partners.")
 
         if not other_partners_data:
-            logger.warning(f"No other users found for {current_user.id} to be a default chat partner.")
-            return None
+            logger.warning(f"No OTHER users found for {current_user.id} ({current_user.display_name}) to be a default chat partner.")
+            return None # FastAPI will return 200 with null body or 204 if response_model=None
         
+        # For a 2-user system, there should be exactly one other partner.
+        # If more than 2 users, this picks the first one from the list.
         default_partner_data = other_partners_data[0]
-        logger.info(f"Default chat partner found for {current_user.id}: {default_partner_data['id']} ({default_partner_data['display_name']})")
+        logger.info(f"Default chat partner selected for {current_user.id} ({current_user.display_name}): ID {default_partner_data['id']} ({default_partner_data['display_name']})")
         
         return DefaultChatPartnerResponse(
             user_id=default_partner_data["id"],
@@ -319,7 +324,11 @@ async def get_default_chat_partner(
         )
     except Exception as e:
         logger.error(f"Error in get_default_chat_partner for user {current_user.id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not determine default chat partner.")
+        # Avoid raising HTTPException here to let FastAPI return 200 with null or 204 as per response_model=Optional[...]
+        # If you want to signal an error explicitly, use HTTPException:
+        # raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not determine default chat partner due to an internal error.")
+        return None # Ensures 200 with null or 204
 
+    
 
     

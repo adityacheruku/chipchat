@@ -80,29 +80,29 @@ class WebSocketConnectionManager:
             cached_time, participant_ids = self.participant_cache[chat_id]
             if (now_utc - cached_time).total_seconds() < CACHE_TTL_SECONDS:
                 self.participant_cache.move_to_end(chat_id) # Mark as recently used for LRU
-                logger.debug(f"Cache hit for participants of chat {chat_id}. Count: {len(participant_ids)}")
+                logger.info(f"Cache hit for participants of chat {chat_id}. Participants: {[str(pid) for pid in participant_ids]}")
                 return participant_ids
             else:
-                logger.debug(f"Cache expired for participants of chat {chat_id}")
+                logger.info(f"Cache expired for participants of chat {chat_id}")
                 del self.participant_cache[chat_id] # Remove expired entry
 
         # Fetch from DB
-        logger.debug(f"Cache miss for participants of chat {chat_id}. Fetching from DB.")
-        try {
+        logger.info(f"Cache miss for participants of chat {chat_id}. Fetching from DB.")
+        try:
             participants_resp = await db_manager_instance.get_table("chat_participants").select("user_id").eq("chat_id", chat_id).execute()
-            if not participants_resp.data:
+            if not participants_resp or not participants_resp.data:
                 logger.warning(f"No participants found in DB for chat_id {chat_id} during cache refresh.")
-                # Cache empty list to prevent re-fetching immediately if chat is truly empty or deleted
-                # self.participant_cache[chat_id] = (now_utc, []) 
+                self.participant_cache[chat_id] = (now_utc, []) # Cache empty list
                 return []
             
             participant_ids = [UUID(row["user_id"]) for row in participants_resp.data]
+            logger.info(f"Fetched {len(participant_ids)} participants from DB for chat {chat_id}: {[str(pid) for pid in participant_ids]}")
             
             # Update cache
             if len(self.participant_cache) >= CACHE_MAX_SIZE:
                 self.participant_cache.popitem(last=False) # Remove oldest item (LRU)
             self.participant_cache[chat_id] = (now_utc, participant_ids)
-            logger.debug(f"Cached {len(participant_ids)} participants for chat {chat_id}.")
+            logger.info(f"Cached {len(participant_ids)} participants for chat {chat_id}.")
             return participant_ids
         except Exception as e:
             logger.error(f"Database error fetching participants for chat {chat_id}: {e}", exc_info=True)
@@ -120,6 +120,7 @@ class WebSocketConnectionManager:
                 "message": message_data.model_dump() if hasattr(message_data, 'model_dump') else message_data,
                 "chat_id": chat_id
             }
+            logger.info(f"Broadcasting new_message to chat {chat_id} for participants: {[str(pid) for pid in participant_ids]}. Message ID: {payload['message'].get('id', 'N/A')}")
             await self.broadcast_to_users(payload, participant_ids)
         except Exception as e:
             logger.error(f"Failed to broadcast chat message for chat {chat_id}: {e}", exc_info=True)
@@ -140,6 +141,7 @@ class WebSocketConnectionManager:
                 "chat_id": chat_id,
                 "reactions": reactions_val,
             }
+            logger.info(f"Broadcasting reaction_update to chat {chat_id} for msg {message_id_val}. Participants: {[str(pid) for pid in participant_ids]}")
             await self.broadcast_to_users(payload, participant_ids)
         except Exception as e:
             logger.error(f"Failed to broadcast reaction update for chat {chat_id}: {e}", exc_info=True)
@@ -160,6 +162,7 @@ class WebSocketConnectionManager:
                 "user_id": str(typing_user_id),
                 "is_typing": is_typing,
             }
+            # logger.info(f"Broadcasting typing_indicator to chat {chat_id} (is_typing: {is_typing}) for user {typing_user_id}. Recipients: {[str(pid) for pid in recipient_ids]}")
             await self.broadcast_to_users(payload, recipient_ids)
         except Exception as e:
             logger.error(f"Failed to broadcast typing indicator for chat {chat_id}: {e}", exc_info=True)
@@ -171,7 +174,7 @@ class WebSocketConnectionManager:
         try:
             # 1. Find all chat_ids this user is part of
             user_chats_resp = await db_manager_instance.get_table("chat_participants").select("chat_id").eq("user_id", str(user_id)).execute()
-            if not user_chats_resp.data:
+            if not user_chats_resp or not user_chats_resp.data:
                 return []
             chat_ids_user_is_in = list(set([str(row["chat_id"]) for row in user_chats_resp.data]))
 
@@ -180,7 +183,7 @@ class WebSocketConnectionManager:
 
             # 2. Find all participants in THOSE chats
             all_participants_in_those_chats_resp = await db_manager_instance.get_table("chat_participants").select("user_id").in_("chat_id", chat_ids_user_is_in).execute()
-            if not all_participants_in_those_chats_resp.data:
+            if not all_participants_in_those_chats_resp or not all_participants_in_those_chats_resp.data:
                 return []
             
             # 3. Collect unique user_ids, excluding the original user_id
@@ -205,6 +208,7 @@ class WebSocketConnectionManager:
                 "user_id": str(user_id),
                 **updated_data # e.g. {"mood": "Happy", "avatar_url": "..."}
             }
+            logger.info(f"Broadcasting user_profile_update for user {user_id} to {len(unique_recipient_ids)} users. Data: {updated_data}")
             await self.broadcast_to_users(payload, unique_recipient_ids)
         except Exception as e:
             logger.error(f"Failed to broadcast user profile update for user {user_id}: {e}", exc_info=True)
@@ -224,10 +228,13 @@ class WebSocketConnectionManager:
                 "last_seen": last_seen.isoformat() if last_seen else None,
                 "mood": mood,
             }
+            logger.info(f"Broadcasting user_presence_update for user {user_id} (online: {is_online}) to {len(unique_recipient_ids)} users.")
             await self.broadcast_to_users(payload, unique_recipient_ids)
         except Exception as e:
             logger.error(f"Failed to broadcast presence update for user {user_id}: {e}", exc_info=True)
 
 manager = WebSocketConnectionManager()
+
+    
 
     
