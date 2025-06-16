@@ -72,7 +72,7 @@ async def create_chat(
                     participant_details_list.append(ChatParticipant(**user_resp_obj_inner.data))
                 
                 last_msg_resp_obj = await db_manager.get_table("messages").select("*").eq("chat_id", chat_id_str).order("created_at", desc=True).limit(1).maybe_single().execute()
-                last_message_data = last_msg_resp_obj.data if last_msg_resp_obj else None
+                last_message_data = last_msg_resp_obj.data if last_msg_resp_obj else None # Check if last_msg_resp_obj is None
                 last_message = MessageInDB(**last_message_data) if last_message_data else None
 
                 return ChatResponse(
@@ -160,7 +160,7 @@ async def list_chats(
             continue
 
         last_msg_resp_obj = await db_manager.get_table("messages").select("*").eq("chat_id", chat_id_str).order("created_at", desc=True).limit(1).maybe_single().execute()
-        last_message_data = last_msg_resp_obj.data if last_msg_resp_obj else None
+        last_message_data = last_msg_resp_obj.data if last_msg_resp_obj else None # Check if last_msg_resp_obj is None
         last_message = MessageInDB(**last_message_data) if last_message_data else None
         
         chat_responses.append(
@@ -290,27 +290,39 @@ async def get_default_chat_partner(
     current_user: UserPublic = Depends(get_current_active_user),
 ):
     try:
-        logger.info(f"Fetching default chat partner for user: {current_user.id} ({current_user.display_name})")
+        logger.info(f"BEGIN: get_default_chat_partner for user: {current_user.id} ({current_user.display_name})")
         
-        all_users_resp_obj = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, is_online, last_seen").execute()
+        all_users_resp_obj = await db_manager.get_table("users").select("id, display_name, avatar_url").execute()
         
         if not all_users_resp_obj or not all_users_resp_obj.data: 
-            logger.warning(f"No users found in the database (or DB response error) when fetching default chat partner for {current_user.id}.")
-            return None # FastAPI will return 200 with null body or 204 if response_model=None
+            logger.warning(f"No users found in DB or DB response error for {current_user.id}.")
+            return None
 
-        logger.info(f"Found {len(all_users_resp_obj.data)} users in total for default partner search for user {current_user.display_name} ({current_user.id}).")
-        for u_idx, u_data_log in enumerate(all_users_resp_obj.data): # Log all users fetched
-            logger.info(f"User {u_idx} from DB query: ID {u_data_log['id']}, Name: {u_data_log['display_name']}")
+        all_users_from_db = all_users_resp_obj.data
+        logger.info(f"Total users fetched from DB: {len(all_users_from_db)}")
+        for i, u_data in enumerate(all_users_from_db):
+            logger.info(f"  DB User {i}: ID '{u_data['id']}' (type: {type(u_data['id'])}), Name: '{u_data['display_name']}'")
 
-        other_partners_data = [
-            user_data for user_data in all_users_resp_obj.data 
-            if str(user_data["id"]) != str(current_user.id) # Robust UUID comparison
-        ]
-        logger.info(f"After filtering current user ({current_user.id} - {current_user.display_name}), found {len(other_partners_data)} other potential partners.")
+        current_user_id_str_lower = str(current_user.id).lower()
+        logger.info(f"Current User ID (for filtering, as lowercase string): '{current_user_id_str_lower}'")
+
+        other_partners_data = []
+        for user_data_from_db in all_users_from_db:
+            db_user_id_str_lower = str(user_data_from_db["id"]).lower()
+            
+            logger.info(f"  Comparing: DB User '{user_data_from_db['display_name']}' (ID string: '{db_user_id_str_lower}') with Current User ID string: '{current_user_id_str_lower}'")
+            
+            if db_user_id_str_lower != current_user_id_str_lower:
+                logger.info(f"    -> NOT current user. Adding '{user_data_from_db['display_name']}' to potential partners.")
+                other_partners_data.append(user_data_from_db)
+            else:
+                logger.info(f"    -> IS current user. Filtering out '{user_data_from_db['display_name']}'.")
+        
+        logger.info(f"Found {len(other_partners_data)} potential other partners after filtering.")
 
         if not other_partners_data:
             logger.warning(f"No OTHER users found for {current_user.id} ({current_user.display_name}) to be a default chat partner.")
-            return None # FastAPI will return 200 with null body or 204 if response_model=None
+            return None 
         
         # For a 2-user system, there should be exactly one other partner.
         # If more than 2 users, this picks the first one from the list.
@@ -318,17 +330,15 @@ async def get_default_chat_partner(
         logger.info(f"Default chat partner selected for {current_user.id} ({current_user.display_name}): ID {default_partner_data['id']} ({default_partner_data['display_name']})")
         
         return DefaultChatPartnerResponse(
-            user_id=default_partner_data["id"],
+            user_id=UUID(str(default_partner_data["id"])), # Ensure it's a UUID object
             display_name=default_partner_data["display_name"],
-            avatar_url=default_partner_data["avatar_url"]
+            avatar_url=default_partner_data.get("avatar_url") # Use .get for safety
         )
     except Exception as e:
         logger.error(f"Error in get_default_chat_partner for user {current_user.id}: {str(e)}", exc_info=True)
-        # Avoid raising HTTPException here to let FastAPI return 200 with null or 204 as per response_model=Optional[...]
-        # If you want to signal an error explicitly, use HTTPException:
-        # raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not determine default chat partner due to an internal error.")
-        return None # Ensures 200 with null or 204
-
+        return None
+    finally:
+        logger.info(f"END: get_default_chat_partner for user: {current_user.id} ({current_user.display_name})")
     
 
     
