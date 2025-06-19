@@ -11,6 +11,7 @@ import UserProfileModal from '@/components/chat/UserProfileModal';
 import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal';
 import MoodEntryModal from '@/components/chat/MoodEntryModal';
 import { Button } from '@/components/ui/button';
+import { ToastAction } from "@/components/ui/toast";
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useAvatar } from '@/hooks/useAvatar';
@@ -22,6 +23,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { Loader2, MessagesSquare } from 'lucide-react';
+
+const STATIC_SUGGESTION_CHIPS = ["Let's do it", "Great!", "Sounds good!"];
 
 export default function ChatPage() {
   const router = useRouter();
@@ -174,25 +177,20 @@ export default function ChatPage() {
 
   const handleWSMessageReceived = useCallback((newMessageFromServer: MessageType) => {
     setMessages(prevMessages => {
-      // Check if this message (by client_temp_id) was already optimistically added
       const optimisticMessageIndex = newMessageFromServer.client_temp_id 
         ? prevMessages.findIndex(m => m.client_temp_id === newMessageFromServer.client_temp_id && m.status === "sending")
         : -1;
 
       let updatedMessages;
       if (optimisticMessageIndex > -1) {
-        // If found, replace the optimistic message with the confirmed one from server
         updatedMessages = [...prevMessages];
-        updatedMessages[optimisticMessageIndex] = newMessageFromServer; // newMessageFromServer includes server ID, status, etc.
+        updatedMessages[optimisticMessageIndex] = newMessageFromServer; 
       } else {
-        // If not found (or no client_temp_id), or if it's a message from another user, just add it
-        // Also prevent adding a message if it somehow already exists by its permanent ID
         if (prevMessages.find(m => m.id === newMessageFromServer.id)) {
             return prevMessages; 
         }
         updatedMessages = [...prevMessages, newMessageFromServer];
       }
-      // Sort messages by creation date to maintain order
       return updatedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
 
@@ -214,7 +212,7 @@ export default function ChatPage() {
       setOtherUser(prev => prev ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : null);
     }
      if (currentUser && data.user_id === currentUser.id) {
-      fetchAndUpdateUser(); // Current user's presence might have changed from another device
+      fetchAndUpdateUser(); 
     }
   }, [otherUser, currentUser, fetchAndUpdateUser]);
 
@@ -223,7 +221,7 @@ export default function ChatPage() {
         setOtherUser(prev => prev ? { ...prev, ...data } : null);
     }
     if (currentUser && data.user_id === currentUser.id) {
-        fetchAndUpdateUser(); // Current user's profile might have been updated from another device/session
+        fetchAndUpdateUser(); 
     }
   }, [currentUser, otherUser, fetchAndUpdateUser]);
 
@@ -237,15 +235,34 @@ export default function ChatPage() {
     }
   }, [activeChat]);
 
+  const handleSendThought = async () => {
+    if (!currentUser || !otherUser || !isWsConnected) return;
+    try {
+      sendWsMessage({
+          event_type: "ping_thinking_of_you",
+          recipient_user_id: otherUser.id,
+      });
+      initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
+      addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: 'Ping Failed', description: error.message });
+    }
+  };
+
   const handleWSThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
     if (otherUser && data.sender_id === otherUser.id) {
       toast({
         title: "❤️ Thinking of You!",
         description: `${otherUser.display_name} is thinking of you.`,
-        duration: THINKING_OF_YOU_DURATION
+        duration: THINKING_OF_YOU_DURATION,
+        action: (
+          <ToastAction altText="Send one back" onClick={handleSendThought}>
+            Send one back?
+          </ToastAction>
+        ),
       });
     }
-  }, [otherUser, toast]);
+  }, [otherUser, toast, handleSendThought]); // Added handleSendThought dependency
 
   const { isConnected: isWsConnected, sendMessage: sendWsMessage } = useWebSocket({
     token,
@@ -260,9 +277,9 @@ export default function ChatPage() {
   });
 
  useEffect(() => {
+    console.log('[ChatPage] Auth State Change: isAuthenticated:', isAuthenticated, 'isAuthLoading:', isAuthLoading, 'currentUser:', currentUser?.id);
     if (!isAuthenticated && !isAuthLoading) {
       router.push('/');
-      // Clear all chat-related state immediately on logout/auth failure
       setOtherUser(null);
       setActiveChat(null);
       setMessages([]);
@@ -273,16 +290,13 @@ export default function ChatPage() {
 
     if (isAuthenticated && currentUser && token) {
       console.log('[ChatPage] useEffect[auth]: User changed or authenticated. CurrentUser ID:', currentUser.id);
-      // Clear previous chat state before loading new data
       setOtherUser(null);
       setActiveChat(null);
       setMessages([]);
       setTypingUsers({});
       setChatSetupErrorMessage(null);
-
       performLoadChatData();
     } else if (!isAuthLoading && !currentUser) {
-      // This case handles when user logs out or if initial auth check finds no user
       console.log('[ChatPage] useEffect[auth]: User logged out or no current user.');
       setOtherUser(null);
       setActiveChat(null);
@@ -291,14 +305,14 @@ export default function ChatPage() {
       setChatSetupErrorMessage(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAuthLoading, currentUser, token, router]); // router is stable, performLoadChatData is useCallback
+  }, [isAuthenticated, isAuthLoading, currentUser, token, router]); 
 
   const handleSendMessage = (text: string) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
 
     const clientTempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const optimisticMessage: MessageType = {
-      id: clientTempId, // Use temp ID as primary ID for optimistic message
+      id: clientTempId, 
       user_id: currentUser.id,
       chat_id: activeChat.id,
       text,
@@ -306,7 +320,7 @@ export default function ChatPage() {
       updated_at: new Date().toISOString(),
       reactions: {},
       client_temp_id: clientTempId,
-      status: "sending" as MessageStatus, // Optimistic status
+      status: "sending" as MessageStatus, 
     };
     setMessages(prev => [...prev, optimisticMessage].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
 
@@ -315,7 +329,7 @@ export default function ChatPage() {
       event_type: "send_message",
       chat_id: activeChat.id,
       text,
-      client_temp_id: clientTempId, // Send temp ID to server
+      client_temp_id: clientTempId, 
     });
     addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0,30)}"`, currentUser.id, currentUser.display_name);
 
@@ -334,10 +348,6 @@ export default function ChatPage() {
         const placeholderText = clipType === 'audio'
             ? `${currentUser.display_name} sent an audio mood clip.`
             : `${currentUser.display_name} sent a video mood clip.`;
-
-        // Optimistically add clip message (optional, more complex for files)
-        // For simplicity, we'll rely on server confirmation for clips.
-
         sendWsMessage({
             event_type: "send_message",
             chat_id: activeChat.id,
@@ -350,6 +360,25 @@ export default function ChatPage() {
         toast({ title: "Mood Clip Sent!" });
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Clip Upload Failed', description: error.message });
+    }
+  };
+
+   const handleSendImage = async (file: File) => {
+    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    toast({ title: "Uploading image..." });
+    const clientTempId = `temp_img_${Date.now()}`;
+    try {
+      const uploadResponse = await api.uploadChatImage(file);
+      sendWsMessage({
+        event_type: "send_message",
+        chat_id: activeChat.id,
+        image_url: uploadResponse.image_url,
+        client_temp_id: clientTempId,
+      });
+      addAppEvent('messageSent', `${currentUser.display_name} sent an image.`, currentUser.id, currentUser.display_name);
+      toast({ title: "Image Sent!" });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Image Upload Failed', description: error.message });
     }
   };
 
@@ -378,37 +407,19 @@ export default function ChatPage() {
     try {
       if (newAvatarFile) {
         toast({title: "Uploading avatar..."});
-        const avatarUploadResponse = await api.uploadAvatar(newAvatarFile); // This already updates DB and returns user
-        setAvatarPreview(avatarUploadResponse.avatar_url); // Update preview based on successful upload from API
-        // No need to call api.updateUserProfile for avatar_url again if uploadAvatar handles it.
+        const avatarUploadResponse = await api.uploadAvatar(newAvatarFile); 
+        setAvatarPreview(avatarUploadResponse.avatar_url); 
       }
-
-      // Only call updateUserProfile if there are other textual changes
       const textUpdates = { ...updatedProfileData };
       if (Object.keys(textUpdates).length > 0) {
          await api.updateUserProfile(textUpdates);
       }
-
-      await fetchAndUpdateUser(); // Refresh currentUser state from backend
+      await fetchAndUpdateUser(); 
       toast({ title: "Profile Updated", description: "Your profile has been saved." });
       addAppEvent('profileUpdate', `${currentUser.display_name} updated profile.`, currentUser.id, currentUser.display_name);
       setIsProfileModalOpen(false);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Profile Save Failed', description: error.message });
-    }
-  };
-
-  const handleSendThought = async () => {
-    if (!currentUser || !otherUser || !isWsConnected) return;
-    try {
-      sendWsMessage({
-          event_type: "ping_thinking_of_you",
-          recipient_user_id: otherUser.id,
-      });
-      initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
-      addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
-    } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Ping Failed', description: error.message });
     }
   };
 
@@ -491,8 +502,15 @@ export default function ChatPage() {
     setIsMoodModalOpen(false);
   }, []);
 
+  const handleSuggestionChipClick = (text: string) => {
+    if (!disabled) {
+      handleSendMessage(text);
+    }
+  };
 
-  if (isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !otherUser && !activeChat)) {
+
+  const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !otherUser && !activeChat);
+  if (isLoadingPage) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -542,6 +560,7 @@ export default function ChatPage() {
 
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
   const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : (currentUser ? {[currentUser.id]: currentUser} : {});
+  const disabled = !otherUser || !activeChat || !isWsConnected;
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
@@ -558,12 +577,28 @@ export default function ChatPage() {
                 isOtherUserTyping={!!otherUserIsTyping}
               />
               {otherUser && activeChat ? (
-                <MessageArea
-                  messages={messages}
-                  currentUser={currentUser}
-                  allUsers={allUsersForMessageArea}
-                  onToggleReaction={handleToggleReaction}
-                />
+                <>
+                  <MessageArea
+                    messages={messages}
+                    currentUser={currentUser}
+                    allUsers={allUsersForMessageArea}
+                    onToggleReaction={handleToggleReaction}
+                  />
+                  <div className="p-2 border-t border-border bg-card flex flex-wrap gap-2 justify-center">
+                    {STATIC_SUGGESTION_CHIPS.map((chipText) => (
+                      <Button
+                        key={chipText}
+                        variant="outline"
+                        size="sm"
+                        className="bg-primary/10 text-primary-foreground hover:bg-primary/20 border-primary/30"
+                        onClick={() => handleSuggestionChipClick(chipText)}
+                        disabled={disabled}
+                      >
+                        {chipText}
+                      </Button>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="flex-grow flex flex-col items-center justify-center p-4 text-center bg-transparent">
                     <MessagesSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
@@ -584,9 +619,10 @@ export default function ChatPage() {
               <InputBar
                 onSendMessage={handleSendMessage}
                 onSendMoodClip={handleSendMoodClip}
+                onSendImage={handleSendImage}
                 isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
-                disabled={!otherUser || !activeChat || !isWsConnected}
+                disabled={disabled}
               />
             </div>
           </ErrorBoundary>
@@ -621,4 +657,3 @@ export default function ChatPage() {
     </div>
   );
 }
-

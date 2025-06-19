@@ -5,7 +5,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { SmilePlus, PlayCircle, Image as ImageIcon } from 'lucide-react';
+import { SmilePlus, PlayCircle } from 'lucide-react'; // Removed Image as ImageIcon from here as it's not used
 import {
   Tooltip,
   TooltipContent,
@@ -29,14 +29,17 @@ interface MessageBubbleProps {
 
 export default function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction }: MessageBubbleProps) {
   const alignmentClass = isCurrentUser ? 'items-end' : 'items-start';
+  // Updated to use primary for current user (sender) and secondary for other user (receiver)
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
 
   let formattedTime = "sending...";
   try {
-    if (message.created_at) {
+    if (message.created_at && message.status !== 'sending') { // Don't format if still sending
         const timestampDate = parseISO(message.created_at);
         formattedTime = format(timestampDate, 'p');
+    } else if (message.status === 'sending') {
+        formattedTime = 'Sending...';
     }
   } catch(e) {
     console.warn("Could not parse message timestamp:", message.created_at)
@@ -150,8 +153,8 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
                 className={cn(
                   "text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-colors",
                   currentUserReacted 
-                    ? (isCurrentUser ? "bg-primary-foreground/30 border-primary-foreground/50 text-primary-foreground" : "bg-accent text-accent-foreground border-accent/80")
-                    : (isCurrentUser ? "bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-primary-foreground/20" : "bg-background/50 border-border hover:bg-muted"),
+                    ? (isCurrentUser ? "bg-background/30 border-primary-foreground/50 text-primary-foreground" : "bg-accent text-accent-foreground border-accent/80") // Adjusted current user reacted on their own message
+                    : (isCurrentUser ? "bg-background/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-background/20" : "bg-background/50 border-border hover:bg-muted"),
                   isAnimated && "animate-pop" 
                 )}
                 aria-label={`React with ${emoji}, current count ${reactors.length}. ${currentUserReacted ? 'You reacted.' : 'Click to react.'}`}
@@ -189,7 +192,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
         />
          <div className="flex flex-col w-full">
           {!isCurrentUser && (
-            <p className="text-xs font-semibold text-secondary-foreground mb-0.5 ml-0.5">{sender.display_name}</p>
+            <p className="text-xs font-semibold text-muted-foreground mb-0.5 ml-0.5">{sender.display_name}</p>
           )}
           {messageContentDiv}
         </div>
@@ -202,7 +205,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
               {formattedTime}
             </p>
           </TooltipTrigger>
-           {message.created_at && (
+           {message.created_at && message.status !== 'sending' && ( // Only show full timestamp if not sending
             <TooltipContent>
                 <p>{format(parseISO(message.created_at), 'PPpp')}</p>
             </TooltipContent>

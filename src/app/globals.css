@@ -9,33 +9,33 @@ body {
 
 @layer base {
   :root {
-    --background: 207 33% 96%; /* Light gray #F0F4F7 */
+    --background: 240 20% 98%; /* Very light grey, off-white */
     --foreground: 210 15% 25%; /* Dark grayish blue for text */
 
-    --card: 0 0% 100%; /* White */
+    --card: 240 15% 95%; /* For input bar background, profile modal, etc. */
     --card-foreground: 210 15% 25%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 210 15% 25%;
 
-    --primary: 205 30% 67%; /* Soft blue #90AFC5 */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary: 260 70% 90%; /* Light Lilac for sent messages, suggestion chips */
+    --primary-foreground: 260 40% 30%; /* Dark purple text for on primary elements */
 
-    --secondary: 207 33% 90%; /* Lighter gray for secondary elements */
-    --secondary-foreground: 210 15% 25%; /* Dark grayish blue for text on secondary */
+    --secondary: 240 10% 92%; /* Slightly darker light grey for received messages */
+    --secondary-foreground: 210 15% 25%; 
 
     --muted: 207 33% 85%; /* Muted gray */
     --muted-foreground: 210 15% 45%; /* Lighter text for muted contexts */
 
-    --accent: 278 17% 64%; /* Pale violet #A991B5 */
-    --accent-foreground: 0 0% 100%; /* White */
+    --accent: 260 40% 50%; /* Medium Dark Purple for send button, active elements */
+    --accent-foreground: 0 0% 100%; /* White text/icons on accent elements */
 
     --destructive: 0 72% 51%; /* Standard red */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 207 25% 88%; /* Border color */
-    --input: 207 25% 80%; /* Input border color */
-    --ring: 205 30% 57%; /* Ring color, derived from primary */
+    --border: 240 10% 88%; /* Border color */
+    --input: 240 10% 85%; /* Input border color */
+    --ring: 260 50% 60%; /* Ring color, derived from new accent */
     
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -56,8 +56,8 @@ body {
   }
 
   .dark {
-    --background: 210 15% 15%; /* Dark background for dark mode */
-    --foreground: 207 33% 90%; /* Light foreground for dark mode */
+    --background: 210 15% 15%; 
+    --foreground: 207 33% 90%; 
 
     --card: 210 15% 20%;
     --card-foreground: 207 33% 90%;
@@ -65,8 +65,8 @@ body {
     --popover: 210 15% 20%;
     --popover-foreground: 207 33% 90%;
 
-    --primary: 205 30% 67%; /* Soft blue */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary: 260 50% 65%; /* Dark mode Light Lilac */
+    --primary-foreground: 0 0% 100%; 
 
     --secondary: 210 15% 25%;
     --secondary-foreground: 207 33% 90%;
@@ -74,7 +74,7 @@ body {
     --muted: 210 15% 30%;
     --muted-foreground: 207 33% 70%;
 
-    --accent: 278 17% 64%; /* Pale violet */
+    --accent: 260 50% 70%; /* Dark mode Medium Dark Purple (lighter for contrast) */
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62.8% 30.6%;
@@ -82,7 +82,7 @@ body {
 
     --border: 210 15% 35%;
     --input: 210 15% 40%;
-    --ring: 205 30% 57%;
+    --ring: 260 50% 70%;
     
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;

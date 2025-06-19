@@ -13,7 +13,7 @@ import type {
 // Assuming UserCreate from backend will now take phone.
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas'; 
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://192.168.29.167:8000';
 
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
