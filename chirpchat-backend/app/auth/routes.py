@@ -129,11 +129,9 @@ async def login(
 
     user_response_obj = None
     try:
-        # This is the call that resulted in a 406 from Supabase in logs
         user_response_obj = await db_manager.get_table("users").select("*").eq("phone", form_data.username).maybe_single().execute()
     
     except APIError as e:
-        # This block will catch explicit APIErrors raised by postgrest-py
         logger.error(
             f"Supabase APIError during login for phone {form_data.username}: "
             f"Status Code: {getattr(e, 'code', 'N/A')}, Message: {getattr(e, 'message', 'N/A')}, "
@@ -141,21 +139,16 @@ async def login(
             exc_info=True
         )
         detail_msg = "Error communicating with the authentication service. Please try again later."
-        # If it's a 406, it might indicate RLS issues or misconfiguration.
-        # For the client, this is still an authentication failure or service problem.
         if hasattr(e, 'code') and e.code == 406: # type: ignore
              logger.warning(f"Received 406 Not Acceptable from Supabase for user {form_data.username}. This may indicate RLS policy issues or other access restrictions.")
-             # For the client, it's safest to treat as an auth failure or a server-side issue.
-             # Let's return a 503 to indicate a backend problem that needs investigation (RLS policies).
              detail_msg = "Login failed: Could not retrieve user details due to server configuration. Please contact support."
         
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, # Use 503 to indicate server-side/DB issue
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
             detail=detail_msg,
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception as e:
-        # Catch any other unexpected errors during the DB call
         logger.error(f"Unexpected error during Supabase call for login (phone {form_data.username}): {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -163,8 +156,6 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # This check handles the case where user_response_obj might be None
-    # if execute() returns None directly (e.g., if 406 doesn't raise APIError and results in None object).
     if user_response_obj is None:
         logger.error(f"Login attempt for phone {form_data.username} resulted in a 'None' database response object. This typically indicates a problem with the database query execution or connection not caught as an APIError.")
         raise HTTPException(
@@ -173,8 +164,6 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Now, user_response_obj is guaranteed to be a response object.
-    # Its .data attribute will be the user dict if found, or None if not found by maybe_single().
     user_dict_from_db = user_response_obj.data 
     
     if user_dict_from_db is None:
@@ -185,7 +174,6 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # At this point, user_dict_from_db is confirmed to be a dictionary.
     if not verify_password(form_data.password, user_dict_from_db["hashed_password"]):
         logger.warning(f"Login attempt failed for phone: {form_data.username} - Incorrect password.")
         raise HTTPException(
@@ -255,14 +243,13 @@ async def update_profile(
     
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    # Password update should be a separate endpoint with current password verification
     if "password" in update_data and update_data["password"]:
-        # This route is not for password changes.
-        # If password change is needed, it should be a dedicated, secure process.
-        # For now, we just remove it if it's part of the payload to avoid accidental updates.
         del update_data["password"] 
 
     logger.info(f"User {current_user.id} updating profile with data: {update_data}")
+    if "mood" in update_data:
+        logger.info(f"User {current_user.id} attempting to update mood to: {update_data['mood']}")
+
     updated_user_response_obj = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).execute()
     
     if not updated_user_response_obj or not hasattr(updated_user_response_obj, 'data') or not updated_user_response_obj.data or not isinstance(updated_user_response_obj.data, list) or len(updated_user_response_obj.data) == 0:
@@ -270,11 +257,10 @@ async def update_profile(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or update failed")
 
     refreshed_user_data = updated_user_response_obj.data[0]
-    logger.info(f"User {current_user.id} profile updated successfully.")
+    logger.info(f"User {current_user.id} profile updated successfully. New mood (if changed): {refreshed_user_data.get('mood')}")
     
-    # Check if mood specifically changed to broadcast presence update
     if "mood" in update_data and "mood" in refreshed_user_data and refreshed_user_data['mood'] != current_user.mood :
-        from app.websocket.manager import manager as ws_manager # Renamed to avoid conflict
+        from app.websocket.manager import manager as ws_manager 
         logger.info(f"Mood changed for user {current_user.id} from {current_user.mood} to {refreshed_user_data['mood']}. Broadcasting update.")
         await ws_manager.broadcast_user_update_for_profile_change(
             user_id=current_user.id,
@@ -299,13 +285,11 @@ async def upload_avatar_route(
     file: UploadFile = File(...),
     current_user: UserPublic = Depends(get_current_active_user)
 ):
-    # Import locally to avoid circular dependency issues if uploads.py imports UserPublic
     from app.routers.uploads import upload_avatar_to_cloudinary 
     
     try:
         file_url = await upload_avatar_to_cloudinary(file)
     except HTTPException as e:
-        # Re-raise HTTPExceptions directly (e.g., validation errors from upload_avatar_to_cloudinary)
         raise e
     except Exception as e:
         logger.error(f"Avatar upload processing failed for user {current_user.id}: {str(e)}", exc_info=True)
@@ -325,12 +309,11 @@ async def upload_avatar_route(
     refreshed_user_data = updated_user_response_obj.data[0]
     logger.info(f"User {current_user.id} avatar updated successfully in DB.")
 
-    # Broadcast this avatar update to relevant users
-    from app.websocket.manager import manager as ws_manager # Renamed to avoid conflict
+    from app.websocket.manager import manager as ws_manager 
     logger.info(f"Broadcasting avatar update for user {current_user.id}")
     await ws_manager.broadcast_user_update_for_profile_change(
         user_id=current_user.id,
-        updated_data={"avatar_url": refreshed_user_data["avatar_url"]}, # Send only the changed field
+        updated_data={"avatar_url": refreshed_user_data["avatar_url"]}, 
         db_manager_instance=db_manager
     )
 
@@ -352,31 +335,29 @@ async def http_ping_thinking_of_you(
 ):
     logger.info(f"User {current_user.id} ({current_user.display_name}) is sending 'Thinking of You' ping to user {recipient_user_id} via HTTP.")
 
-    # Optional: Check if recipient_user_id exists
     recipient_check_resp_obj = await db_manager.get_table("users").select("id").eq("id", str(recipient_user_id)).maybe_single().execute()
     if not recipient_check_resp_obj or not recipient_check_resp_obj.data:
         logger.warning(f"HTTP Ping: Recipient user {recipient_user_id} not found in DB.")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipient user not found.")
 
     if recipient_user_id == current_user.id:
-        logger.info(f"User {current_user.id} attempted to ping themselves. Action not sent via WebSocket.")
+        logger.info(f"User {current_user.id} attempted to ping themselves via HTTP. Action not sent via WebSocket.")
         return {"status": "Ping to self noted, not sent via WebSocket."}
 
     try:
-        # Use the global WebSocket manager instance
         await manager.send_personal_message_by_user_id(
             {
                 "event_type": "thinking_of_you_received",
                 "sender_id": str(current_user.id),
-                "sender_name": current_user.display_name, # Send sender's name
+                "sender_name": current_user.display_name, 
             },
-            recipient_user_id, # Target user ID
+            recipient_user_id, 
         )
-        logger.info(f"'Thinking of You' WebSocket event dispatched from user {current_user.id} to {recipient_user_id}.")
+        logger.info(f"'Thinking of You' WebSocket event dispatched from user {current_user.id} to {recipient_user_id} via HTTP route.")
         return {"status": "Ping sent to WebSocket manager"}
     except Exception as e:
-        logger.error(f"Failed to dispatch 'Thinking of You' WebSocket event for recipient {recipient_user_id} from user {current_user.id}: {e}", exc_info=True)
+        logger.error(f"Failed to dispatch 'Thinking of You' WebSocket event for recipient {recipient_user_id} from user {current_user.id} via HTTP: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send ping via WebSocket manager.")
-
+    
 
     
