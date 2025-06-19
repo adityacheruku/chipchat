@@ -1,51 +1,108 @@
 
-from typing import Dict, List, Optional, Any, Tuple # Added Tuple
+from typing import Dict, List, Optional, Any, Tuple 
 from uuid import UUID
 from fastapi import WebSocket
 import asyncio
 import json
-from datetime import datetime, timezone
-from app.utils.logging import logger # Ensure logger is imported
-from collections import OrderedDict # For LRU cache
-
-# Assuming db_manager can be imported or passed if needed for complex broadcasts
-# For simplicity, this manager won't directly use db_manager in broadcast,
-# the calling function (e.g., in ws_router or chat_router) will fetch participants.
-# from app.database import db_manager # Optional, if manager needs to query DB directly
+from datetime import datetime, timezone, timedelta
+from app.utils.logging import logger 
+from collections import OrderedDict 
 
 CACHE_MAX_SIZE = 100
-CACHE_TTL_SECONDS = 60 # Cache participant lists for 1 minute
+CACHE_TTL_SECONDS = 60 
+GRACEFUL_DISCONNECT_SECONDS = 45 # 45 seconds grace period
 
 class WebSocketConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[UUID, WebSocket] = {} # Maps user_id to WebSocket
-        # Cache: chat_id -> (timestamp_cached, list_of_participant_uuids)
+        self.active_connections: Dict[UUID, WebSocket] = {} 
         self.participant_cache: OrderedDict[str, Tuple[datetime, List[UUID]]] = OrderedDict()
+        self.pending_offline_tasks: Dict[UUID, asyncio.Task] = {}
 
 
-    async def connect(self, websocket: WebSocket, user_id: UUID):
+    async def connect(self, websocket: WebSocket, user_id: UUID, db_manager_instance: Any):
+        # If there's a pending task to mark this user offline, cancel it
+        if user_id in self.pending_offline_tasks:
+            task = self.pending_offline_tasks.pop(user_id)
+            if not task.done(): # Check if task is not already done/cancelled
+                task.cancel()
+                logger.info(f"User {user_id} reconnected. Cancelled pending offline task.")
+            else:
+                logger.info(f"User {user_id} reconnected. Pending offline task was already completed or cancelled.")
+
+
         await websocket.accept()
         self.active_connections[user_id] = websocket
         logger.info(f"User {user_id} connected via WebSocket. Total connections: {len(self.active_connections)}")
-        # Caller (e.g., ws_router) should handle DB update for is_online and broadcast presence.
+        
+        # Mark user as online and broadcast presence (moved from ws_router to here for atomicity with task cancellation)
+        now_utc = datetime.now(timezone.utc)
+        await db_manager_instance.get_table("users").update({
+            "is_online": True, 
+            "last_seen": now_utc.isoformat()
+        }).eq("id", str(user_id)).execute()
+        
+        user_data_for_presence_resp = await db_manager_instance.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
+        current_mood = "Neutral"
+        if user_data_for_presence_resp and user_data_for_presence_resp.data:
+            current_mood = user_data_for_presence_resp.data.get("mood", "Neutral")
+        
+        await self.broadcast_presence_update_to_relevant_users(user_id, True, now_utc, current_mood, db_manager_instance)
 
-    async def disconnect(self, user_id: UUID):
+
+    async def schedule_graceful_disconnect(self, user_id: UUID, db_manager_instance: Any):
+        if user_id in self.pending_offline_tasks and not self.pending_offline_tasks[user_id].done():
+            logger.info(f"User {user_id} already has a pending disconnect task. Not scheduling another.")
+            return
+
+        logger.info(f"User {user_id} disconnected from WebSocket. Scheduling offline cleanup in {GRACEFUL_DISCONNECT_SECONDS}s.")
+        
+        # Remove from active connections immediately, so new connections aren't blocked
         if user_id in self.active_connections:
-            # websocket_to_close = self.active_connections.pop(user_id, None) # Remove and get
-            # if websocket_to_close:
-            #     try:
-            #         # Ensure the socket is still open before trying to close
-            #         # if websocket_to_close.client_state != WebSocketState.DISCONNECTED:
-            #         # await websocket_to_close.close() # Client might have already closed or error occurs here
-            #         pass # Let FastAPI handle actual closing from endpoint
-            #     except Exception as e:
-            #         logger.warning(f"Exception while trying to explicitly close WebSocket for user {user_id} during disconnect: {e}")
-            #         pass # Ignore errors on close, connection might already be severed
-            self.active_connections.pop(user_id, None) # Just remove from tracking
-            logger.info(f"User {user_id} disconnected from WebSocket. Total connections: {len(self.active_connections)}")
-        else:
-            logger.info(f"User {user_id} requested disconnect, but was not found in active WebSocket connections.")
-        # Caller (e.g., ws_router) should handle DB update for is_online and broadcast presence.
+            self.active_connections.pop(user_id, None)
+            logger.info(f"User {user_id} removed from active_connections list. Current active: {len(self.active_connections)}")
+
+
+        task = asyncio.create_task(self._perform_offline_cleanup(user_id, db_manager_instance))
+        self.pending_offline_tasks[user_id] = task
+
+
+    async def _perform_offline_cleanup(self, user_id: UUID, db_manager_instance: Any):
+        try:
+            await asyncio.sleep(GRACEFUL_DISCONNECT_SECONDS)
+            
+            # Check if task was cancelled (e.g., by reconnection)
+            if user_id not in self.pending_offline_tasks or self.pending_offline_tasks[user_id].cancelled():
+                logger.info(f"Offline cleanup for user {user_id} was cancelled (likely reconnected).")
+                if user_id in self.pending_offline_tasks: # Clean up if cancelled but still in dict
+                    del self.pending_offline_tasks[user_id]
+                return
+
+            logger.info(f"Grace period ended for user {user_id}. Performing offline cleanup.")
+            
+            offline_now = datetime.now(timezone.utc)
+            await db_manager_instance.get_table("users").update({
+                "is_online": False, 
+                "last_seen": offline_now.isoformat()
+            }).eq("id", str(user_id)).execute()
+            logger.info(f"User {user_id}: DB updated to is_online=False, last_seen={offline_now.isoformat()}.")
+
+            user_data_for_offline_presence_resp = await db_manager_instance.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
+            offline_mood = "Neutral"
+            if user_data_for_offline_presence_resp and user_data_for_offline_presence_resp.data:
+                offline_mood = user_data_for_offline_presence_resp.data.get("mood", "Neutral")
+            
+            await self.broadcast_presence_update_to_relevant_users(user_id, False, offline_now, offline_mood, db_manager_instance)
+            logger.info(f"User {user_id}: Broadcasted offline presence.")
+
+        except asyncio.CancelledError:
+            logger.info(f"Offline cleanup task for user {user_id} explicitly cancelled.")
+        except Exception as e:
+            logger.error(f"Error during offline cleanup for user {user_id}: {e}", exc_info=True)
+        finally:
+            if user_id in self.pending_offline_tasks:
+                del self.pending_offline_tasks[user_id]
+                logger.info(f"Removed pending offline task for user {user_id}.")
+
 
     async def send_personal_message_by_user_id(self, message_payload: dict, user_id: UUID):
         websocket = self.active_connections.get(user_id)
@@ -60,7 +117,7 @@ class WebSocketConnectionManager:
         active_user_ids_to_send = [uid for uid in user_ids if uid in self.active_connections]
         
         tasks = []
-        for user_id_to_send in active_user_ids_to_send: # Renamed user_id to user_id_to_send to avoid conflict
+        for user_id_to_send in active_user_ids_to_send: 
             websocket = self.active_connections[user_id_to_send]
             tasks.append(websocket.send_json(message_payload))
         
@@ -69,44 +126,39 @@ class WebSocketConnectionManager:
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     failed_user_id = active_user_ids_to_send[i]
-                    logger.error(f"Error broadcasting to user {failed_user_id}: {result}", exc_info=False) # exc_info=False to reduce log spam for common send errors
-                    # Optionally, handle disconnect for users where send failed, or mark them as suspect
-                    # e.g., self.handle_failed_send(failed_user_id, result)
+                    logger.error(f"Error broadcasting to user {failed_user_id}: {result}", exc_info=False) 
 
     async def _get_chat_participants(self, chat_id: str, db_manager_instance: Any) -> List[UUID]:
         now_utc = datetime.now(timezone.utc)
-        # Check cache
         if chat_id in self.participant_cache:
             cached_time, participant_ids = self.participant_cache[chat_id]
             if (now_utc - cached_time).total_seconds() < CACHE_TTL_SECONDS:
-                self.participant_cache.move_to_end(chat_id) # Mark as recently used for LRU
-                logger.info(f"Cache hit for participants of chat {chat_id}. Participants: {[str(pid) for pid in participant_ids]}")
+                self.participant_cache.move_to_end(chat_id) 
+                logger.debug(f"Cache hit for participants of chat {chat_id}.")
                 return participant_ids
             else:
-                logger.info(f"Cache expired for participants of chat {chat_id}")
-                del self.participant_cache[chat_id] # Remove expired entry
+                logger.debug(f"Cache expired for participants of chat {chat_id}")
+                del self.participant_cache[chat_id] 
 
-        # Fetch from DB
-        logger.info(f"Cache miss for participants of chat {chat_id}. Fetching from DB.")
+        logger.debug(f"Cache miss for participants of chat {chat_id}. Fetching from DB.")
         try:
             participants_resp = await db_manager_instance.get_table("chat_participants").select("user_id").eq("chat_id", chat_id).execute()
             if not participants_resp or not participants_resp.data:
                 logger.warning(f"No participants found in DB for chat_id {chat_id} during cache refresh.")
-                self.participant_cache[chat_id] = (now_utc, []) # Cache empty list
+                self.participant_cache[chat_id] = (now_utc, []) 
                 return []
             
             participant_ids = [UUID(row["user_id"]) for row in participants_resp.data]
-            logger.info(f"Fetched {len(participant_ids)} participants from DB for chat {chat_id}: {[str(pid) for pid in participant_ids]}")
+            logger.debug(f"Fetched {len(participant_ids)} participants from DB for chat {chat_id}")
             
-            # Update cache
             if len(self.participant_cache) >= CACHE_MAX_SIZE:
-                self.participant_cache.popitem(last=False) # Remove oldest item (LRU)
+                self.participant_cache.popitem(last=False) 
             self.participant_cache[chat_id] = (now_utc, participant_ids)
-            logger.info(f"Cached {len(participant_ids)} participants for chat {chat_id}.")
+            logger.debug(f"Cached {len(participant_ids)} participants for chat {chat_id}.")
             return participant_ids
         except Exception as e:
             logger.error(f"Database error fetching participants for chat {chat_id}: {e}", exc_info=True)
-            return [] # Return empty list on DB error to prevent crashes, error is logged
+            return [] 
 
     async def broadcast_chat_message(self, chat_id: str, message_data: Any, db_manager_instance: Any):
         try:
@@ -162,17 +214,12 @@ class WebSocketConnectionManager:
                 "user_id": str(typing_user_id),
                 "is_typing": is_typing,
             }
-            # logger.info(f"Broadcasting typing_indicator to chat {chat_id} (is_typing: {is_typing}) for user {typing_user_id}. Recipients: {[str(pid) for pid in recipient_ids]}")
             await self.broadcast_to_users(payload, recipient_ids)
         except Exception as e:
             logger.error(f"Failed to broadcast typing indicator for chat {chat_id}: {e}", exc_info=True)
 
     async def _get_all_chat_partners_for_user(self, user_id: UUID, db_manager_instance: Any) -> List[UUID]:
-        # This helper method consolidates logic to find all users this user has chats with.
-        # For performance, this could also be cached if user_id -> list_of_chat_ids is very stable
-        # or if user_id -> list_of_all_partners is needed frequently.
         try:
-            # 1. Find all chat_ids this user is part of
             user_chats_resp = await db_manager_instance.get_table("chat_participants").select("chat_id").eq("user_id", str(user_id)).execute()
             if not user_chats_resp or not user_chats_resp.data:
                 return []
@@ -181,12 +228,10 @@ class WebSocketConnectionManager:
             if not chat_ids_user_is_in:
                 return []
 
-            # 2. Find all participants in THOSE chats
             all_participants_in_those_chats_resp = await db_manager_instance.get_table("chat_participants").select("user_id").in_("chat_id", chat_ids_user_is_in).execute()
             if not all_participants_in_those_chats_resp or not all_participants_in_those_chats_resp.data:
                 return []
             
-            # 3. Collect unique user_ids, excluding the original user_id
             unique_partner_ids = list(set(
                 [UUID(row["user_id"]) for row in all_participants_in_those_chats_resp.data if UUID(row["user_id"]) != user_id]
             ))
@@ -197,7 +242,6 @@ class WebSocketConnectionManager:
 
     async def broadcast_user_update_for_profile_change(self, user_id: UUID, updated_data: dict, db_manager_instance: Any):
         try:
-            # Notify all users who share a chat with the updated user
             unique_recipient_ids = await self._get_all_chat_partners_for_user(user_id, db_manager_instance)
             if not unique_recipient_ids:
                 logger.info(f"No one to notify about profile update for user {user_id}")
@@ -206,7 +250,7 @@ class WebSocketConnectionManager:
             payload = {
                 "event_type": "user_profile_update",
                 "user_id": str(user_id),
-                **updated_data # e.g. {"mood": "Happy", "avatar_url": "..."}
+                **updated_data 
             }
             logger.info(f"Broadcasting user_profile_update for user {user_id} to {len(unique_recipient_ids)} users. Data: {updated_data}")
             await self.broadcast_to_users(payload, unique_recipient_ids)
@@ -215,7 +259,6 @@ class WebSocketConnectionManager:
 
     async def broadcast_presence_update_to_relevant_users(self, user_id: UUID, is_online: bool, last_seen: Optional[datetime], mood: str, db_manager_instance: Any):
         try:
-            # Notify all users who share a chat with the user whose presence changed
             unique_recipient_ids = await self._get_all_chat_partners_for_user(user_id, db_manager_instance)
             if not unique_recipient_ids:
                 logger.info(f"No one to notify about presence update for user {user_id}")
@@ -234,7 +277,3 @@ class WebSocketConnectionManager:
             logger.error(f"Failed to broadcast presence update for user {user_id}: {e}", exc_info=True)
 
 manager = WebSocketConnectionManager()
-
-    
-
-    

@@ -122,6 +122,10 @@ export type UserProfileUpdateEventData = {
   // Add other updatable fields if necessary
 };
 
+export interface HeartbeatClientEvent {
+  event_type: "HEARTBEAT";
+}
+
 
 export type WebSocketEventData =
   | NewMessageEventData
@@ -131,7 +135,8 @@ export type WebSocketEventData =
   | ThinkingOfYouReceivedEventData
   | UserProfileUpdateEventData
   | { event_type: "error", detail: string }
-  | { event_type: "authenticated" };
+  | { event_type: "authenticated" }
+  | HeartbeatClientEvent; // Client sends this, server acknowledges or just uses it for activity
 
 
 export interface DefaultChatPartnerResponse {

@@ -22,7 +22,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { Loader2, MessagesSquare } from 'lucide-react';
+import { Loader2, MessagesSquare, WifiOff } from 'lucide-react';
 
 const STATIC_SUGGESTION_CHIPS = ["Let's do it", "Great!", "Sounds good!"];
 
@@ -262,9 +262,9 @@ export default function ChatPage() {
         ),
       });
     }
-  }, [otherUser, toast, handleSendThought]); // Added handleSendThought dependency
+  }, [otherUser, toast, handleSendThought]); 
 
-  const { isConnected: isWsConnected, sendMessage: sendWsMessage } = useWebSocket({
+  const { isConnected: isWsConnected, sendMessage: sendWsMessage, isBrowserOnline } = useWebSocket({
     token,
     onMessageReceived: handleWSMessageReceived,
     onReactionUpdate: handleWSReactionUpdate,
@@ -564,7 +564,13 @@ export default function ChatPage() {
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
-        <div className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
+        {!isBrowserOnline && (
+            <div className="fixed top-0 left-0 right-0 bg-destructive text-destructive-foreground p-2 text-center text-sm z-50 flex items-center justify-center">
+                <WifiOff size={16} className="mr-2" />
+                You are offline. Connecting...
+            </div>
+        )}
+        <div className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass, !isBrowserOnline ? 'pt-10' : '')}>
           <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try resetting or refreshing the page.">
             <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden">
               <ChatHeader
@@ -622,7 +628,7 @@ export default function ChatPage() {
                 onSendImage={handleSendImage}
                 isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
-                disabled={disabled}
+                disabled={disabled || !isBrowserOnline || !isWsConnected}
               />
             </div>
           </ErrorBoundary>
@@ -657,3 +663,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
