@@ -24,7 +24,8 @@ import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { Loader2, MessagesSquare, WifiOff } from 'lucide-react';
 
-const STATIC_SUGGESTION_CHIPS = ["Let's do it", "Great!", "Sounds good!"];
+// Static suggestion chips are removed as per user request.
+// const STATIC_SUGGESTION_CHIPS = ["Let's do it", "Great!", "Sounds good!"];
 
 export default function ChatPage() {
   const router = useRouter();
@@ -502,12 +503,7 @@ export default function ChatPage() {
     setIsMoodModalOpen(false);
   }, []);
 
-  const handleSuggestionChipClick = (text: string) => {
-    if (!disabled) {
-      handleSendMessage(text);
-    }
-  };
-
+  // Removed handleSuggestionChipClick as chips are removed.
 
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !otherUser && !activeChat);
   if (isLoadingPage) {
@@ -583,28 +579,13 @@ export default function ChatPage() {
                 isOtherUserTyping={!!otherUserIsTyping}
               />
               {otherUser && activeChat ? (
-                <>
-                  <MessageArea
-                    messages={messages}
-                    currentUser={currentUser}
-                    allUsers={allUsersForMessageArea}
-                    onToggleReaction={handleToggleReaction}
-                  />
-                  <div className="p-2 border-t border-border bg-card flex flex-wrap gap-2 justify-center">
-                    {STATIC_SUGGESTION_CHIPS.map((chipText) => (
-                      <Button
-                        key={chipText}
-                        variant="outline"
-                        size="sm"
-                        className="bg-primary/10 text-primary-foreground hover:bg-primary/20 border-primary/30"
-                        onClick={() => handleSuggestionChipClick(chipText)}
-                        disabled={disabled}
-                      >
-                        {chipText}
-                      </Button>
-                    ))}
-                  </div>
-                </>
+                <MessageArea
+                  messages={messages}
+                  currentUser={currentUser}
+                  allUsers={allUsersForMessageArea}
+                  onToggleReaction={handleToggleReaction}
+                />
+                // Suggestion chips section removed from here
               ) : (
                 <div className="flex-grow flex flex-col items-center justify-center p-4 text-center bg-transparent">
                     <MessagesSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
