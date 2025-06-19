@@ -1,3 +1,4 @@
+
 import type {NextConfig} from 'next';
 import path from 'path';
 
@@ -29,6 +30,12 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      { // Adding Cloudinary for user avatars and other media
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+        port: '',
+        pathname: `/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/**`,
+      }
     ],
   },
 };

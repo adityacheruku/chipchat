@@ -1,9 +1,9 @@
 
 {
-  "name": "ChirpChat – Emotionally Rich Chat",
+  "name": "ChirpChat",
   "short_name": "ChirpChat",
-  "description": "An emotionally intelligent chat application with PWA shortcuts.",
-  "start_url": "/?source=pwa",
+  "description": "A friendly chat application with PWA shortcuts.",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#F0F4F7",
   "theme_color": "#90AFC5",
@@ -23,25 +23,25 @@
   ],
   "shortcuts": [
     {
-      "name": "Thinking of You ❤️",
-      "short_name": "Think of You",
-      "description": "Quick‑ping your chat partner",
-      "url": "/quick/think?source=pwa_shortcut",
-      "icons": [{ "src": "/icons/think.png", "sizes": "192x192", "type": "image/png" }]
+      "name": "Thinking of You",
+      "short_name": "Think",
+      "description": "Send a 'Thinking of You' ping to your chat partner.",
+      "url": "/quick/think",
+      "icons": [{ "src": "/icons/shortcut-think-96.png", "sizes": "96x96" }]
     },
     {
-      "name": "Send Mood Image 📷",
-      "short_name": "Send Image",
-      "description": "Pick & send a photo to your friend",
-      "url": "/quick/image?source=pwa_shortcut",
-      "icons": [{ "src": "/icons/image.png", "sizes": "192x192", "type": "image/png" }]
+      "name": "Set My Mood",
+      "short_name": "Mood",
+      "description": "Quickly update your current mood.",
+      "url": "/quick/mood",
+      "icons": [{ "src": "/icons/shortcut-mood-96.png", "sizes": "96x96" }]
     },
     {
-      "name": "Set My Mood 😊",
-      "short_name": "Set Mood",
-      "description": "Update your current mood",
-      "url": "/quick/mood?source=pwa_shortcut",
-      "icons": [{ "src": "/icons/mood.png", "sizes": "192x192", "type": "image/png" }]
+      "name": "Send Image",
+      "short_name": "Image",
+      "description": "Quickly send an image to your chat partner.",
+      "url": "/quick/image",
+      "icons": [{ "src": "/icons/shortcut-image-96.png", "sizes": "96x96" }]
     }
   ]
 }

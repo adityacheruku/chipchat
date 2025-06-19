@@ -24,9 +24,6 @@ import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { Loader2, MessagesSquare, WifiOff } from 'lucide-react';
 
-// Static suggestion chips are removed as per user request.
-// const STATIC_SUGGESTION_CHIPS = ["Let's do it", "Great!", "Sounds good!"];
-
 export default function ChatPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -503,8 +500,6 @@ export default function ChatPage() {
     setIsMoodModalOpen(false);
   }, []);
 
-  // Removed handleSuggestionChipClick as chips are removed.
-
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !otherUser && !activeChat);
   if (isLoadingPage) {
     return (
@@ -585,7 +580,6 @@ export default function ChatPage() {
                   allUsers={allUsersForMessageArea}
                   onToggleReaction={handleToggleReaction}
                 />
-                // Suggestion chips section removed from here
               ) : (
                 <div className="flex-grow flex flex-col items-center justify-center p-4 text-center bg-transparent">
                     <MessagesSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
@@ -644,4 +638,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
