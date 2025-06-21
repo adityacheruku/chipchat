@@ -11,6 +11,7 @@ import type {
   VoiceMessageUploadResponse,
   StickerPackResponse,
   StickerListResponse,
+  PushSubscriptionJSON,
 } from '@/types';
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
@@ -307,5 +308,38 @@ export const api = {
       // No body needed for this request
     });
     return handleResponse<{ status: string }>(response);
+  },
+
+  // PUSH NOTIFICATIONS
+  sendPushSubscriptionToServer: async (subscription: PushSubscriptionJSON): Promise<any> => {
+    const token = getAuthToken();
+    console.log("Sending push subscription to server:", subscription);
+    // This is a placeholder. In a real app, you would have an endpoint like:
+    // const response = await fetch(`${API_BASE_URL}/notifications/subscribe`, {
+    //   method: 'POST',
+    //   headers: {
+    //     'Content-Type': 'application/json',
+    //     Authorization: `Bearer ${token}`,
+    //   },
+    //   body: JSON.stringify(subscription),
+    // });
+    // return handleResponse(response);
+    return Promise.resolve({ success: true }); // Mock response
+  },
+
+  removePushSubscriptionFromServer: async (endpoint: string): Promise<any> => {
+    const token = getAuthToken();
+    console.log("Removing push subscription from server:", endpoint);
+    // This is a placeholder. In a real app, you would have an endpoint like:
+    // const response = await fetch(`${API_BASE_URL}/notifications/unsubscribe`, {
+    //   method: 'POST',
+    //   headers: {
+    //     'Content-Type': 'application/json',
+    //     Authorization: `Bearer ${token}`,
+    //   },
+    //   body: JSON.stringify({ endpoint }),
+    // });
+    // return handleResponse(response);
+    return Promise.resolve({ success: true }); // Mock response
   },
 };

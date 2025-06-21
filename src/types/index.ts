@@ -209,3 +209,13 @@ export interface UserStickerPack {
     pack_id: string; // UUID
     unlocked_at: string; // ISO Date string
 }
+
+// Push Notifications
+export interface PushSubscriptionJSON {
+  endpoint: string;
+  expirationTime?: number | null;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}

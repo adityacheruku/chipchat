@@ -9,8 +9,7 @@ const withPWA = withPWAImport({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
-  // You can add more PWA options here if needed
-  // E.g., runtimeCaching: require('next-pwa/cache'),
+  importScripts: ['/push-worker.js'], // Import our custom push notification handler
 });
 
 

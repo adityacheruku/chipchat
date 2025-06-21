@@ -17,7 +17,9 @@ import Image from 'next/image';
 import type { FormEvent, ChangeEvent } from 'react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { Loader2, Bell, BellOff } from 'lucide-react';
+import { Separator } from '../ui/separator';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -42,22 +44,29 @@ export default function UserProfileModal({
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
-
+  
+  const {
+    isSubscribed,
+    permissionStatus,
+    subscribeToPush,
+    unsubscribeFromPush,
+    isPushApiSupported,
+    isSubscribing
+  } = usePushNotifications();
 
   useEffect(() => {
     if (user) {
       setDisplayName(user.display_name);
       setMood(user.mood);
       setPhone(user.phone || '');
-      // Avatar preview is managed by parent via props
-      setSelectedAvatarFile(null); // Reset selected file when modal opens or user changes
+      setSelectedAvatarFile(null);
     }
-  }, [user, isOpen]); // Reset form when modal opens or user data changes
+  }, [user, isOpen]);
 
   if (!user) return null;
 
   const internalHandleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
-    onAvatarFileChange(e, user.avatar_url); // Let parent hook handle preview
+    onAvatarFileChange(e, user.avatar_url);
     const file = e.target.files?.[0];
     if (file) {
       setSelectedAvatarFile(file);
@@ -74,15 +83,36 @@ export default function UserProfileModal({
       if (phone !== (user.phone || '')) profileUpdates.phone = phone;
 
       await onSave(profileUpdates, selectedAvatarFile || undefined);
-      // Toast for success is handled in parent `onSave`
-      onClose(); // Close modal on successful save
+      onClose();
     } catch (error: any) {
-      // Toast for error is handled in parent `onSave`
       console.error("Error saving profile from modal:", error.message);
     } finally {
       setIsSaving(false);
     }
   };
+
+  const renderNotificationButton = () => {
+    if (!isPushApiSupported) {
+      return <p className="col-span-3 text-sm text-muted-foreground">Push notifications are not supported on this browser.</p>;
+    }
+    if (permissionStatus === 'denied') {
+      return <p className="col-span-3 text-sm text-destructive">You have blocked notifications. Please enable them in your browser settings.</p>;
+    }
+    if (isSubscribed) {
+      return (
+        <Button variant="outline" onClick={unsubscribeFromPush} className="col-span-3" disabled={isSubscribing}>
+          {isSubscribing ? <Loader2 className="animate-spin" /> : <BellOff className="mr-2 h-4 w-4" />}
+          Disable Notifications
+        </Button>
+      );
+    }
+    return (
+      <Button variant="outline" onClick={subscribeToPush} className="col-span-3" disabled={isSubscribing}>
+        {isSubscribing ? <Loader2 className="animate-spin" /> : <Bell className="mr-2 h-4 w-4" />}
+        Enable Notifications
+      </Button>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -161,6 +191,16 @@ export default function UserProfileModal({
                 </SelectContent>
               </Select>
             </div>
+            
+            <Separator />
+
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right text-foreground">
+                Notifications
+              </Label>
+              {renderNotificationButton()}
+            </div>
+
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} className="hover:bg-muted active:bg-muted/80" disabled={isSaving}>

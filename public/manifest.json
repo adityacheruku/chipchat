@@ -1,18 +1,28 @@
-
 {
+  "theme_color": "#90AFC5",
+  "background_color": "#F0F4F7",
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/chat",
   "name": "ChirpChat",
   "short_name": "ChirpChat",
-  "description": "A friendly chat application with PWA shortcuts.",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#F0F4F7",
-  "theme_color": "#90AFC5",
+  "description": "An emotionally intelligent chat application.",
+  "gcm_sender_id": "103953800507",
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png"
     },
     {
       "src": "/icons/icon-512.png",
@@ -23,25 +33,25 @@
   ],
   "shortcuts": [
     {
+      "name": "Set My Mood",
+      "short_name": "Set Mood",
+      "description": "Quickly update your current mood",
+      "url": "/quick/mood",
+      "icons": [{ "src": "/icons/shortcut-mood.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Send Mood Image",
+      "short_name": "Send Image",
+      "description": "Send an image to your partner",
+      "url": "/quick/image",
+      "icons": [{ "src": "/icons/shortcut-image.png", "sizes": "96x96" }]
+    },
+    {
       "name": "Thinking of You",
       "short_name": "Think",
-      "description": "Send a 'Thinking of You' ping to your chat partner.",
+      "description": "Let your partner know you're thinking of them",
       "url": "/quick/think",
-      "icons": [{ "src": "/icons/shortcut-think-96.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "Set My Mood",
-      "short_name": "Mood",
-      "description": "Quickly update your current mood.",
-      "url": "/quick/mood",
-      "icons": [{ "src": "/icons/shortcut-mood-96.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "Send Image",
-      "short_name": "Image",
-      "description": "Quickly send an image to your chat partner.",
-      "url": "/quick/image",
-      "icons": [{ "src": "/icons/shortcut-image-96.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/icons/shortcut-think.png", "sizes": "96x96" }]
     }
   ]
 }
