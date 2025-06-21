@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { WebSocketEventData, Message, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, User, Mood, HeartbeatClientEvent } from '@/types';
+import type { WebSocketEventData, Message, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, User, Mood, HeartbeatClientEvent, UserProfileUpdateEventData } from '@/types';
 import { useToast } from './use-toast';
 
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL ;
@@ -21,7 +21,7 @@ interface UseWebSocketOptions {
   onPresenceUpdate: (data: UserPresenceUpdateEventData) => void;
   onTypingUpdate: (data: TypingIndicatorEventData) => void;
   onThinkingOfYouReceived: (data: ThinkingOfYouReceivedEventData) => void;
-  onUserProfileUpdate: (data: {user_id: string, mood?: Mood, display_name?: string, avatar_url?: string}) => void;
+  onUserProfileUpdate: (data: UserProfileUpdateEventData) => void;
 }
 
 export function useWebSocket({
@@ -123,7 +123,7 @@ export function useWebSocket({
           case 'user_presence_update': onPresenceUpdate(data as UserPresenceUpdateEventData); break;
           case 'typing_indicator': onTypingUpdate(data as TypingIndicatorEventData); break;
           case 'thinking_of_you_received': onThinkingOfYouReceived(data as ThinkingOfYouReceivedEventData); break;
-          case 'user_profile_update': onUserProfileUpdate(data as {user_id: string, mood?: Mood, display_name?: string, avatar_url?: string}); break;
+          case 'user_profile_update': onUserProfileUpdate(data as UserProfileUpdateEventData); break;
           case 'error': toast({ variant: 'destructive', title: 'WebSocket Server Error', description: data.detail }); break;
           // HEARTBEAT from server is not explicitly handled, any message resets timeout
         }
