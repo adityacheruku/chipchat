@@ -10,12 +10,14 @@ import InputBar from '@/components/chat/InputBar';
 import UserProfileModal from '@/components/chat/UserProfileModal';
 import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal';
 import MoodEntryModal from '@/components/chat/MoodEntryModal';
+import NotificationPrompt from '@/components/chat/NotificationPrompt';
 import { Button } from '@/components/ui/button';
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useAvatar } from '@/hooks/useAvatar';
 import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { THINKING_OF_YOU_DURATION, MAX_AVATAR_SIZE_KB, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -26,11 +28,13 @@ import { Loader2, MessagesSquare, WifiOff } from 'lucide-react';
 import ReactionSummaryModal from '@/components/chat/ReactionSummaryModal';
 
 const MemoizedMessageArea = memo(MessageArea);
+const FIRST_MESSAGE_SENT_KEY = 'chirpChat_firstMessageSent';
 
 export default function ChatPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { currentUser, token, logout, fetchAndUpdateUser, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { isSubscribed, permissionStatus, subscribeToPush, isPushApiSupported } = usePushNotifications();
 
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [otherUser, setOtherUser] = useState<User | null>(null);
@@ -40,7 +44,6 @@ export default function ChatPage() {
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
   const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
   const [chatSetupErrorMessage, setChatSetupErrorMessage] = useState<string | null>(null);
-
 
   const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
   const [fullScreenUserData, setFullScreenUserData] = useState<User | null>(null);
@@ -52,6 +55,7 @@ export default function ChatPage() {
   const [reactionModalData, setReactionModalData] = useState<{ reactions: MessageType['reactions'], allUsers: Record<string, User> } | null>(null);
   const lastReactionToggleTimes = useRef<Record<string, number>>({});
   const lastMessageTextRef = useRef<string>("");
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
 
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string, metadata?: Record<string, any>) => {
     setAppEvents(prevEvents => {
@@ -359,6 +363,15 @@ export default function ChatPage() {
       lastMessageTextRef.current = text;
       aiSuggestMood(text);
     }
+
+    // Progressive disclosure for notifications
+    if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
+        const hasSentFirstMessage = localStorage.getItem(FIRST_MESSAGE_SENT_KEY) === 'true';
+        if (!hasSentFirstMessage) {
+            localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true');
+            setTimeout(() => setShowNotificationPrompt(true), 2000); // Show prompt after a short delay
+        }
+    }
   };
 
   const handleSendSticker = (stickerId: string) => {
@@ -621,6 +634,16 @@ export default function ChatPage() {
     }
   }, []);
 
+  const handleEnableNotifications = useCallback(() => {
+    subscribeToPush();
+    setShowNotificationPrompt(false);
+  }, [subscribeToPush]);
+
+  const handleDismissNotificationPrompt = useCallback(() => {
+    setShowNotificationPrompt(false);
+    // Optionally, set a flag in sessionStorage to not ask again this session
+    sessionStorage.setItem('notificationPromptDismissed', 'true');
+  }, []);
 
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !otherUser && !activeChat);
   if (isLoadingPage) {
@@ -685,7 +708,13 @@ export default function ChatPage() {
         )}
         <div className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass, !isBrowserOnline ? 'pt-10' : '')}>
           <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try resetting or refreshing the page.">
-            <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden">
+            <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
+              <NotificationPrompt
+                isOpen={showNotificationPrompt}
+                onEnable={handleEnableNotifications}
+                onDismiss={handleDismissNotificationPrompt}
+                partnerName={otherUser?.display_name}
+              />
               <ChatHeader
                 currentUser={currentUser}
                 otherUser={otherUser}
