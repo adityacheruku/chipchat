@@ -13,6 +13,7 @@ from app.chat.routes import router as chat_router
 from app.routers.uploads import router as uploads_router # Corrected path
 from app.routers.ws import router as ws_router
 from app.routers.ai import router as ai_router # Ensure AI router is included if used
+from app.routers.stickers import router as stickers_router # Import the new sticker router
 
 app = FastAPI(
     title="ChirpChat API",
@@ -82,6 +83,7 @@ app.include_router(chat_router) # Prefix is /chats
 app.include_router(uploads_router) # Prefix is /uploads
 app.include_router(ws_router) # Prefix is /ws
 app.include_router(ai_router) # Prefix is /ai
+app.include_router(stickers_router) # Prefix is /stickers
 
 # Mount WebSocket endpoint (Alternative: include ws_router which already defines it)
 # from app.routers.ws import websocket_endpoint

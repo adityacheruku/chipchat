@@ -20,12 +20,18 @@ class MessageStatusEnum(str, enum.Enum):
 
 class MessageBase(BaseModel):
     text: Optional[str] = None
+    # Sticker fields
     sticker_url: Optional[str] = None
+    sticker_id: Optional[UUID] = None
+    sticker_pack_id: Optional[UUID] = None
+    # Media clip fields
     clip_type: Optional[ClipTypeEnum] = None
     clip_placeholder_text: Optional[str] = None
     clip_url: Optional[str] = None
+    # Image fields
     image_url: Optional[str] = None
     image_thumbnail_url: Optional[str] = None # For optimized image loading
+    # Document fields
     document_url: Optional[str] = None
     document_name: Optional[str] = None
     # Voice message metadata

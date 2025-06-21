@@ -233,6 +233,8 @@ async def send_message_http(
         "user_id": str(current_user.id),
         "text": message_create.text,
         "sticker_url": message_create.sticker_url,
+        "sticker_id": str(message_create.sticker_id) if message_create.sticker_id else None,
+        "sticker_pack_id": str(message_create.sticker_pack_id) if message_create.sticker_pack_id else None,
         "clip_type": message_create.clip_type.value if message_create.clip_type else None,
         "clip_placeholder_text": message_create.clip_placeholder_text,
         "clip_url": message_create.clip_url,
