@@ -186,6 +186,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     clip_placeholder_text = data.get("clip_placeholder_text")
                     clip_url = data.get("clip_url")
                     image_url = data.get("image_url")
+                    document_url = data.get("document_url")
+                    document_name = data.get("document_name")
                     client_temp_id = data.get("client_temp_id") 
                     message_db_id = uuid4()
                     msg_now = datetime.now(timezone.utc)
@@ -193,6 +195,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
                         "text": text, "clip_type": clip_type, "clip_placeholder_text": clip_placeholder_text,
                         "clip_url": clip_url, "image_url": image_url, 
+                        "document_url": document_url, "document_name": document_name,
                         "client_temp_id": client_temp_id, 
                         "status": MessageStatusEnum.SENT_TO_SERVER.value, 
                         "created_at": msg_now.isoformat(), "updated_at": msg_now.isoformat(), "reactions": {},

@@ -6,7 +6,7 @@ import cloudinary.uploader
 
 from app.auth.dependencies import get_current_active_user 
 from app.auth.schemas import UserPublic 
-from app.utils.security import validate_image_upload, validate_clip_upload 
+from app.utils.security import validate_image_upload, validate_clip_upload, validate_document_upload
 from app.utils.logging import logger 
 
 cloudinary.config(
@@ -89,5 +89,24 @@ async def upload_chat_image(
         logger.error(f"Cloudinary chat image upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat image upload failed: {str(e)}")
 
-
-    
+@router.post("/chat_document", summary="Upload a document for chat messages, returns URL and filename")
+async def upload_chat_document(
+    file: UploadFile = File(...),
+    current_user: UserPublic = Depends(get_current_active_user),
+):
+    logger.info(f"Route /uploads/chat_document called by user {current_user.id} for file {file.filename}")
+    validate_document_upload(file)
+    try:
+        # Use resource_type 'raw' for documents, and use the original filename
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder=f"chirpchat_chat_documents/user_{current_user.id}",
+            resource_type="raw",
+            use_filename=True,
+            unique_filename=True # Set to true to avoid overwrites
+        )
+        logger.info(f"Chat document {file.filename} uploaded successfully for user {current_user.id}. URL: {result.get('secure_url')}")
+        return {"file_url": result.get("secure_url"), "file_name": file.filename}
+    except Exception as e:
+        logger.error(f"Cloudinary chat document upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Chat document upload failed: {str(e)}")

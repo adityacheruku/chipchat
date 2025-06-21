@@ -1,3 +1,4 @@
+
 export type Mood = "Happy" | "Sad" | "Neutral" | "Excited" | "Thoughtful" | "Chilling" | "Angry" | "Anxious" | "Content";
 export const ALL_MOODS: Mood[] = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"];
 
@@ -36,6 +37,8 @@ export interface Message {
   clip_placeholder_text?: string | null;
   clip_url?: string | null;
   image_url?: string | null;
+  document_url?: string | null;
+  document_name?: string | null;
   client_temp_id?: string | null; // Client-generated temporary ID
   status?: MessageStatus | null; // Message status
 }

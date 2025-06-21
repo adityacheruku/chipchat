@@ -24,6 +24,8 @@ class MessageBase(BaseModel):
     clip_placeholder_text: Optional[str] = None
     clip_url: Optional[str] = None
     image_url: Optional[str] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
 class MessageCreate(MessageBase):
     recipient_id: Optional[UUID] = None # For HTTP creation, if directly targeting a user to start a chat

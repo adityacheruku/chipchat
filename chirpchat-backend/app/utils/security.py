@@ -27,13 +27,32 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 # Placeholder for image/clip validation - kept from original structure
 from fastapi import UploadFile, HTTPException, status
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif"}
-ALLOWED_CLIP_TYPES = {"audio/mpeg", "audio/wav", "video/mp4", "video/quicktime"}
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+ALLOWED_CLIP_TYPES = {"audio/mpeg", "audio/wav", "audio/webm", "video/mp4", "video/quicktime", "video/webm"}
+ALLOWED_DOCUMENT_TYPES = {
+    "application/pdf", 
+    "application/msword", 
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", # .docx
+    "text/plain"
+}
+MAX_FILE_SIZE = 10 * 1024 * 1024 # 10 MB general limit
+
 
 def validate_image_upload(file: UploadFile):
     if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image file type.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid image file type. Allowed: {', '.join(ALLOWED_IMAGE_TYPES)}")
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"File too large. Max size is {MAX_FILE_SIZE/1024/1024}MB.")
 
 def validate_clip_upload(file: UploadFile):
     if file.content_type not in ALLOWED_CLIP_TYPES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid audio/video file type.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid audio/video file type. Allowed: {', '.join(ALLOWED_CLIP_TYPES)}")
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"File too large. Max size is {MAX_FILE_SIZE/1024/1024}MB.")
+
+def validate_document_upload(file: UploadFile):
+    if file.content_type not in ALLOWED_DOCUMENT_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid document file type. Allowed: {', '.join(ALLOWED_DOCUMENT_TYPES)}")
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"File too large. Max size is {MAX_FILE_SIZE/1024/1024}MB.")

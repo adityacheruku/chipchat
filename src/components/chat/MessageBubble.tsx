@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Message, User, SupportedEmoji } from '@/types';
@@ -6,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, SmilePlus } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -91,6 +92,47 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     console.warn("Could not parse message timestamp:", message.created_at)
   }
 
+  const renderMessageContent = () => {
+    if (message.clip_url && message.clip_type) {
+      return (
+        <div className="flex items-center gap-2">
+          <PlayCircle size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
+          <a href={message.clip_url} target="_blank" rel="noopener noreferrer" className="text-sm italic underline hover:opacity-80">
+            {message.clip_placeholder_text || `View ${message.clip_type} clip`}
+          </a>
+        </div>
+      );
+    }
+    if (message.image_url) {
+      return (
+        <a href={message.image_url} target="_blank" rel="noopener noreferrer" className="block max-w-xs">
+          <Image 
+              src={message.image_url} 
+              alt="Chat image" 
+              width={200} 
+              height={150} 
+              className="rounded-md object-cover cursor-pointer hover:opacity-80"
+              data-ai-hint="chat photo"
+          />
+        </a>
+      );
+    }
+    if (message.document_url) {
+      return (
+        <div className="flex items-center gap-2">
+          <FileText size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
+          <a href={message.document_url} target="_blank" rel="noopener noreferrer" className="text-sm italic underline hover:opacity-80">
+            {message.document_name || 'View Document'}
+          </a>
+        </div>
+      );
+    }
+    if (message.text) {
+      return <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>;
+    }
+    return <p className="text-sm italic text-muted-foreground">Message content not available</p>;
+  };
+
   return (
     <div className={cn('flex flex-col group', alignmentClass)}>
       <div className={cn('flex items-end', isCurrentUser ? 'flex-row-reverse space-x-reverse' : 'flex-row space-x-2')}>
@@ -109,29 +151,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             <p className="text-xs font-semibold text-muted-foreground mb-0.5 ml-2">{sender.display_name}</p>
           )}
           <div className={cn('p-3 rounded-xl shadow min-w-[80px]', bubbleColorClass, bubbleBorderRadius)}>
-            {message.clip_url && message.clip_type ? (
-              <div className="flex items-center gap-2">
-                <PlayCircle size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
-                <a href={message.clip_url} target="_blank" rel="noopener noreferrer" className="text-sm italic underline hover:opacity-80">
-                  {message.clip_placeholder_text || `View ${message.clip_type} clip`}
-                </a>
-              </div>
-            ) : message.image_url ? (
-               <a href={message.image_url} target="_blank" rel="noopener noreferrer" className="block max-w-xs">
-                  <Image 
-                      src={message.image_url} 
-                      alt="Chat image" 
-                      width={200} 
-                      height={150} 
-                      className="rounded-md object-cover cursor-pointer hover:opacity-80"
-                      data-ai-hint="chat photo"
-                  />
-               </a>
-            ) : message.text ? (
-              <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
-            ) : (
-              <p className="text-sm italic text-muted-foreground">Message content not available</p>
-            )}
+            {renderMessageContent()}
           </div>
         </div>
 

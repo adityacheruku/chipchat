@@ -382,6 +382,26 @@ export default function ChatPage() {
     }
   };
 
+  const handleSendDocument = async (file: File) => {
+    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    toast({ title: "Uploading document..." });
+    const clientTempId = `temp_doc_${Date.now()}`;
+    try {
+      const uploadResponse = await api.uploadChatDocument(file);
+      sendWsMessage({
+        event_type: "send_message",
+        chat_id: activeChat.id,
+        document_url: uploadResponse.file_url,
+        document_name: uploadResponse.file_name,
+        client_temp_id: clientTempId,
+      });
+      addAppEvent('messageSent', `${currentUser.display_name} sent a document: ${uploadResponse.file_name}.`, currentUser.id, currentUser.display_name);
+      toast({ title: "Document Sent!" });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Document Upload Failed', description: error.message });
+    }
+  };
+
   const handleToggleReaction = (messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
     const RATE_LIMIT_MS = 500; // Allow toggles a bit faster for better UX
@@ -639,6 +659,7 @@ export default function ChatPage() {
                 onSendMessage={handleSendMessage}
                 onSendMoodClip={handleSendMoodClip}
                 onSendImage={handleSendImage}
+                onSendDocument={handleSendDocument}
                 isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
                 disabled={disabled || !isBrowserOnline || !isWsConnected}

@@ -16,6 +16,7 @@ interface InputBarProps {
   onSendMessage: (text: string) => void;
   onSendMoodClip: (clipType: MessageClipType, file: File) => void;
   onSendImage?: (file: File) => void; 
+  onSendDocument: (file: File) => void;
   isSending?: boolean;
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean; 
@@ -26,7 +27,8 @@ const LONG_PRESS_DURATION = 500; // milliseconds
 export default function InputBar({ 
   onSendMessage, 
   onSendMoodClip, 
-  onSendImage, 
+  onSendImage,
+  onSendDocument,
   isSending = false, 
   onTyping,
   disabled = false 
@@ -36,6 +38,7 @@ export default function InputBar({
   const audioInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -67,7 +70,7 @@ export default function InputBar({
     }
   };
 
-  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, attachmentType: 'audio' | 'media') => {
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, attachmentType: 'audio' | 'media' | 'document') => {
     if (disabled) return;
     const file = event.target.files?.[0];
     if (file) {
@@ -85,6 +88,8 @@ export default function InputBar({
                 return;
             }
             onSendMoodClip(attachmentType, file);
+        } else if (attachmentType === 'document') {
+            onSendDocument(file);
         }
     }
     setShowAttachmentOptions(false); 
@@ -242,20 +247,14 @@ export default function InputBar({
         <input type="file" ref={cameraInputRef} accept="image/*" capture className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
         <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
         <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileSelect(e, 'audio')} />
+        <input type="file" ref={documentInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileSelect(e, 'document')} />
 
         {showAttachmentOptions && !disabled && !isLongPressActive && (
              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2 border-t mt-2">
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" className="flex flex-col h-auto py-3 items-center justify-center" disabled>
-                                <FileText size={24} className="mb-1 text-blue-500"/>
-                                <span className="text-xs font-normal text-muted-foreground">Document</span>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Coming Soon!</p></TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
+                <Button variant="outline" size="sm" onClick={() => documentInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
+                    <FileText size={24} className="mb-1 text-blue-500"/>
+                    <span className="text-xs font-normal text-muted-foreground">Document</span>
+                </Button>
                 
                 {onSendImage && (
                      <Button variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">

@@ -162,7 +162,7 @@ export const api = {
     return handleResponse<{messages: Message[]}>(response);
   },
 
-  sendMessageHttp: async (chatId: string, messageData: { text?: string; clip_type?: string; clip_placeholder_text?: string; clip_url?: string; image_url?: string; client_temp_id?: string }): Promise<Message> => {
+  sendMessageHttp: async (chatId: string, messageData: { text?: string; clip_type?: string; clip_placeholder_text?: string; clip_url?: string; image_url?: string; document_url?: string; document_name?: string; client_temp_id?: string }): Promise<Message> => {
     const token = getAuthToken();
     const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, {
       method: 'POST',
@@ -212,6 +212,18 @@ export const api = {
         body: formData,
     });
     return handleResponse<{ file_url: string, clip_type: string }>(response);
+  },
+
+  uploadChatDocument: async (file: File): Promise<{ file_url: string, file_name: string }> => {
+    const token = getAuthToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/uploads/chat_document`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+    });
+    return handleResponse<{ file_url: string, file_name: string }>(response);
   },
 
   // PWA SHORTCUT ACTIONS
