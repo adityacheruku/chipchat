@@ -5,7 +5,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { SmilePlus, PlayCircle } from 'lucide-react'; // Removed Image as ImageIcon from here as it's not used
+import { SmilePlus, PlayCircle } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -25,17 +25,18 @@ interface MessageBubbleProps {
   isCurrentUser: boolean;
   currentUserId: string;
   onToggleReaction: (messageId: string, emoji: SupportedEmoji) => void;
+  onShowReactions: (message: Message) => void;
+  allUsers: Record<string, User>;
 }
 
-export default function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction }: MessageBubbleProps) {
+export default function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers }: MessageBubbleProps) {
   const alignmentClass = isCurrentUser ? 'items-end' : 'items-start';
-  // Updated to use primary for current user (sender) and secondary for other user (receiver)
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
 
   let formattedTime = "sending...";
   try {
-    if (message.created_at && message.status !== 'sending') { // Don't format if still sending
+    if (message.created_at && message.status !== 'sending') {
         const timestampDate = parseISO(message.created_at);
         formattedTime = format(timestampDate, 'p');
     } else if (message.status === 'sending') {
@@ -45,7 +46,6 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
     console.warn("Could not parse message timestamp:", message.created_at)
   }
   
-
   const prevReactionsRef = useRef<Message['reactions']>();
   const [animatedEmojis, setAnimatedEmojis] = useState<Record<SupportedEmoji, boolean>>({});
 
@@ -71,7 +71,6 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
 
     prevReactionsRef.current = message.reactions ? JSON.parse(JSON.stringify(message.reactions)) : {};
   }, [message.reactions]);
-
 
   const handleReactionClick = (emoji: SupportedEmoji) => {
     onToggleReaction(message.id, emoji);
@@ -111,6 +110,18 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
     </Popover>
   );
 
+  const getReactorNames = (reactors: string[] | undefined) => {
+    if (!reactors || reactors.length === 0) return "No one";
+    const MAX_NAMES = 3;
+    const names = reactors.slice(0, MAX_NAMES).map(id => allUsers[id]?.display_name || 'Unknown User');
+    let namesString = names.join(', ');
+    if (reactors.length > MAX_NAMES) {
+      namesString += ` and ${reactors.length - MAX_NAMES} more`;
+    }
+    return namesString;
+  };
+
+
   const messageContentDiv = (
     <div className={cn('p-3 rounded-xl shadow min-w-[80px] relative group/bubble', bubbleColorClass, bubbleBorderRadius)}>
       {message.clip_url && message.clip_type ? (
@@ -147,21 +158,29 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
             const isAnimated = animatedEmojis[emoji];
 
             return (
-              <button
-                key={emoji}
-                onClick={() => handleReactionClick(emoji)}
-                className={cn(
-                  "text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-colors",
-                  currentUserReacted 
-                    ? (isCurrentUser ? "bg-background/30 border-primary-foreground/50 text-primary-foreground" : "bg-accent text-accent-foreground border-accent/80") // Adjusted current user reacted on their own message
-                    : (isCurrentUser ? "bg-background/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-background/20" : "bg-background/50 border-border hover:bg-muted"),
-                  isAnimated && "animate-pop" 
-                )}
-                aria-label={`React with ${emoji}, current count ${reactors.length}. ${currentUserReacted ? 'You reacted.' : 'Click to react.'}`}
-              >
-                <span>{emoji}</span>
-                <span className="font-medium">{reactors.length}</span>
-              </button>
+              <TooltipProvider key={emoji} delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => onShowReactions(message)}
+                      className={cn(
+                        "text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-colors",
+                        currentUserReacted 
+                          ? (isCurrentUser ? "bg-background/30 border-primary-foreground/50 text-primary-foreground" : "bg-accent text-accent-foreground border-accent/80")
+                          : (isCurrentUser ? "bg-background/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-background/20" : "bg-background/50 border-border hover:bg-muted"),
+                        isAnimated && "animate-pop" 
+                      )}
+                      aria-label={`Reacted with ${emoji}, count ${reactors.length}. Click to see who reacted.`}
+                    >
+                      <span>{emoji}</span>
+                      <span className="font-medium">{reactors.length}</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{getReactorNames(reactors)}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             );
           })}
         </div>
@@ -205,7 +224,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
               {formattedTime}
             </p>
           </TooltipTrigger>
-           {message.created_at && message.status !== 'sending' && ( // Only show full timestamp if not sending
+           {message.created_at && message.status !== 'sending' && (
             <TooltipContent>
                 <p>{format(parseISO(message.created_at), 'PPpp')}</p>
             </TooltipContent>

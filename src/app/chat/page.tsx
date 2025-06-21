@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { Loader2, MessagesSquare, WifiOff } from 'lucide-react';
+import ReactionSummaryModal from '@/components/chat/ReactionSummaryModal';
 
 export default function ChatPage() {
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function ChatPage() {
   const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
   const [initialMoodOnLoad, setInitialMoodOnLoad] = useState<Mood | null>(null);
 
+  const [reactionModalData, setReactionModalData] = useState<{ reactions: MessageType['reactions'], allUsers: Record<string, User> } | null>(null);
   const lastReactionToggleTimes = useRef<Record<string, number>>({});
   const lastMessageTextRef = useRef<string>("");
 
@@ -528,6 +530,13 @@ export default function ChatPage() {
     setIsMoodModalOpen(false);
   }, []);
 
+  const handleShowReactions = useCallback((message: MessageType, allUsers: Record<string, User>) => {
+    if (message.reactions && Object.keys(message.reactions).length > 0) {
+      setReactionModalData({ reactions: message.reactions, allUsers });
+    }
+  }, []);
+
+
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !otherUser && !activeChat);
   if (isLoadingPage) {
     return (
@@ -607,6 +616,7 @@ export default function ChatPage() {
                   currentUser={currentUser}
                   allUsers={allUsersForMessageArea}
                   onToggleReaction={handleToggleReaction}
+                  onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)}
                 />
               ) : (
                 <div className="flex-grow flex flex-col items-center justify-center p-4 text-center bg-transparent">
@@ -663,6 +673,14 @@ export default function ChatPage() {
         />
       )}
       <ReasoningDialog />
+      {reactionModalData && (
+        <ReactionSummaryModal
+          isOpen={!!reactionModalData}
+          onClose={() => setReactionModalData(null)}
+          reactions={reactionModalData.reactions}
+          allUsers={reactionModalData.allUsers}
+        />
+      )}
     </div>
   );
 }

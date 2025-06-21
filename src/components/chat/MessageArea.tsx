@@ -8,17 +8,17 @@ import { useAutoScroll } from '@/hooks/useAutoScroll';
 interface MessageAreaProps {
   messages: Message[];
   currentUser: User;
-  allUsers: Record<string, User>; // Changed from User[] to Record<string, User> for easier lookup
+  allUsers: Record<string, User>;
   onToggleReaction: (messageId: string, emoji: SupportedEmoji) => void;
+  onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
 }
 
-export default function MessageArea({ messages, currentUser, allUsers, onToggleReaction }: MessageAreaProps) {
+export default function MessageArea({ messages, currentUser, allUsers, onToggleReaction, onShowReactions }: MessageAreaProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null); 
   const viewportRef = useRef<HTMLDivElement>(null); 
 
   useAutoScroll(viewportRef, [messages]);
   
-  // If sender info is not in allUsers (e.g., self message before full hydration), default to currentUser info
   const findUser = (userId: string) => allUsers[userId] || (userId === currentUser.id ? currentUser : null);
 
   return (
@@ -28,7 +28,6 @@ export default function MessageArea({ messages, currentUser, allUsers, onToggleR
           const sender = findUser(msg.user_id);
           if (!sender) {
             console.warn("Sender not found for message:", msg.id, "senderId:", msg.user_id);
-            // Optionally render a placeholder or skip rendering this message
             return null;
           }
           return (
@@ -39,6 +38,8 @@ export default function MessageArea({ messages, currentUser, allUsers, onToggleR
               isCurrentUser={msg.user_id === currentUser.id}
               currentUserId={currentUser.id}
               onToggleReaction={onToggleReaction}
+              onShowReactions={(message) => onShowReactions(message, allUsers)}
+              allUsers={allUsers}
             />
           );
         })}
