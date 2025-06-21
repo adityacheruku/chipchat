@@ -213,11 +213,27 @@ export interface UserStickerPack {
 }
 
 // Push Notifications
+export interface PushSubscriptionKeys {
+    p256dh: string;
+    auth: string;
+}
+
 export interface PushSubscriptionJSON {
   endpoint: string;
   expirationTime?: number | null;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
+  keys: PushSubscriptionKeys;
+}
+
+export interface NotificationSettings {
+  user_id: string;
+  messages: boolean;
+  mood_updates: boolean;
+  thinking_of_you: boolean;
+  voice_messages: boolean;
+  media_sharing: boolean;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start: string | null; // e.g., "22:00:00"
+  quiet_hours_end: string | null;   // e.g., "08:00:00"
+  quiet_hours_weekdays_only: boolean;
+  timezone: string;
 }

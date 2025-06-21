@@ -1,5 +1,5 @@
 
-import type { User, Mood } from '@/types';
+import type { User, Mood, NotificationSettings } from '@/types';
 import { ALL_MOODS } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,12 +15,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Image from 'next/image';
 import type { FormEvent, ChangeEvent } from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
-import { Loader2, Bell, BellOff } from 'lucide-react';
+import { Loader2, Bell, BellOff, AlertTriangle } from 'lucide-react';
 import { Separator } from '../ui/separator';
 import { Switch } from '@/components/ui/switch';
+import { Skeleton } from '../ui/skeleton';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -45,22 +46,23 @@ export default function UserProfileModal({
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
-  // State for notification toggles (UI only for now)
-  const [messageNotifications, setMessageNotifications] = useState(true);
-  const [moodNotifications, setMoodNotifications] = useState(true);
-  const [pingNotifications, setPingNotifications] = useState(true);
-
-  const { toast } = useToast();
-  
   const {
     isSubscribed,
     permissionStatus,
     subscribeToPush,
     unsubscribeFromPush,
     isPushApiSupported,
-    isSubscribing
+    isSubscribing,
+    notificationSettings,
+    updateNotificationSettings
   } = usePushNotifications();
 
+  // Local state for notification settings toggles
+  const [localSettings, setLocalSettings] = useState<Partial<NotificationSettings>>({});
+  const [isSettingsLoading, setIsSettingsLoading] = useState(true);
+
+  const { toast } = useToast();
+  
   useEffect(() => {
     if (user) {
       setDisplayName(user.display_name);
@@ -69,11 +71,21 @@ export default function UserProfileModal({
       setSelectedAvatarFile(null);
     }
   }, [user, isOpen]);
+  
+  useEffect(() => {
+    if (isOpen && notificationSettings) {
+        setLocalSettings(notificationSettings);
+        setIsSettingsLoading(false);
+    } else if (isOpen && isSubscribed) {
+        setIsSettingsLoading(true);
+    } else {
+        setIsSettingsLoading(false);
+    }
+  }, [isOpen, notificationSettings, isSubscribed]);
 
-  if (!user) return null;
 
   const internalHandleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
-    onAvatarFileChange(e, user.avatar_url);
+    onAvatarFileChange(e, user?.avatar_url);
     const file = e.target.files?.[0];
     if (file) {
       setSelectedAvatarFile(file);
@@ -84,13 +96,19 @@ export default function UserProfileModal({
     e.preventDefault();
     setIsSaving(true);
     try {
-      const profileUpdates: Partial<Pick<User, 'display_name' | 'mood' | 'phone'>> = {};
-      if (displayName !== user.display_name) profileUpdates.display_name = displayName;
-      if (mood !== user.mood) profileUpdates.mood = mood;
-      if (phone !== (user.phone || '')) profileUpdates.phone = phone;
+      const profileUpdates: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>> = {};
+      if (user && displayName !== user.display_name) profileUpdates.display_name = displayName;
+      if (user && mood !== user.mood) profileUpdates.mood = mood;
+      if (user && phone !== (user.phone || '')) profileUpdates.phone = phone;
 
-      // Note: Notification settings are not saved to the backend in this version.
+      // Save user profile data and avatar
       await onSave(profileUpdates, selectedAvatarFile || undefined);
+
+      // Save notification settings if they have been loaded and changed
+      if (notificationSettings && JSON.stringify(localSettings) !== JSON.stringify(notificationSettings)) {
+          await updateNotificationSettings(localSettings);
+      }
+
       onClose();
     } catch (error: any) {
       console.error("Error saving profile from modal:", error.message);
@@ -99,28 +117,44 @@ export default function UserProfileModal({
     }
   };
 
+  const handleSettingsChange = (key: keyof NotificationSettings, value: any) => {
+    setLocalSettings(prev => ({...prev, [key]: value}));
+  };
+
   const renderNotificationButton = () => {
     if (!isPushApiSupported) {
-      return <p className="col-span-3 text-sm text-muted-foreground">Push notifications are not supported on this browser.</p>;
+      return (
+        <div className="col-span-3 flex items-center text-sm text-muted-foreground gap-2">
+            <AlertTriangle className="text-amber-500" />
+            <p>Push notifications not supported on this browser.</p>
+        </div>
+      );
     }
     if (permissionStatus === 'denied') {
-      return <p className="col-span-3 text-sm text-destructive">You have blocked notifications. Please enable them in your browser settings.</p>;
+      return (
+        <div className="col-span-3 flex items-center text-sm text-destructive gap-2">
+             <BellOff />
+            <p>You have blocked notifications. Please enable them in your browser settings.</p>
+        </div>
+      );
     }
     if (isSubscribed) {
       return (
         <Button variant="outline" onClick={unsubscribeFromPush} className="col-span-3" disabled={isSubscribing}>
           {isSubscribing ? <Loader2 className="animate-spin" /> : <BellOff className="mr-2 h-4 w-4" />}
-          Disable Notifications
+          Disable Push Notifications
         </Button>
       );
     }
     return (
-      <Button variant="outline" onClick={subscribeToPush} className="col-span-3" disabled={isSubscribing}>
+      <Button variant="default" onClick={subscribeToPush} className="col-span-3 bg-primary hover:bg-primary/90" disabled={isSubscribing}>
         {isSubscribing ? <Loader2 className="animate-spin" /> : <Bell className="mr-2 h-4 w-4" />}
-        Enable Notifications
+        Enable Push Notifications
       </Button>
     );
   }
+  
+  if (!user) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -210,47 +244,52 @@ export default function UserProfileModal({
             </div>
 
             {isSubscribed && (
-              <div className="col-span-4 grid gap-4 rounded-lg border bg-card p-4 shadow-inner">
-                <p className="text-sm font-medium text-muted-foreground -mt-1 mb-1">Notify me about...</p>
-                <div className="flex items-center justify-between space-x-2">
-                  <Label htmlFor="messages-notif" className="font-normal cursor-pointer">
-                    New Messages
-                  </Label>
-                  <Switch
-                    id="messages-notif"
-                    checked={messageNotifications}
-                    onCheckedChange={setMessageNotifications}
-                    disabled={isSaving || isSubscribing}
-                  />
+              isSettingsLoading ? (
+                 <div className="col-span-4 grid gap-4 rounded-lg border bg-card p-4 shadow-inner">
+                    <Skeleton className="h-5 w-3/4" />
+                    <div className="flex justify-between items-center"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-6 w-11" /></div>
+                    <div className="flex justify-between items-center"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-6 w-11" /></div>
+                    <div className="flex justify-between items-center"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-6 w-11" /></div>
+                 </div>
+              ) : localSettings && (
+                 <div className="col-span-4 grid gap-4 rounded-lg border bg-card p-4 shadow-inner">
+                    <p className="text-sm font-medium text-muted-foreground -mt-1 mb-1">Notify me about...</p>
+                    <div className="flex items-center justify-between space-x-2">
+                    <Label htmlFor="messages-notif" className="font-normal cursor-pointer">
+                        New Messages
+                    </Label>
+                    <Switch
+                        id="messages-notif"
+                        checked={localSettings.messages ?? true}
+                        onCheckedChange={(checked) => handleSettingsChange('messages', checked)}
+                        disabled={isSaving || isSubscribing}
+                    />
+                    </div>
+                    <div className="flex items-center justify-between space-x-2">
+                    <Label htmlFor="mood-notif" className="font-normal cursor-pointer">
+                        Mood Changes
+                    </Label>
+                    <Switch
+                        id="mood-notif"
+                        checked={localSettings.mood_updates ?? true}
+                        onCheckedChange={(checked) => handleSettingsChange('mood_updates', checked)}
+                        disabled={isSaving || isSubscribing}
+                    />
+                    </div>
+                    <div className="flex items-center justify-between space-x-2">
+                    <Label htmlFor="pings-notif" className="font-normal cursor-pointer">
+                        "Thinking of You" Pings
+                    </Label>
+                    <Switch
+                        id="pings-notif"
+                        checked={localSettings.thinking_of_you ?? true}
+                        onCheckedChange={(checked) => handleSettingsChange('thinking_of_you', checked)}
+                        disabled={isSaving || isSubscribing}
+                    />
+                    </div>
                 </div>
-                <div className="flex items-center justify-between space-x-2">
-                  <Label htmlFor="mood-notif" className="font-normal cursor-pointer">
-                    Mood Changes
-                  </Label>
-                  <Switch
-                    id="mood-notif"
-                    checked={moodNotifications}
-                    onCheckedChange={setMoodNotifications}
-                    disabled={isSaving || isSubscribing}
-                  />
-                </div>
-                <div className="flex items-center justify-between space-x-2">
-                  <Label htmlFor="pings-notif" className="font-normal cursor-pointer">
-                    "Thinking of You" Pings
-                  </Label>
-                  <Switch
-                    id="pings-notif"
-                    checked={pingNotifications}
-                    onCheckedChange={setPingNotifications}
-                    disabled={isSaving || isSubscribing}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground text-center pt-2">
-                  Note: Granular controls are for UI demonstration and are not yet saved.
-                </p>
-              </div>
+              )
             )}
-
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} className="hover:bg-muted active:bg-muted/80" disabled={isSaving}>

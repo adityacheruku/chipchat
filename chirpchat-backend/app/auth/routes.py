@@ -14,6 +14,8 @@ from app.utils.email_utils import send_login_notification_email
 from app.utils.logging import logger
 from postgrest.exceptions import APIError
 from app.websocket.manager import manager # Import the WebSocket manager
+from app.notifications.service import notification_service # Import notification service
+
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 user_router = APIRouter(prefix="/users", tags=["Users"])
@@ -67,6 +69,8 @@ async def register(user_create: UserCreate):
 
     insert_response_obj = None
     try:
+        # Note: The trigger `handle_new_user_notifications` will automatically
+        # create a default entry in user_notification_settings table.
         insert_response_obj = await db_manager.admin_client.table("users").insert(new_user_data).execute()
     except APIError as e:
         logger.error(f"PostgREST APIError during user insert. Status: {getattr(e, 'code', 'N/A')}, Message: {getattr(e, 'message', 'N/A')}, Details: {getattr(e, 'details', 'N/A')}, Hint: {getattr(e, 'hint', 'N/A')}", exc_info=True)
@@ -267,6 +271,12 @@ async def update_profile(
             updated_data={"mood": refreshed_user_data['mood']},
             db_manager_instance=db_manager
         )
+        # Also send a push notification for mood change
+        await notification_service.send_mood_change_notification(
+            user=current_user, 
+            new_mood=refreshed_user_data['mood']
+        )
+
 
     return UserPublic(
         id=refreshed_user_data["id"],
@@ -345,6 +355,7 @@ async def http_ping_thinking_of_you(
         return {"status": "Ping to self noted, not sent via WebSocket."}
 
     try:
+        # Send WebSocket event
         await manager.send_personal_message_by_user_id(
             {
                 "event_type": "thinking_of_you_received",
@@ -354,10 +365,15 @@ async def http_ping_thinking_of_you(
             recipient_user_id, 
         )
         logger.info(f"'Thinking of You' WebSocket event dispatched from user {current_user.id} to {recipient_user_id} via HTTP route.")
-        return {"status": "Ping sent to WebSocket manager"}
-    except Exception as e:
-        logger.error(f"Failed to dispatch 'Thinking of You' WebSocket event for recipient {recipient_user_id} from user {current_user.id} via HTTP: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send ping via WebSocket manager.")
-    
+        
+        # Send Push Notification
+        await notification_service.send_thinking_of_you_notification(
+            sender=current_user,
+            recipient_id=recipient_user_id
+        )
 
+        return {"status": "Ping sent"}
+    except Exception as e:
+        logger.error(f"Failed to dispatch 'Thinking of You' events for recipient {recipient_user_id} from user {current_user.id} via HTTP: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send ping.")
     

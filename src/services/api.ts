@@ -12,6 +12,7 @@ import type {
   StickerPackResponse,
   StickerListResponse,
   PushSubscriptionJSON,
+  NotificationSettings,
 } from '@/types';
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
@@ -311,35 +312,50 @@ export const api = {
   },
 
   // PUSH NOTIFICATIONS
-  sendPushSubscriptionToServer: async (subscription: PushSubscriptionJSON): Promise<any> => {
+  sendPushSubscriptionToServer: async (subscription: PushSubscriptionJSON): Promise<{ msg: string }> => {
     const token = getAuthToken();
-    console.log("Sending push subscription to server:", subscription);
-    // This is a placeholder. In a real app, you would have an endpoint like:
-    // const response = await fetch(`${API_BASE_URL}/notifications/subscribe`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     Authorization: `Bearer ${token}`,
-    //   },
-    //   body: JSON.stringify(subscription),
-    // });
-    // return handleResponse(response);
-    return Promise.resolve({ success: true }); // Mock response
+    const response = await fetch(`${API_BASE_URL}/notifications/subscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(subscription),
+    });
+    return handleResponse<{ msg: string }>(response);
   },
 
-  removePushSubscriptionFromServer: async (endpoint: string): Promise<any> => {
+  removePushSubscriptionFromServer: async (endpoint: string): Promise<{ msg: string }> => {
     const token = getAuthToken();
-    console.log("Removing push subscription from server:", endpoint);
-    // This is a placeholder. In a real app, you would have an endpoint like:
-    // const response = await fetch(`${API_BASE_URL}/notifications/unsubscribe`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     Authorization: `Bearer ${token}`,
-    //   },
-    //   body: JSON.stringify({ endpoint }),
-    // });
-    // return handleResponse(response);
-    return Promise.resolve({ success: true }); // Mock response
+    const response = await fetch(`${API_BASE_URL}/notifications/unsubscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ endpoint }),
+    });
+    return handleResponse<{ msg: string }>(response);
+  },
+
+  getNotificationSettings: async (): Promise<NotificationSettings> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/notifications/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return handleResponse<NotificationSettings>(response);
+  },
+
+  updateNotificationSettings: async (settings: Partial<NotificationSettings>): Promise<NotificationSettings> => {
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/notifications/settings`, {
+          method: 'PUT',
+          headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(settings),
+      });
+      return handleResponse<NotificationSettings>(response);
   },
 };

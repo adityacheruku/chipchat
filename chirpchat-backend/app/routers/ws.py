@@ -11,6 +11,7 @@ from app.auth.schemas import UserPublic, TokenData
 from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, SupportedEmoji, MessageStatusEnum, SUPPORTED_EMOJIS, MessageSubtypeEnum
 from app.database import db_manager
 from app.utils.logging import logger
+from app.notifications.service import notification_service # Import notification service
 
 from app.config import settings
 from jose import jwt, JWTError, ExpiredSignatureError, JWTClaimsError
@@ -255,6 +256,13 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         message_out = MessageInDB(**final_msg_resp.data)
 
                     await manager.broadcast_chat_message(str(chat_id), message_out, db_manager)
+                    
+                    # Send Push Notification
+                    await notification_service.send_new_message_notification(
+                        sender=current_user,
+                        chat_id=chat_id,
+                        message=message_out
+                    )
 
                 elif event_type == "toggle_reaction":
                     message_id_str = data.get("message_id")
@@ -357,6 +365,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         await websocket.send_json({"event_type": "error", "detail": "Recipient user not found."})
                         continue
 
+                    # Send WebSocket event
                     await manager.send_personal_message_by_user_id(
                         {
                             "event_type": "thinking_of_you_received",
@@ -366,6 +375,12 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         recipient_user_id,
                     )
                     logger.info(f"WS: 'Thinking of You' event dispatched from user {current_user.id} to {recipient_user_id}.")
+                    
+                    # Send Push Notification
+                    await notification_service.send_thinking_of_you_notification(
+                        sender=current_user,
+                        recipient_id=recipient_user_id
+                    )
 
                 elif event_type == "HEARTBEAT":
                     logger.debug(f"WS user {user_id}: Received HEARTBEAT.")

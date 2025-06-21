@@ -18,3 +18,5 @@ alembic
 psycopg2-binary
 bcrypt
 fastapi-mail==1.4.1
+pywebpush==1.15.0
+pytz==2024.1

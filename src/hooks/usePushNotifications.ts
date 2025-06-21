@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/services/api';
+import type { NotificationSettings } from '@/types';
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const PUSH_SUBSCRIPTION_KEY = 'chirpChatPushSubscription';
@@ -28,6 +29,7 @@ export function usePushNotifications() {
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
   const [isPushApiSupported, setIsPushApiSupported] = useState(false);
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
@@ -120,12 +122,44 @@ export function usePushNotifications() {
     }
   }, [isPushApiSupported, toast]);
 
+  const fetchSettings = useCallback(async () => {
+    if(!isSubscribed) return;
+    try {
+      const fetchedSettings = await api.getNotificationSettings();
+      setSettings(fetchedSettings);
+    } catch(err) {
+      console.error("Failed to fetch notification settings:", err);
+      toast({variant: 'destructive', title: 'Settings Error', description: 'Could not load your notification settings.'});
+    }
+  }, [isSubscribed, toast]);
+
+  const updateSettings = useCallback(async (newSettings: Partial<NotificationSettings>) => {
+    try {
+      const updatedSettings = await api.updateNotificationSettings(newSettings);
+      setSettings(updatedSettings);
+      toast({title: 'Settings Saved', description: 'Your notification preferences have been updated.'});
+    } catch(err) {
+       console.error("Failed to update notification settings:", err);
+      toast({variant: 'destructive', title: 'Save Error', description: 'Could not save your notification settings.'});
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (isSubscribed) {
+      fetchSettings();
+    } else {
+      setSettings(null);
+    }
+  }, [isSubscribed, fetchSettings]);
+
   return {
     isSubscribed,
     subscribeToPush,
     unsubscribeFromPush,
     permissionStatus,
     isPushApiSupported,
-    isSubscribing
+    isSubscribing,
+    notificationSettings: settings,
+    updateNotificationSettings: updateSettings,
   };
 }

@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
     
+    # Push Notifications (VAPID)
+    VAPID_PUBLIC_KEY: Optional[str] = None
+    VAPID_PRIVATE_KEY: Optional[str] = None
+    VAPID_ADMIN_EMAIL: Optional[str] = "mailto:admin@example.com"
+
     # Environment
     ENVIRONMENT: str = "development"
     DEBUG: bool = True

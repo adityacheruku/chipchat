@@ -22,6 +22,7 @@ from app.auth.schemas import UserPublic
 from app.database import db_manager
 from app.websocket.manager import manager
 from app.utils.logging import logger 
+from app.notifications.service import notification_service # Import notification service
 import uuid 
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
@@ -242,7 +243,15 @@ async def send_message_http(
     if not message_for_response:
         raise HTTPException(status_code=500, detail="Could not retrieve message details after sending.")
     
+    # Broadcast via WebSocket
     await manager.broadcast_chat_message(str(chat_id), message_for_response, db_manager)
+    
+    # Send Push Notification
+    await notification_service.send_new_message_notification(
+        sender=current_user,
+        chat_id=chat_id,
+        message=message_for_response
+    )
     
     return message_for_response
 
