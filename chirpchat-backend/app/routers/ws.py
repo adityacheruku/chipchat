@@ -181,25 +181,28 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         await websocket.send_json({"event_type": "error", "detail": "You are not a participant of this chat."})
                         continue
                     
-                    text = data.get("text")
-                    clip_type = data.get("clip_type")
-                    clip_placeholder_text = data.get("clip_placeholder_text")
-                    clip_url = data.get("clip_url")
-                    image_url = data.get("image_url")
-                    image_thumbnail_url = data.get("image_thumbnail_url")
-                    document_url = data.get("document_url")
-                    document_name = data.get("document_name")
-                    client_temp_id = data.get("client_temp_id") 
                     message_db_id = uuid4()
                     msg_now = datetime.now(timezone.utc)
                     new_message_payload = {
                         "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
-                        "text": text, "clip_type": clip_type, "clip_placeholder_text": clip_placeholder_text,
-                        "clip_url": clip_url, "image_url": image_url, "image_thumbnail_url": image_thumbnail_url,
-                        "document_url": document_url, "document_name": document_name,
-                        "client_temp_id": client_temp_id, 
+                        "text": data.get("text"),
+                        "clip_type": data.get("clip_type"),
+                        "clip_placeholder_text": data.get("clip_placeholder_text"),
+                        "clip_url": data.get("clip_url"),
+                        "image_url": data.get("image_url"),
+                        "image_thumbnail_url": data.get("image_thumbnail_url"),
+                        "document_url": data.get("document_url"),
+                        "document_name": data.get("document_name"),
+                        "client_temp_id": data.get("client_temp_id"), 
                         "status": MessageStatusEnum.SENT_TO_SERVER.value, 
-                        "created_at": msg_now.isoformat(), "updated_at": msg_now.isoformat(), "reactions": {},
+                        "created_at": msg_now.isoformat(),
+                        "updated_at": msg_now.isoformat(),
+                        "reactions": {},
+                        # Voice message metadata
+                        "duration_seconds": data.get("duration_seconds"),
+                        "file_size_bytes": data.get("file_size_bytes"),
+                        "audio_format": data.get("audio_format"),
+                        "transcription": data.get("transcription"), # Initially null
                     }
                     insert_result_obj = await db_manager.get_table("messages").insert(new_message_payload).execute()
                     

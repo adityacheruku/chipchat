@@ -124,7 +124,7 @@ async def upload_chat_document(
         raise HTTPException(status_code=500, detail=f"Chat document upload failed: {str(e)}")
 
 
-@router.post("/voice_message", summary="Upload a voice message for chat, returns URL")
+@router.post("/voice_message", summary="Upload a voice message for chat, returns URL and metadata")
 async def upload_voice_message(
     file: UploadFile = File(...),
     current_user: UserPublic = Depends(get_current_active_user),
@@ -140,9 +140,21 @@ async def upload_voice_message(
             resource_type="video" 
         )
         # Detailed logging of the Cloudinary response
-        logger.info(f"Cloudinary voice message response for user {current_user.id}: public_id={result.get('public_id')}, duration={result.get('duration')}, format={result.get('format')}")
-        logger.info(f"Voice message {file.filename} uploaded successfully for user {current_user.id}. URL: {result.get('secure_url')}")
-        return {"file_url": result.get("secure_url"), "clip_type": "audio"}
+        logger.info(f"Cloudinary voice message response for user {current_user.id}: {result}")
+        
+        duration_seconds = result.get('duration')
+        file_size_bytes = result.get('bytes')
+        audio_format = result.get('format')
+
+        logger.info(f"Voice message {file.filename} uploaded for user {current_user.id}. URL: {result.get('secure_url')}, Duration: {duration_seconds}s, Size: {file_size_bytes}B, Format: {audio_format}")
+        
+        return {
+            "file_url": result.get("secure_url"), 
+            "clip_type": "audio",
+            "duration_seconds": round(duration_seconds) if duration_seconds is not None else None,
+            "file_size_bytes": file_size_bytes,
+            "audio_format": audio_format
+        }
     except Exception as e:
         logger.error(f"Cloudinary voice message upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Voice message upload failed: {str(e)}")

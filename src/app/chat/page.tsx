@@ -432,14 +432,21 @@ export default function ChatPage() {
     try {
       const uploadResponse = await api.uploadVoiceMessage(file);
       const placeholderText = `${currentUser.display_name} sent a voice message.`;
-      sendWsMessage({
-        event_type: "send_message",
-        chat_id: activeChat.id,
-        clip_type: 'audio',
-        clip_url: uploadResponse.file_url,
-        clip_placeholder_text: placeholderText,
-        client_temp_id: clientTempId,
-      });
+      
+      const payload: Record<string, any> = {
+          event_type: "send_message",
+          chat_id: activeChat.id,
+          clip_type: 'audio',
+          clip_url: uploadResponse.file_url,
+          clip_placeholder_text: placeholderText,
+          client_temp_id: clientTempId,
+          duration_seconds: uploadResponse.duration_seconds,
+          file_size_bytes: uploadResponse.file_size_bytes,
+          audio_format: uploadResponse.audio_format,
+      };
+      
+      sendWsMessage(payload);
+      
       addAppEvent('messageSent', `${currentUser.display_name} sent a voice message.`, currentUser.id, currentUser.display_name);
       toast({ title: "Voice Message Sent!" });
     } catch (error: any) {

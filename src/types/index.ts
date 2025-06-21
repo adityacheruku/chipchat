@@ -42,6 +42,11 @@ export interface Message {
   document_name?: string | null;
   client_temp_id?: string | null; // Client-generated temporary ID
   status?: MessageStatus | null; // Message status
+  // Voice message metadata
+  duration_seconds?: number | null;
+  file_size_bytes?: number | null;
+  audio_format?: string | null;
+  transcription?: string | null;
 }
 
 export interface ChatParticipant extends User {}
@@ -74,6 +79,15 @@ export interface AuthResponse {
 export interface ApiErrorResponse {
   detail?: string | { msg: string; type: string }[];
 }
+
+export interface VoiceMessageUploadResponse {
+    file_url: string;
+    clip_type: 'audio';
+    duration_seconds: number | null;
+    file_size_bytes: number | null;
+    audio_format: string | null;
+}
+
 
 // WebSocket message types
 export interface WebSocketMessagePayload {

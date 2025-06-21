@@ -27,6 +27,12 @@ class MessageBase(BaseModel):
     image_thumbnail_url: Optional[str] = None # For optimized image loading
     document_url: Optional[str] = None
     document_name: Optional[str] = None
+    # Voice message metadata
+    duration_seconds: Optional[int] = None
+    file_size_bytes: Optional[int] = None
+    audio_format: Optional[str] = None
+    transcription: Optional[str] = None
+
 
 class MessageCreate(MessageBase):
     recipient_id: Optional[UUID] = None # For HTTP creation, if directly targeting a user to start a chat

@@ -8,6 +8,7 @@ import type {
   DefaultChatPartnerResponse,
   ApiErrorResponse,
   SupportedEmoji,
+  VoiceMessageUploadResponse,
 } from '@/types';
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
@@ -226,7 +227,7 @@ export const api = {
     return handleResponse<{ file_url: string, file_name: string }>(response);
   },
 
-  uploadVoiceMessage: async (file: File): Promise<{ file_url: string, clip_type: 'audio' }> => {
+  uploadVoiceMessage: async (file: File): Promise<VoiceMessageUploadResponse> => {
     const token = getAuthToken();
     const formData = new FormData();
     formData.append('file', file);
@@ -235,7 +236,7 @@ export const api = {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
     });
-    return handleResponse<{ file_url: string, clip_type: 'audio' }>(response);
+    return handleResponse<VoiceMessageUploadResponse>(response);
   },
 
   // PWA SHORTCUT ACTIONS

@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -30,6 +30,14 @@ interface MessageBubbleProps {
   onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
   allUsers: Record<string, User>;
 }
+
+function formatDuration(seconds: number | null | undefined): string {
+    if (seconds === null || seconds === undefined) return '';
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
 
 function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers }: MessageBubbleProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -95,13 +103,21 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const renderMessageContent = () => {
     if (message.clip_url && message.clip_type === 'audio') {
         return (
-            <audio
-                controls
-                src={message.clip_url}
-                className="w-full max-w-[250px] h-10"
-            >
-                Your browser does not support the audio element.
-            </audio>
+            <div className="flex items-center gap-2">
+                <audio
+                    controls
+                    src={message.clip_url}
+                    className="w-full max-w-[250px] h-10"
+                >
+                    Your browser does not support the audio element.
+                </audio>
+                {message.duration_seconds && (
+                    <div className="flex items-center text-xs text-muted-foreground ml-2">
+                         <Clock size={12} className="mr-1" />
+                        <span>{formatDuration(message.duration_seconds)}</span>
+                    </div>
+                )}
+            </div>
         );
     }
     if (message.clip_url && message.clip_type === 'video') {
