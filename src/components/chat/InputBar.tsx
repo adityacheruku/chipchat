@@ -27,6 +27,7 @@ interface InputBarProps {
   isSending?: boolean;
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
+  placeholder?: string;
 }
 
 const LONG_PRESS_DURATION = 300; // milliseconds
@@ -41,7 +42,8 @@ export default function InputBar({
   onSendDocument,
   isSending = false,
   onTyping,
-  disabled = false
+  disabled = false,
+  placeholder = "Type a message...",
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
@@ -97,7 +99,7 @@ export default function InputBar({
 
   const handleStickerSelect = (stickerUrl: string) => {
     if (disabled) return;
-    onSendSticker(stickerUrl);
+    onStickerSelect(stickerUrl);
     setIsStickerPickerOpen(false);
   };
 
@@ -338,7 +340,7 @@ export default function InputBar({
 
             <Input
                 type="text"
-                placeholder={disabled ? "Waiting for a chat partner..." : "Type a message..."}
+                placeholder={placeholder}
                 value={messageText}
                 onChange={handleTextChange}
                 onBlur={handleBlur}

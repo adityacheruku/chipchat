@@ -611,7 +611,22 @@ export default function ChatPage() {
     sessionStorage.setItem('notificationPromptDismissed', 'true');
   }, []);
 
+  const getPlaceholderAndDisabledState = useCallback(() => {
+    if (!isBrowserOnline) {
+      return { placeholder: "You are offline. Please reconnect.", disabled: true };
+    }
+    if (!isWsConnected) {
+      return { placeholder: "Connecting to chat service...", disabled: true };
+    }
+    if (!otherUser || !activeChat) {
+      return { placeholder: "Initializing chat...", disabled: true };
+    }
+    return { placeholder: "Type a message...", disabled: false };
+  }, [isBrowserOnline, isWsConnected, otherUser, activeChat]);
+
+  const { placeholder: inputPlaceholder, disabled: isInputDisabled } = getPlaceholderAndDisabledState();
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
+
   if (isLoadingPage) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -648,7 +663,6 @@ export default function ChatPage() {
 
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
   const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {};
-  const disabled = !otherUser || !activeChat || !isWsConnected;
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
@@ -699,7 +713,8 @@ export default function ChatPage() {
                 onSendDocument={handleSendDocument}
                 isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
-                disabled={disabled || !isBrowserOnline || !isWsConnected}
+                disabled={isInputDisabled}
+                placeholder={inputPlaceholder}
               />
             </div>
           </ErrorBoundary>
