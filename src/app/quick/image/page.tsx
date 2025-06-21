@@ -91,7 +91,11 @@ export default function QuickImagePage() {
       const uploadRes = await api.uploadChatImage(selectedFile);
       // After upload, send message via API (or ideally WebSocket if useWebSocket hook was available here)
       // For simplicity, using HTTP POST. A WebSocket message would be better for real-time.
-      await api.sendMessageHttp(recipientChat.id, { image_url: uploadRes.image_url });
+      await api.sendMessageHttp(recipientChat.id, { 
+        image_url: uploadRes.image_url,
+        image_thumbnail_url: uploadRes.image_thumbnail_url,
+        message_subtype: 'image'
+      });
       
       toast({
         title: "Image Sent!",

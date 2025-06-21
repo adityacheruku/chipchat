@@ -220,10 +220,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const alignmentClass = isCurrentUser ? 'items-end' : 'items-start';
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
-  
-  const hasSticker = !!message.sticker_image_url;
-  const contentBubbleColor = hasSticker ? 'bg-transparent' : cn(bubbleColorClass, bubbleBorderRadius);
-
+  const isStickerMessage = message.message_subtype === 'sticker';
 
   let formattedTime = "sending...";
   try {
@@ -238,60 +235,75 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   }
 
   const renderMessageContent = () => {
-    if (hasSticker) {
-      return (
-        <Image
-          src={message.sticker_image_url!}
-          alt={`Sticker: ${sender.display_name} sent a sticker.`}
-          width={128}
-          height={128}
-          className="bg-transparent"
-          unoptimized
-        />
-      );
-    }
-    if (message.clip_url && message.clip_type === 'audio') {
-        return <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} />;
-    }
-    if (message.clip_url && message.clip_type === 'video') {
-      return (
-        <div className="flex items-center gap-2">
-          <PlayCircle size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
-          <a href={message.clip_url} target="_blank" rel="noopener noreferrer" className="text-sm italic underline hover:opacity-80">
-            {message.clip_placeholder_text || `View ${message.clip_type} clip`}
-          </a>
-        </div>
-      );
-    }
-    if (message.image_url) {
-      const imageUrl = message.image_thumbnail_url || message.image_url;
-      return (
-        <a href={message.image_url} target="_blank" rel="noopener noreferrer" className="block max-w-xs">
+    switch (message.message_subtype) {
+      case 'sticker':
+        return message.sticker_image_url ? (
           <Image
-              src={imageUrl}
-              alt="Chat image"
-              width={200}
-              height={150}
-              className="rounded-md object-cover cursor-pointer hover:opacity-80"
-              data-ai-hint="chat photo"
+            src={message.sticker_image_url}
+            alt={`Sticker: ${sender.display_name} sent a sticker.`}
+            width={128}
+            height={128}
+            className="bg-transparent"
+            unoptimized
           />
-        </a>
-      );
+        ) : null;
+
+      case 'voice_message':
+      case 'clip':
+        if (message.clip_url && message.clip_type === 'audio') {
+          return <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} />;
+        }
+        if (message.clip_url && message.clip_type === 'video') {
+          return (
+            <div className="flex items-center gap-2">
+              <PlayCircle size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
+              <a href={message.clip_url} target="_blank" rel="noopener noreferrer" className="text-sm italic underline hover:opacity-80">
+                {message.clip_placeholder_text || `View ${message.clip_type} clip`}
+              </a>
+            </div>
+          );
+        }
+        return <p className="text-sm italic text-muted-foreground">Clip content not available</p>;
+
+      case 'image':
+        if (message.image_url) {
+            const imageUrl = message.image_thumbnail_url || message.image_url;
+            return (
+                <a href={message.image_url} target="_blank" rel="noopener noreferrer" className="block max-w-xs">
+                <Image
+                    src={imageUrl}
+                    alt="Chat image"
+                    width={200}
+                    height={150}
+                    className="rounded-md object-cover cursor-pointer hover:opacity-80"
+                    data-ai-hint="chat photo"
+                />
+                </a>
+            );
+        }
+        return <p className="text-sm italic text-muted-foreground">Image content not available</p>;
+
+      case 'document':
+        if (message.document_url) {
+            return (
+                <div className="flex items-center gap-2">
+                <FileText size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
+                <a href={message.document_url} target="_blank" rel="noopener noreferrer" className="text-sm italic underline hover:opacity-80">
+                    {message.document_name || 'View Document'}
+                </a>
+                </div>
+            );
+        }
+        return <p className="text-sm italic text-muted-foreground">Document content not available</p>;
+      
+      case 'text':
+      case 'emoji_only':
+      default:
+        if (message.text) {
+          return <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>;
+        }
+        return <p className="text-sm italic text-muted-foreground">Message content not available</p>;
     }
-    if (message.document_url) {
-      return (
-        <div className="flex items-center gap-2">
-          <FileText size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />
-          <a href={message.document_url} target="_blank" rel="noopener noreferrer" className="text-sm italic underline hover:opacity-80">
-            {message.document_name || 'View Document'}
-          </a>
-        </div>
-      );
-    }
-    if (message.text) {
-      return <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>;
-    }
-    return <p className="text-sm italic text-muted-foreground">Message content not available</p>;
   };
 
   return (
@@ -313,7 +325,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           )}
           <div className={cn(
             'p-3 rounded-xl shadow min-w-[80px]',
-            hasSticker ? 'bg-transparent p-0 shadow-none' : cn(bubbleColorClass, bubbleBorderRadius)
+            isStickerMessage ? 'bg-transparent p-0 shadow-none' : cn(bubbleColorClass, bubbleBorderRadius)
             )}>
             {renderMessageContent()}
           </div>

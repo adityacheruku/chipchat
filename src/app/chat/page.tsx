@@ -346,7 +346,8 @@ export default function ChatPage() {
       updated_at: new Date().toISOString(),
       reactions: {},
       client_temp_id: clientTempId,
-      status: "sending" as MessageStatus, 
+      status: "sending" as MessageStatus,
+      message_subtype: "text",
     };
     setMessages(prev => [...prev, optimisticMessage].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
 
@@ -355,7 +356,8 @@ export default function ChatPage() {
       event_type: "send_message",
       chat_id: activeChat.id,
       text,
-      client_temp_id: clientTempId, 
+      client_temp_id: clientTempId,
+      message_subtype: "text",
     });
     addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0,30)}"`, currentUser.id, currentUser.display_name);
 
@@ -386,6 +388,7 @@ export default function ChatPage() {
         chat_id: activeChat.id,
         sticker_id: stickerId,
         client_temp_id: clientTempId,
+        message_subtype: "sticker",
     });
     addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
   };
@@ -407,6 +410,7 @@ export default function ChatPage() {
             clip_url: uploadResponse.file_url,
             clip_placeholder_text: placeholderText,
             client_temp_id: clientTempId,
+            message_subtype: "clip",
         });
         addAppEvent('moodClipSent', `${currentUser.display_name} sent a ${clipType} clip.`, currentUser.id, currentUser.display_name);
         toast({ title: "Mood Clip Sent!" });
@@ -427,6 +431,7 @@ export default function ChatPage() {
         image_url,
         image_thumbnail_url,
         client_temp_id: clientTempId,
+        message_subtype: "image",
       });
       addAppEvent('messageSent', `${currentUser.display_name} sent an image.`, currentUser.id, currentUser.display_name);
       toast({ title: "Image Sent!" });
@@ -447,6 +452,7 @@ export default function ChatPage() {
         document_url: uploadResponse.file_url,
         document_name: uploadResponse.file_name,
         client_temp_id: clientTempId,
+        message_subtype: "document",
       });
       addAppEvent('messageSent', `${currentUser.display_name} sent a document: ${uploadResponse.file_name}.`, currentUser.id, currentUser.display_name);
       toast({ title: "Document Sent!" });
@@ -466,6 +472,7 @@ export default function ChatPage() {
       const payload: Record<string, any> = {
           event_type: "send_message",
           chat_id: activeChat.id,
+          message_subtype: "voice_message",
           clip_type: 'audio',
           clip_url: uploadResponse.file_url,
           clip_placeholder_text: placeholderText,

@@ -24,6 +24,7 @@ export interface UserInToken extends User {}
 
 export type MessageClipType = 'audio' | 'video';
 export type MessageStatus = "sending" | "sent_to_server" | "delivered_to_recipient" | "read_by_recipient" | "failed";
+export type MessageSubtype = 'text' | 'sticker' | 'clip' | 'image' | 'document' | 'voice_message' | 'emoji_only';
 
 
 export interface Message {
@@ -34,6 +35,7 @@ export interface Message {
   created_at: string; 
   updated_at: string; 
   reactions?: Partial<Record<SupportedEmoji, string[] /* User IDs */>> | null;
+  message_subtype?: MessageSubtype | null;
   clip_type?: MessageClipType | null;
   clip_placeholder_text?: string | null;
   clip_url?: string | null;
