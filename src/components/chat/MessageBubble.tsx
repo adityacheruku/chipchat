@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot, AlertCircle } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { useState, useEffect, useRef, memo } from 'react';
+import { useToast } from '@/hooks/use-toast';
 
 interface MessageBubbleProps {
   message: Message;
@@ -45,6 +46,8 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
     const [duration, setDuration] = useState(initialDuration || 0);
     const [currentTime, setCurrentTime] = useState(0);
     const [hasBeenPlayed, setHasBeenPlayed] = useState(false);
+    const [hasError, setHasError] = useState(false);
+    const { toast } = useToast();
 
     const handlePlayPause = () => {
         if (!audioRef.current) return;
@@ -82,6 +85,17 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
         }
     };
 
+    const handleError = () => {
+        console.error(`AudioPlayer: Failed to load audio source: ${src}`);
+        toast({
+            variant: "destructive",
+            title: "Playback Error",
+            description: "Could not load the audio message. It may be corrupt or unavailable.",
+        });
+        setHasError(true);
+    };
+
+
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
@@ -98,16 +112,28 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
         audio.addEventListener('timeupdate', handleTimeUpdate);
         audio.addEventListener('loadedmetadata', handleLoadedMetadata);
         audio.addEventListener('ended', () => setIsPlaying(false));
+        audio.addEventListener('error', handleError);
 
         return () => {
             document.removeEventListener('audio-play', handleGlobalPlay);
             audio.removeEventListener('timeupdate', handleTimeUpdate);
             audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
             audio.removeEventListener('ended', () => setIsPlaying(false));
+            audio.removeEventListener('error', handleError);
         };
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [src]);
 
     const playerColorClass = isCurrentUser ? 'text-primary-foreground' : 'text-secondary-foreground';
+
+    if (hasError) {
+        return (
+            <div className={cn("flex items-center gap-2 text-destructive", isCurrentUser ? "text-red-300" : "text-red-500")}>
+                <AlertCircle size={18} />
+                <span className="text-sm">Audio failed to load</span>
+            </div>
+        );
+    }
     
     return (
         <div className={cn("flex items-center gap-3 w-full max-w-[250px]", playerColorClass)}>
@@ -363,5 +389,3 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 }
 
 export default memo(MessageBubble);
-
-    
