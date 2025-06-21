@@ -2,7 +2,7 @@
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile, Mic, Plus, Loader2, X, Image as ImageIconLucide } from 'lucide-react'; 
+import { Send, Smile, Mic, Plus, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin } from 'lucide-react'; 
 import {
   Tooltip,
   TooltipContent,
@@ -35,6 +35,7 @@ export default function InputBar({
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -66,16 +67,18 @@ export default function InputBar({
     }
   };
 
-  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, attachmentType: MessageClipType | 'image') => {
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, attachmentType: 'audio' | 'media') => {
     if (disabled) return;
     const file = event.target.files?.[0];
     if (file) {
-        if (attachmentType === 'image' && onSendImage) {
-            if (!file.type.startsWith('image/')) {
-                toast({variant: 'destructive', title: 'Invalid File', description: 'Please select an image file.'});
-                return;
+        if (attachmentType === 'media' && onSendImage) {
+            if (file.type.startsWith('image/')) {
+                onSendImage(file);
+            } else if (file.type.startsWith('video/')) {
+                onSendMoodClip('video', file);
+            } else {
+                 toast({variant: 'destructive', title: 'Invalid File', description: 'Please select an image or video file.'});
             }
-            onSendImage(file);
         } else if (attachmentType === 'audio') { 
              if (!file.type.startsWith('audio/')) {
                 toast({variant: 'destructive', title: 'Invalid File', description: 'Please select an audio file.'});
@@ -202,6 +205,24 @@ export default function InputBar({
                 autoComplete="off"
                 disabled={isSending || disabled || isLongPressActive}
             />
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            type="button"
+                            className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
+                            aria-label="Use camera"
+                            disabled={isSending || disabled || isLongPressActive || !onSendImage}
+                            onClick={() => cameraInputRef.current?.click()}
+                        >
+                            <Camera size={22} />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Use Camera</p></TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
             <Button 
                 type="button" // Changed from submit to prevent form submission on mousedown
                 size="icon" 
@@ -218,20 +239,47 @@ export default function InputBar({
                 <span className="sr-only">{isSending ? "Sending..." : sendButtonLabel}</span>
             </Button>
         </form>
+        <input type="file" ref={cameraInputRef} accept="image/*" capture className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
+        <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
+        <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileSelect(e, 'audio')} />
 
         {showAttachmentOptions && !disabled && !isLongPressActive && (
-            <div className="flex justify-around p-2 border-t mt-2 space-x-2">
-                <Button variant="outline" size="sm" onClick={() => audioInputRef.current?.click()} className="flex-1">
-                    <Mic size={16} className="mr-2"/> Audio
-                </Button>
-                <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileSelect(e, 'audio')} />
+             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2 border-t mt-2">
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" className="flex flex-col h-auto py-3 items-center justify-center" disabled>
+                                <FileText size={24} className="mb-1 text-blue-500"/>
+                                <span className="text-xs font-normal text-muted-foreground">Document</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Coming Soon!</p></TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
                 
                 {onSendImage && (
-                     <Button variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} className="flex-1">
-                        <ImageIconLucide size={16} className="mr-2"/> Image
+                     <Button variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
+                        <ImageIconLucide size={24} className="mb-1 text-purple-500"/>
+                         <span className="text-xs font-normal text-muted-foreground">Photo/Video</span>
                     </Button>
                 )}
-                <input type="file" ref={imageInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileSelect(e, 'image')} />
+               
+                <Button variant="outline" size="sm" onClick={() => audioInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
+                    <Mic size={24} className="mb-1 text-red-500"/>
+                    <span className="text-xs font-normal text-muted-foreground">Audio</span>
+                </Button>
+               
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" className="flex flex-col h-auto py-3 items-center justify-center" disabled>
+                                <MapPin size={24} className="mb-1 text-green-500"/>
+                                 <span className="text-xs font-normal text-muted-foreground">Location</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Coming Soon!</p></TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </div>
         )}
     </div>

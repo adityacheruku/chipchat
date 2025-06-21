@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { WebSocketEventData, Message, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, User, Mood, HeartbeatClientEvent } from '@/types';
 import { useToast } from './use-toast';
 
-const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL || 'ws://localhost:8000';
+const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL ;
 const INITIAL_RECONNECT_INTERVAL = 1000;
 const MAX_RECONNECT_INTERVAL = 30000;
 const MAX_RECONNECT_ATTEMPTS = 10;
