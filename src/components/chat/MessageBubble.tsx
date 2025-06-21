@@ -93,7 +93,18 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   }
 
   const renderMessageContent = () => {
-    if (message.clip_url && message.clip_type) {
+    if (message.clip_url && message.clip_type === 'audio') {
+        return (
+            <audio
+                controls
+                src={message.clip_url}
+                className="w-full max-w-[250px] h-10"
+            >
+                Your browser does not support the audio element.
+            </audio>
+        );
+    }
+    if (message.clip_url && message.clip_type === 'video') {
       return (
         <div className="flex items-center gap-2">
           <PlayCircle size={24} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80")} />

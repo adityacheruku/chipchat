@@ -2,7 +2,7 @@
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile, Mic, Plus, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin, Paperclip } from 'lucide-react'; 
+import { Send, Smile, Mic, Plus, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin, Paperclip, Trash2, StopCircle, Play } from 'lucide-react'; 
 import {
   Tooltip,
   TooltipContent,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { MessageClipType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface InputBarProps {
   onSendMessage: (text: string) => void;
@@ -22,7 +23,7 @@ interface InputBarProps {
   disabled?: boolean; 
 }
 
-const LONG_PRESS_DURATION = 500; // milliseconds
+const LONG_PRESS_DURATION = 300; // milliseconds
 
 export default function InputBar({ 
   onSendMessage, 
@@ -35,18 +36,31 @@ export default function InputBar({
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  
+  // State for voice recording
+  type RecordingStatus = 'idle' | 'permission_requested' | 'recording' | 'recorded' | 'sending';
+  const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>('idle');
+  const [audioURL, setAudioURL] = useState<string | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  
+  // Refs for recording logic
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Refs for file inputs
   const audioInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
+  
   const { toast } = useToast();
-
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [isLongPressActive, setIsLongPressActive] = useState(false);
-
+  
   const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (messageText.trim() && !isSending && !disabled && !isLongPressActive) {
+    if (messageText.trim() && !isSending && !disabled) {
       onSendMessage(messageText.trim());
       setMessageText('');
       onTyping(false);
@@ -96,66 +110,159 @@ export default function InputBar({
     if(event.target) event.target.value = "";
   };
 
-  const startLongPressTimer = () => {
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = setTimeout(() => {
-      if (messageText.trim() === '') { // Only activate long press for voice if input is empty
-        console.log("Long press detected on send button - initiate voice recording (placeholder)");
-        setIsLongPressActive(true);
-        // TODO: Implement actual voice recording start and UI changes
-        // For now, just logging and setting state
+  // --- Voice Recording Logic ---
+
+  const cleanupRecording = () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
       }
+      if (audioURL) URL.revokeObjectURL(audioURL);
+
+      mediaRecorderRef.current = null;
+      audioChunksRef.current = [];
+      setRecordingStatus('idle');
+      setAudioBlob(null);
+      setAudioURL(null);
+      setRecordingSeconds(0);
+  };
+  
+  const handleStartRecording = async () => {
+    if (recordingStatus !== 'idle') return;
+
+    setRecordingStatus('permission_requested');
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+
+        mediaRecorderRef.current.ondataavailable = (event) => {
+            audioChunksRef.current.push(event.data);
+        };
+
+        mediaRecorderRef.current.onstop = () => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            setAudioBlob(audioBlob);
+            setAudioURL(audioUrl);
+            setRecordingStatus('recorded');
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+            // Clean up the stream tracks
+            stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorderRef.current.start();
+        setRecordingStatus('recording');
+        timerIntervalRef.current = setInterval(() => {
+            setRecordingSeconds(prev => prev + 1);
+        }, 1000);
+
+    } catch (err) {
+        console.error("Microphone access denied:", err);
+        toast({
+            variant: 'destructive',
+            title: 'Microphone Access Denied',
+            description: 'Please enable microphone permissions in your browser settings to record voice messages.',
+        });
+        cleanupRecording();
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+    }
+  };
+
+  const handleDeletePreview = () => {
+      cleanupRecording();
+  };
+
+  const handleSendVoiceMessage = () => {
+      if (audioBlob) {
+        setRecordingStatus('sending');
+        // Convert blob to file to send
+        const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
+        onSendMoodClip('audio', audioFile);
+        
+        // Cleanup after a short delay to allow sending process to start
+        setTimeout(() => {
+            cleanupRecording();
+        }, 500);
+      }
+  };
+
+  // Long press logic on the main send/mic button
+  const handleButtonPress = () => {
+    if (disabled || isSending || messageText.trim() !== '') return;
+    
+    longPressTimerRef.current = setTimeout(() => {
+        handleStartRecording();
     }, LONG_PRESS_DURATION);
   };
 
-  const clearLongPressTimer = (isSubmittingText: boolean = false) => {
+  const handleButtonRelease = () => {
     if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    if (isLongPressActive) {
-        console.log("Long press ended / Voice recording ended (placeholder)");
-        // TODO: Implement voice recording stop & send/cancel logic
-    } else if (isSubmittingText && messageText.trim() && !isSending && !disabled) {
-        // If not a long press and there's text, send the message
-        onSendMessage(messageText.trim());
-        setMessageText('');
-        onTyping(false);
-    }
-    setIsLongPressActive(false);
-  };
-  
-  useEffect(() => {
-    // Cleanup timer on component unmount
-    return () => {
-      if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
-      }
+    }
+    if (recordingStatus === 'recording') {
+        handleStopRecording();
+    }
+  };
+
+  useEffect(() => {
+    // Cleanup timers on component unmount
+    return () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, []);
-
-  const handleSendButtonMouseDown = () => {
-    if (disabled || isSending) return;
-    startLongPressTimer();
-  };
-
-  const handleSendButtonMouseUp = () => {
-    if (disabled || isSending) return;
-    clearLongPressTimer(true); // Pass true to indicate potential text submission
-  };
-
-  const handleSendButtonTouchStart = () => {
-     if (disabled || isSending) return;
-     startLongPressTimer();
-  };
-
-  const handleSendButtonTouchEnd = () => {
-     if (disabled || isSending) return;
-     clearLongPressTimer(true); // Pass true to indicate potential text submission
-  };
   
   const sendButtonIcon = messageText.trim() === '' ? <Mic size={20} /> : <Send size={20} />;
-  const sendButtonLabel = messageText.trim() === '' ? (isLongPressActive ? "Recording..." : "Hold to record voice") : "Send message";
+
+  // Render different UI based on recording status
+  if (recordingStatus === 'recording' || recordingStatus === 'permission_requested') {
+    return (
+        <div className="p-3 border-t border-border bg-card rounded-b-lg flex items-center justify-between animate-pulse">
+            <div className="flex items-center gap-2 text-destructive">
+                <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                </span>
+                <span>Recording... {new Date(recordingSeconds * 1000).toISOString().substr(14, 5)}</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleStopRecording} className="text-destructive hover:bg-destructive/10">
+                <StopCircle size={24} />
+            </Button>
+        </div>
+    )
+  }
+
+  if (recordingStatus === 'recorded' && audioURL) {
+      return (
+         <div className="p-3 border-t border-border bg-card rounded-b-lg flex items-center justify-between gap-2">
+            <Button variant="ghost" size="icon" onClick={handleDeletePreview} className="text-destructive hover:bg-destructive/10 rounded-full">
+                <Trash2 size={20} />
+            </Button>
+            <audio src={audioURL} controls className="flex-grow w-full max-w-xs h-10" />
+             <Button size="icon" onClick={handleSendVoiceMessage} className="bg-accent hover:bg-accent/90 rounded-full">
+                <Send size={20} />
+            </Button>
+        </div>
+      )
+  }
+
+  if (recordingStatus === 'sending') {
+     return (
+        <div className="p-3 border-t border-border bg-card rounded-b-lg flex items-center justify-center gap-2">
+            <Loader2 className="animate-spin" />
+            <span className="text-muted-foreground">Sending voice message...</span>
+        </div>
+     )
+  }
 
   return (
     <div className="p-3 border-t border-border bg-card rounded-b-lg">
@@ -170,7 +277,7 @@ export default function InputBar({
                         onClick={() => setShowAttachmentOptions(!showAttachmentOptions)}
                         className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
                         aria-label={showAttachmentOptions ? "Close attachments menu" : "Open attachments menu"}
-                        disabled={isSending || disabled || isLongPressActive}
+                        disabled={isSending || disabled}
                         >
                         {showAttachmentOptions ? <X size={22} /> : <Paperclip size={22} />}
                     </Button>
@@ -189,7 +296,7 @@ export default function InputBar({
                     type="button" 
                     className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
                     aria-label="Open emoji picker (coming soon)"
-                    disabled={isSending || disabled || isLongPressActive}
+                    disabled={isSending || disabled}
                     >
                     <Smile size={22} />
                     </Button>
@@ -202,13 +309,13 @@ export default function InputBar({
 
             <Input
                 type="text"
-                placeholder={disabled ? "Waiting for a chat partner..." : (isLongPressActive ? "Recording voice..." : "Type a message...")}
+                placeholder={disabled ? "Waiting for a chat partner..." : "Type a message..."}
                 value={messageText}
                 onChange={handleTextChange}
                 onBlur={handleBlur}
                 className="flex-grow bg-card border-input focus-visible:ring-ring"
                 autoComplete="off"
-                disabled={isSending || disabled || isLongPressActive}
+                disabled={isSending || disabled}
             />
             <TooltipProvider>
                 <Tooltip>
@@ -219,7 +326,7 @@ export default function InputBar({
                             type="button"
                             className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
                             aria-label="Use camera"
-                            disabled={isSending || disabled || isLongPressActive || !onSendImage}
+                            disabled={isSending || disabled || !onSendImage}
                             onClick={() => cameraInputRef.current?.click()}
                         >
                             <Camera size={22} />
@@ -229,19 +336,19 @@ export default function InputBar({
                 </Tooltip>
             </TooltipProvider>
             <Button 
-                type="button" // Changed from submit to prevent form submission on mousedown
+                type="button"
                 size="icon" 
                 className="bg-accent hover:bg-accent/90 active:bg-accent/80 text-accent-foreground rounded-full focus-visible:ring-ring w-10 h-10 flex-shrink-0"
-                disabled={isSending || disabled || (messageText.trim() === '' && isLongPressActive)} // Disable if recording and no text
-                onMouseDown={handleSendButtonMouseDown}
-                onMouseUp={handleSendButtonMouseUp}
-                onTouchStart={handleSendButtonTouchStart}
-                onTouchEnd={handleSendButtonTouchEnd}
-                onContextMenu={(e) => e.preventDefault()} // Prevent context menu on long press
-                aria-label={sendButtonLabel}
+                disabled={isSending || disabled}
+                onClick={messageText.trim() ? () => handleFormSubmit(new Event('submit', {cancelable: true}) as unknown as FormEvent<HTMLFormElement>) : undefined}
+                onMouseDown={handleButtonPress}
+                onMouseUp={handleButtonRelease}
+                onTouchStart={handleButtonPress}
+                onTouchEnd={handleButtonRelease}
+                onContextMenu={(e) => e.preventDefault()}
+                aria-label={messageText.trim() ? "Send message" : "Hold to record voice"}
             >
                 {isSending ? <Loader2 size={20} className="animate-spin" /> : sendButtonIcon}
-                <span className="sr-only">{isSending ? "Sending..." : sendButtonLabel}</span>
             </Button>
         </form>
         <input type="file" ref={cameraInputRef} accept="image/*" capture className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
@@ -249,7 +356,7 @@ export default function InputBar({
         <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileSelect(e, 'audio')} />
         <input type="file" ref={documentInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileSelect(e, 'document')} />
 
-        {showAttachmentOptions && !disabled && !isLongPressActive && (
+        {showAttachmentOptions && !disabled && (
              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2 border-t mt-2">
                 <Button variant="outline" size="sm" onClick={() => documentInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
                     <FileText size={24} className="mb-1 text-blue-500"/>
