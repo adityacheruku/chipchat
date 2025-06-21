@@ -62,7 +62,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   
   const handleReactionSelect = (emoji: SupportedEmoji) => {
     onToggleReaction(message.id, emoji);
-    setIsPickerOpen(false); // This is the key fix
+    setIsPickerOpen(false);
   };
 
   const getReactorNames = (reactors: string[] | undefined) => {
@@ -104,10 +104,11 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       );
     }
     if (message.image_url) {
+      const imageUrl = message.image_thumbnail_url || message.image_url;
       return (
         <a href={message.image_url} target="_blank" rel="noopener noreferrer" className="block max-w-xs">
           <Image 
-              src={message.image_url} 
+              src={imageUrl} 
               alt="Chat image" 
               width={200} 
               height={150} 

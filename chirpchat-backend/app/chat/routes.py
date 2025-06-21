@@ -218,7 +218,7 @@ async def send_message_http(
     message_create: MessageCreate,
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Payload: text='{message_create.text[:20]}...', image_url='{message_create.image_url}', clip_url='{message_create.clip_url}', document_url='{message_create.document_url}', client_temp_id='{message_create.client_temp_id}'")
+    logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Payload: text='{message_create.text[:20] if message_create.text else ''}...', image_url='{message_create.image_url}', clip_url='{message_create.clip_url}', document_url='{message_create.document_url}', client_temp_id='{message_create.client_temp_id}'")
     participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp_obj or not participant_check_resp_obj.data:
         logger.warning(f"User {current_user.id} forbidden to send message to chat {chat_id} - not a participant.")
@@ -236,6 +236,7 @@ async def send_message_http(
         "clip_placeholder_text": message_create.clip_placeholder_text,
         "clip_url": message_create.clip_url,
         "image_url": message_create.image_url,
+        "image_thumbnail_url": message_create.image_thumbnail_url,
         "document_url": message_create.document_url,
         "document_name": message_create.document_name,
         "client_temp_id": message_create.client_temp_id, 

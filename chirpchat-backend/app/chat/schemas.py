@@ -24,6 +24,7 @@ class MessageBase(BaseModel):
     clip_placeholder_text: Optional[str] = None
     clip_url: Optional[str] = None
     image_url: Optional[str] = None
+    image_thumbnail_url: Optional[str] = None # For optimized image loading
     document_url: Optional[str] = None
     document_name: Optional[str] = None
 

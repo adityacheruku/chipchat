@@ -37,6 +37,7 @@ export interface Message {
   clip_placeholder_text?: string | null;
   clip_url?: string | null;
   image_url?: string | null;
+  image_thumbnail_url?: string | null; // For optimized image loading
   document_url?: string | null;
   document_name?: string | null;
   client_temp_id?: string | null; // Client-generated temporary ID

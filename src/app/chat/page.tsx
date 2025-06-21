@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageStatus } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
@@ -24,6 +24,8 @@ import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { Loader2, MessagesSquare, WifiOff } from 'lucide-react';
 import ReactionSummaryModal from '@/components/chat/ReactionSummaryModal';
+
+const MemoizedMessageArea = memo(MessageArea);
 
 export default function ChatPage() {
   const router = useRouter();
@@ -235,19 +237,24 @@ export default function ChatPage() {
     }
   }, [activeChat]);
 
-  const handleSendThought = async () => {
-    if (!currentUser || !otherUser || !isWsConnected) return;
+  const handleSendThought = useCallback(async () => {
+    if (!currentUser || !otherUser) return;
     try {
-      sendWsMessage({
-          event_type: "ping_thinking_of_you",
-          recipient_user_id: otherUser.id,
-      });
+      if (isWsConnected) {
+        sendWsMessage({
+            event_type: "ping_thinking_of_you",
+            recipient_user_id: otherUser.id,
+        });
+      } else {
+        // Fallback to HTTP if WebSocket is not connected
+        await api.sendThinkingOfYouPing(otherUser.id);
+      }
       initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
       addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Ping Failed', description: error.message });
     }
-  };
+  }, [currentUser, otherUser, isWsConnected, sendWsMessage, initiateThoughtNotification, addAppEvent, toast]);
 
   const handleWSThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
     if (otherUser && data.sender_id === otherUser.id) {
@@ -368,11 +375,12 @@ export default function ChatPage() {
     toast({ title: "Uploading image..." });
     const clientTempId = `temp_img_${Date.now()}`;
     try {
-      const uploadResponse = await api.uploadChatImage(file);
+      const { image_url, image_thumbnail_url } = await api.uploadChatImage(file);
       sendWsMessage({
         event_type: "send_message",
         chat_id: activeChat.id,
-        image_url: uploadResponse.image_url,
+        image_url,
+        image_thumbnail_url,
         client_temp_id: clientTempId,
       });
       addAppEvent('messageSent', `${currentUser.display_name} sent an image.`, currentUser.id, currentUser.display_name);
@@ -402,19 +410,18 @@ export default function ChatPage() {
     }
   };
 
-  const handleToggleReaction = (messageId: string, emoji: SupportedEmoji) => {
+  const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
-    const RATE_LIMIT_MS = 500; // Allow toggles a bit faster for better UX
+    
+    const RATE_LIMIT_MS = 500;
     const key = `${messageId}_${emoji}`;
     const now = Date.now();
 
     if (lastReactionToggleTimes.current[key] && (now - lastReactionToggleTimes.current[key] < RATE_LIMIT_MS)) {
-      // Silently ignore rapid toggles to prevent spamming the optimistic UI and backend
-      return;
+      return; 
     }
     lastReactionToggleTimes.current[key] = now;
 
-    // Optimistic UI Update
     setMessages(prevMessages => 
       prevMessages.map(msg => {
         if (msg.id === messageId) {
@@ -424,13 +431,11 @@ export default function ChatPage() {
           const userReactedIndex = newReactions[emoji].indexOf(currentUser.id);
 
           if (userReactedIndex > -1) {
-            // User is removing their reaction
             newReactions[emoji].splice(userReactedIndex, 1);
             if (newReactions[emoji].length === 0) {
               delete newReactions[emoji];
             }
           } else {
-            // User is adding a reaction
             newReactions[emoji].push(currentUser.id);
           }
           return { ...msg, reactions: newReactions };
@@ -439,7 +444,6 @@ export default function ChatPage() {
       })
     );
 
-    // Send update to the server in the background
     sendWsMessage({
       event_type: "toggle_reaction",
       message_id: messageId,
@@ -448,7 +452,7 @@ export default function ChatPage() {
     });
 
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
-  };
+  }, [currentUser, activeChat, isWsConnected, otherUser, sendWsMessage, addAppEvent]);
 
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
     if (!currentUser) return;
@@ -631,7 +635,7 @@ export default function ChatPage() {
                 isOtherUserTyping={!!otherUserIsTyping}
               />
               {otherUser && activeChat ? (
-                <MessageArea
+                <MemoizedMessageArea
                   messages={messages}
                   currentUser={currentUser}
                   allUsers={allUsersForMessageArea}

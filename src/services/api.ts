@@ -11,7 +11,7 @@ import type {
 } from '@/types';
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://192.168.29.167:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://192.168.29.167:8000';
 
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -162,7 +162,7 @@ export const api = {
     return handleResponse<{messages: Message[]}>(response);
   },
 
-  sendMessageHttp: async (chatId: string, messageData: { text?: string; clip_type?: string; clip_placeholder_text?: string; clip_url?: string; image_url?: string; document_url?: string; document_name?: string; client_temp_id?: string }): Promise<Message> => {
+  sendMessageHttp: async (chatId: string, messageData: Partial<Omit<Message, 'id' | 'user_id' | 'chat_id' | 'created_at' | 'updated_at' | 'reactions'>>): Promise<Message> => {
     const token = getAuthToken();
     const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, {
       method: 'POST',
@@ -189,7 +189,7 @@ export const api = {
   },
 
   // UPLOADS
-  uploadChatImage: async (file: File): Promise<{ image_url: string }> => {
+  uploadChatImage: async (file: File): Promise<{ image_url: string; image_thumbnail_url: string; }> => {
     const token = getAuthToken();
     const formData = new FormData();
     formData.append('file', file);
@@ -198,7 +198,7 @@ export const api = {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
     });
-    return handleResponse<{ image_url: string }>(response);
+    return handleResponse<{ image_url: string; image_thumbnail_url: string; }>(response);
   },
 
   uploadMoodClip: async (file: File, clip_type: 'audio' | 'video'): Promise<{ file_url: string, clip_type: string }> => {

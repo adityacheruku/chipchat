@@ -75,16 +75,28 @@ async def upload_chat_image(
     file: UploadFile = File(...),
     current_user: UserPublic = Depends(get_current_active_user), 
 ):
-    logger.info(f"Route /uploads/chat_image called by user {current_user.id} for file {file.filename} (e.g., from PWA shortcut)")
-    validate_image_upload(file) 
+    logger.info(f"Route /uploads/chat_image called by user {current_user.id} for file {file.filename}")
+    validate_image_upload(file)
+    # Eager transformation for thumbnails
+    eager_transformations = [
+      {"width": 200, "height": 200, "crop": "limit"}
+    ]
     try:
         result = cloudinary.uploader.upload(
             file.file, 
             folder=f"chirpchat_chat_images/user_{current_user.id}", 
-            resource_type="image"
+            resource_type="image",
+            eager=eager_transformations,
+            eager_async=True # Optional: respond faster, let transformations happen in background
             )
-        logger.info(f"Chat image {file.filename} uploaded successfully for user {current_user.id}. URL: {result.get('secure_url')}")
-        return {"image_url": result.get("secure_url")}
+        
+        # Find the URL of the eagerly transformed thumbnail
+        thumbnail_url = None
+        if 'eager' in result and len(result['eager']) > 0:
+          thumbnail_url = result['eager'][0].get('secure_url')
+
+        logger.info(f"Chat image {file.filename} uploaded for user {current_user.id}. URL: {result.get('secure_url')}, Thumbnail: {thumbnail_url}")
+        return {"image_url": result.get("secure_url"), "image_thumbnail_url": thumbnail_url}
     except Exception as e:
         logger.error(f"Cloudinary chat image upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat image upload failed: {str(e)}")
