@@ -9,7 +9,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Sticker, StickerPack } from '@/types';
 import { Clock, Search, Star, Loader2, Frown } from 'lucide-react';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { api } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '../ui/button';
@@ -54,7 +53,7 @@ const StickerGrid = ({
 
     return (
         <ScrollArea className="h-64">
-            <div className="grid grid-cols-4 gap-2 p-2">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 p-2">
                 {stickerList.map(sticker => (
                     <div key={sticker.id} className="relative group/sticker">
                         <TooltipProvider delayDuration={300}>
@@ -152,9 +151,7 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
   const fetchFavorites = useCallback(async () => {
     setStickersStatus(prev => ({...prev, favorites: 'loading'}));
     try {
-        // Toggle with a non-existent UUID to just get the current list back.
-        // A dedicated GET endpoint would be cleaner but this works with the current API.
-        const response = await api.toggleFavoriteSticker('00000000-0000-0000-0000-000000000001');
+        const response = await api.toggleFavoriteSticker('00000000-0000-0000-0000-000000000001'); // Dummy ID to fetch list
         setFavoriteStickers(response.stickers);
         setStickersStatus(prev => ({...prev, favorites: 'success'}));
     } catch (e) {
@@ -216,11 +213,12 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
   }
 
   const handleToggleFavorite = useCallback(async (stickerId: string) => {
+    const isCurrentlyFavorite = favoriteStickers.some(s => s.id === stickerId);
     try {
         const response = await api.toggleFavoriteSticker(stickerId);
-        setFavoriteStickers(response.stickers); // Update the list with the full response from the API
+        setFavoriteStickers(response.stickers);
         toast({
-            title: favoriteStickerIds.has(stickerId) ? "Removed from favorites" : "Added to favorites",
+            title: isCurrentlyFavorite ? "Removed from favorites" : "Added to favorites",
             duration: 2000,
         });
     } catch (error) {
@@ -231,12 +229,12 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
             description: "Could not update your favorites."
         });
     }
-  }, [toast, setFavoriteStickers]);
+  }, [toast, favoriteStickers]);
 
   const favoriteStickerIds = useMemo(() => new Set(favoriteStickers.map(s => s.id)), [favoriteStickers]);
 
   return (
-    <div className="w-[320px] p-2 bg-card">
+    <div className="w-[90vw] max-w-[340px] p-2 bg-card">
       <div className="relative mb-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -248,10 +246,10 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
           />
       </div>
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className={cn("grid w-full", `grid-cols-${Math.min(packs.length + 3, 6)}`)}>
+        <TabsList className={cn("grid w-full grid-cols-4 sm:grid-cols-5")}>
           <TabsTrigger value="recent" aria-label="Recent stickers"><Clock size={18} /></TabsTrigger>
           <TabsTrigger value="favorites" aria-label="Favorite stickers"><Star size={18} /></TabsTrigger>
-          {packs.map(pack => (
+          {packs.slice(0, 3).map(pack => (
             <TabsTrigger key={pack.id} value={pack.id} className="p-1" aria-label={`Sticker pack: ${pack.name}`}>
                 <Image src={pack.thumbnail_url || ''} alt={pack.name} width={24} height={24} unoptimized />
             </TabsTrigger>
@@ -267,7 +265,7 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
         </TabsContent>
         {packs.map(pack => (
           <TabsContent key={pack.id} value={pack.id}>
-             <StickerGrid stickerList={stickersByPacks[pack.id] || []} status={stickersStatus[pack.id] || 'idle'} onRetry={() => fetchStickersForPack(pack.id)} onSelect={handleSelect} onToggleFavorite={handleToggleFavorite} favoriteStickerIds={favoriteStickerIds} />
+             <StickerGrid stickerList={stickersByPack[pack.id] || []} status={stickersStatus[pack.id] || 'idle'} onRetry={() => fetchStickersForPack(pack.id)} onSelect={handleSelect} onToggleFavorite={handleToggleFavorite} favoriteStickerIds={favoriteStickerIds} />
           </TabsContent>
         ))}
          {searchQuery && (
