@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from uuid import UUID
@@ -90,6 +91,24 @@ async def get_incoming_requests(current_user: UserPublic = Depends(get_current_a
         raise HTTPException(status_code=500, detail="Could not retrieve incoming requests.")
 
 
+@router.get("/requests/outgoing", response_model=IncomingRequestsResponse)
+async def get_outgoing_requests(current_user: UserPublic = Depends(get_current_active_user)):
+    """
+    Get all pending partner requests sent by the current user.
+    """
+    logger.info(f"Fetching outgoing partner requests for user {current_user.id}")
+    try:
+        response = await db_manager.get_table("partner_requests").select(
+            "*, sender:sender_id(*), recipient:recipient_id(*)"
+        ).eq("sender_id", str(current_user.id)).eq("status", "pending").execute()
+        
+        requests = [PartnerRequestResponse.model_validate(req) for req in response.data] if response.data else []
+        return IncomingRequestsResponse(requests=requests)
+    except Exception as e:
+        logger.error(f"Error fetching outgoing requests for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not retrieve outgoing requests.")
+
+
 @router.post("/requests/{request_id}/respond", status_code=status.HTTP_204_NO_CONTENT)
 async def respond_to_partner_request(
     request_id: UUID,
@@ -131,3 +150,4 @@ async def respond_to_partner_request(
             raise HTTPException(status_code=500, detail="Could not reject request.")
     
     return None # Returns 204 No Content on success
+

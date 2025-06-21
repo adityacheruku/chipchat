@@ -145,6 +145,14 @@ export const api = {
     });
     return handleResponse<{requests: PartnerRequest[]}>(response);
   },
+  
+  getOutgoingRequests: async (): Promise<{requests: PartnerRequest[]}> => {
+     const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/partners/requests/outgoing`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return handleResponse<{requests: PartnerRequest[]}>(response);
+  },
 
   sendPartnerRequest: async (recipientId: string): Promise<PartnerRequest> => {
     const token = getAuthToken();
