@@ -9,6 +9,8 @@ import type {
   ApiErrorResponse,
   SupportedEmoji,
   VoiceMessageUploadResponse,
+  StickerPackResponse,
+  StickerListResponse,
 } from '@/types';
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
@@ -237,6 +239,57 @@ export const api = {
         body: formData,
     });
     return handleResponse<VoiceMessageUploadResponse>(response);
+  },
+
+  // STICKERS
+  getStickerPacks: async (): Promise<StickerPackResponse> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/stickers/packs`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return handleResponse<StickerPackResponse>(response);
+  },
+
+  getStickersInPack: async (packId: string): Promise<StickerListResponse> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/stickers/pack/${packId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return handleResponse<StickerListResponse>(response);
+  },
+
+  searchStickers: async (query: string): Promise<StickerListResponse> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/stickers/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ query }),
+    });
+    return handleResponse<StickerListResponse>(response);
+  },
+
+  getRecentStickers: async (): Promise<StickerListResponse> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/stickers/recent`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return handleResponse<StickerListResponse>(response);
+  },
+
+  toggleFavoriteSticker: async (stickerId: string): Promise<StickerListResponse> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/stickers/favorites/toggle`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ sticker_id: stickerId }),
+    });
+    return handleResponse<StickerListResponse>(response);
   },
 
   // PWA SHORTCUT ACTIONS

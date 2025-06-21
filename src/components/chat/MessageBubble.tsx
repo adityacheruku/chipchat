@@ -220,7 +220,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const alignmentClass = isCurrentUser ? 'items-end' : 'items-start';
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
-  const contentBubbleColor = message.sticker_url ? 'bg-transparent' : cn(bubbleColorClass, bubbleBorderRadius);
+  
+  const hasSticker = !!message.sticker_image_url;
+  const contentBubbleColor = hasSticker ? 'bg-transparent' : cn(bubbleColorClass, bubbleBorderRadius);
 
 
   let formattedTime = "sending...";
@@ -236,14 +238,15 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   }
 
   const renderMessageContent = () => {
-    if (message.sticker_url) {
+    if (hasSticker) {
       return (
         <Image
-          src={message.sticker_url}
+          src={message.sticker_image_url!}
           alt={`Sticker sent by ${sender.display_name}`}
           width={128}
           height={128}
           className="bg-transparent"
+          unoptimized
         />
       );
     }
@@ -310,7 +313,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           )}
           <div className={cn(
             'p-3 rounded-xl shadow min-w-[80px]',
-            message.sticker_url ? 'bg-transparent p-0 shadow-none' : cn(bubbleColorClass, bubbleBorderRadius)
+            hasSticker ? 'bg-transparent p-0 shadow-none' : cn(bubbleColorClass, bubbleBorderRadius)
             )}>
             {renderMessageContent()}
           </div>

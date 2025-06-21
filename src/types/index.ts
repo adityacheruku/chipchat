@@ -1,4 +1,5 @@
 
+
 export type Mood = string;
 export const ALL_MOODS: Mood[] = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"];
 
@@ -40,7 +41,8 @@ export interface Message {
   image_thumbnail_url?: string | null; // For optimized image loading
   document_url?: string | null;
   document_name?: string | null;
-  sticker_url?: string | null;
+  sticker_id?: string | null;
+  sticker_image_url?: string | null; // Joined from stickers table on the backend
   client_temp_id?: string | null; // Client-generated temporary ID
   status?: MessageStatus | null; // Message status
   // Voice message metadata
@@ -179,6 +181,8 @@ export interface StickerPack {
   thumbnail_url?: string | null;
   is_active: boolean;
   created_at: string; // ISO Date string
+  is_premium: boolean;
+  updated_at: string; // ISO Date string
 }
 
 export interface Sticker {
@@ -188,7 +192,17 @@ export interface Sticker {
   image_url: string;
   tags?: string[] | null;
   order_index?: number;
+  created_at: string;
 }
+
+export interface StickerPackResponse {
+  packs: StickerPack[];
+}
+
+export interface StickerListResponse {
+  stickers: Sticker[];
+}
+
 
 export interface UserStickerPack {
     user_id: string; // UUID
