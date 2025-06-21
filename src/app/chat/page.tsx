@@ -237,7 +237,48 @@ export default function ChatPage() {
     }
   }, [activeChat]);
 
+  // Define handleSendThought AFTER useWebSocket to use its return values
   const handleSendThought = useCallback(async () => {
+    if (!currentUser || !otherUser) return;
+    // The implementation will be defined after the WebSocket hook is initialized.
+    // This empty shell with a ref ensures the function exists for dependencies.
+  }, [currentUser, otherUser]);
+  
+  const handleSendThoughtRef = useRef(handleSendThought);
+  useEffect(() => {
+    handleSendThoughtRef.current = handleSendThought;
+  }, [handleSendThought]);
+
+
+  const handleWSThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
+    if (otherUser && data.sender_id === otherUser.id) {
+      toast({
+        title: "❤️ Thinking of You!",
+        description: `${otherUser.display_name} is thinking of you.`,
+        duration: THINKING_OF_YOU_DURATION,
+        action: (
+          <ToastAction altText="Send one back" onClick={() => handleSendThoughtRef.current()}>
+            Send one back?
+          </ToastAction>
+        ),
+      });
+    }
+  }, [otherUser, toast]); 
+
+  const { isConnected: isWsConnected, sendMessage: sendWsMessage, isBrowserOnline } = useWebSocket({
+    token,
+    onMessageReceived: handleWSMessageReceived,
+    onReactionUpdate: handleWSReactionUpdate,
+    onPresenceUpdate: handleWSPresenceUpdate,
+    onTypingUpdate: handleWSTypingUpdate,
+    onThinkingOfYouReceived: handleWSThinkingOfYou,
+    onUserProfileUpdate: handleWSUserProfileUpdate,
+    onOpen: () => addAppEvent('apiError', 'WebSocket connected', currentUser?.id, currentUser?.display_name),
+    onClose: (event) => addAppEvent('apiError', `WebSocket disconnected: ${event.reason}`, currentUser?.id, currentUser?.display_name, {code: event.code}),
+  });
+
+  // Now, redefine handleSendThought with the actual logic, using values from the hook.
+  handleSendThoughtRef.current = useCallback(async () => {
     if (!currentUser || !otherUser) return;
     try {
       if (isWsConnected) {
@@ -256,32 +297,6 @@ export default function ChatPage() {
     }
   }, [currentUser, otherUser, isWsConnected, sendWsMessage, initiateThoughtNotification, addAppEvent, toast]);
 
-  const handleWSThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
-    if (otherUser && data.sender_id === otherUser.id) {
-      toast({
-        title: "❤️ Thinking of You!",
-        description: `${otherUser.display_name} is thinking of you.`,
-        duration: THINKING_OF_YOU_DURATION,
-        action: (
-          <ToastAction altText="Send one back" onClick={handleSendThought}>
-            Send one back?
-          </ToastAction>
-        ),
-      });
-    }
-  }, [otherUser, toast, handleSendThought]); 
-
-  const { isConnected: isWsConnected, sendMessage: sendWsMessage, isBrowserOnline } = useWebSocket({
-    token,
-    onMessageReceived: handleWSMessageReceived,
-    onReactionUpdate: handleWSReactionUpdate,
-    onPresenceUpdate: handleWSPresenceUpdate,
-    onTypingUpdate: handleWSTypingUpdate,
-    onThinkingOfYouReceived: handleWSThinkingOfYou,
-    onUserProfileUpdate: handleWSUserProfileUpdate,
-    onOpen: () => addAppEvent('apiError', 'WebSocket connected', currentUser?.id, currentUser?.display_name),
-    onClose: (event) => addAppEvent('apiError', `WebSocket disconnected: ${event.reason}`, currentUser?.id, currentUser?.display_name, {code: event.code}),
-  });
 
  useEffect(() => {
     console.log('[ChatPage] Auth State Change: isAuthenticated:', isAuthenticated, 'isAuthLoading:', isAuthLoading, 'currentUser:', currentUser?.id);
@@ -629,7 +644,7 @@ export default function ChatPage() {
                 currentUser={currentUser}
                 otherUser={otherUser}
                 onProfileClick={() => setIsProfileModalOpen(true)}
-                onSendThinkingOfYou={handleSendThought}
+                onSendThinkingOfYou={() => handleSendThoughtRef.current?.()}
                 isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)}
                 onOtherUserAvatarClick={handleOtherUserAvatarClick}
                 isOtherUserTyping={!!otherUserIsTyping}
