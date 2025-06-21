@@ -183,6 +183,11 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     
                     message_db_id = uuid4()
                     msg_now = datetime.now(timezone.utc)
+                    
+                    # Log if it's a voice message with metadata
+                    if data.get("clip_type") == "audio" and data.get("duration_seconds") is not None:
+                        logger.info(f"WS user {user_id}: Processing voice message. Duration: {data.get('duration_seconds')}s, Format: {data.get('audio_format')}")
+
                     new_message_payload = {
                         "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
                         "text": data.get("text"),
@@ -374,3 +379,5 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
         # For now, it's kept.
 
         logger.info(f"WS user {user_id}: Graceful disconnect initiated.")
+
+    
