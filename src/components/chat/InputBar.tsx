@@ -24,6 +24,7 @@ interface InputBarProps {
 }
 
 const LONG_PRESS_DURATION = 300; // milliseconds
+const MAX_RECORDING_SECONDS = 120; // 2 minutes
 
 export default function InputBar({ 
   onSendMessage, 
@@ -49,6 +50,7 @@ export default function InputBar({
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const maxDurationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Refs for file inputs
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +116,7 @@ export default function InputBar({
 
   const cleanupRecording = () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (maxDurationTimeoutRef.current) clearTimeout(maxDurationTimeoutRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
@@ -147,15 +150,21 @@ export default function InputBar({
             setAudioURL(audioUrl);
             setRecordingStatus('recorded');
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-            // Clean up the stream tracks
+            if (maxDurationTimeoutRef.current) clearTimeout(maxDurationTimeoutRef.current);
             stream.getTracks().forEach(track => track.stop());
         };
 
         mediaRecorderRef.current.start();
         setRecordingStatus('recording');
+
         timerIntervalRef.current = setInterval(() => {
             setRecordingSeconds(prev => prev + 1);
         }, 1000);
+
+        maxDurationTimeoutRef.current = setTimeout(() => {
+            toast({ title: "Recording Limit Reached", description: `Maximum duration of ${MAX_RECORDING_SECONDS} seconds reached.`});
+            handleStopRecording();
+        }, MAX_RECORDING_SECONDS * 1000);
 
     } catch (err) {
         console.error("Microphone access denied:", err);
@@ -184,18 +193,15 @@ export default function InputBar({
   const handleSendVoiceMessage = () => {
       if (audioBlob) {
         setRecordingStatus('sending');
-        // Convert blob to file to send
         const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
         onSendMoodClip('audio', audioFile);
         
-        // Cleanup after a short delay to allow sending process to start
         setTimeout(() => {
             cleanupRecording();
         }, 500);
       }
   };
 
-  // Long press logic on the main send/mic button
   const handleButtonPress = () => {
     if (disabled || isSending || messageText.trim() !== '') return;
     
@@ -214,16 +220,15 @@ export default function InputBar({
   };
 
   useEffect(() => {
-    // Cleanup timers on component unmount
     return () => {
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (maxDurationTimeoutRef.current) clearTimeout(maxDurationTimeoutRef.current);
     };
   }, []);
   
   const sendButtonIcon = messageText.trim() === '' ? <Mic size={20} /> : <Send size={20} />;
 
-  // Render different UI based on recording status
   if (recordingStatus === 'recording' || recordingStatus === 'permission_requested') {
     return (
         <div className="p-3 border-t border-border bg-card rounded-b-lg flex items-center justify-between animate-pulse">
