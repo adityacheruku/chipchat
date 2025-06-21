@@ -240,7 +240,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       return (
         <Image
           src={message.sticker_url}
-          alt="sticker"
+          alt={`Sticker sent by ${sender.display_name}`}
           width={128}
           height={128}
           className="bg-transparent"
