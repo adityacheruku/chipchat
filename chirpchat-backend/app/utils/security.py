@@ -29,7 +29,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 from fastapi import UploadFile, HTTPException, status
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-ALLOWED_CLIP_TYPES = {"audio/mpeg", "audio/wav", "audio/webm", "video/mp4", "video/quicktime", "video/webm"}
+ALLOWED_CLIP_TYPES = {"audio/mpeg", "audio/wav", "audio/webm", "audio/ogg", "audio/mp4", "video/mp4", "video/quicktime", "video/webm"}
 ALLOWED_DOCUMENT_TYPES = {
     "application/pdf", 
     "application/msword", 

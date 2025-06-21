@@ -226,6 +226,18 @@ export const api = {
     return handleResponse<{ file_url: string, file_name: string }>(response);
   },
 
+  uploadVoiceMessage: async (file: File): Promise<{ file_url: string, clip_type: 'audio' }> => {
+    const token = getAuthToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/uploads/voice_message`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+    });
+    return handleResponse<{ file_url: string, clip_type: 'audio' }>(response);
+  },
+
   // PWA SHORTCUT ACTIONS
   sendThinkingOfYouPing: async (recipientUserId: string): Promise<{ status: string }> => {
     const token = getAuthToken();

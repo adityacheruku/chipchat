@@ -425,6 +425,28 @@ export default function ChatPage() {
     }
   };
 
+  const handleSendVoiceMessage = async (file: File) => {
+    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    toast({ title: "Uploading voice message..." });
+    const clientTempId = `temp_audio_${Date.now()}`;
+    try {
+      const uploadResponse = await api.uploadVoiceMessage(file);
+      const placeholderText = `${currentUser.display_name} sent a voice message.`;
+      sendWsMessage({
+        event_type: "send_message",
+        chat_id: activeChat.id,
+        clip_type: 'audio',
+        clip_url: uploadResponse.file_url,
+        clip_placeholder_text: placeholderText,
+        client_temp_id: clientTempId,
+      });
+      addAppEvent('messageSent', `${currentUser.display_name} sent a voice message.`, currentUser.id, currentUser.display_name);
+      toast({ title: "Voice Message Sent!" });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Voice Message Upload Failed', description: error.message });
+    }
+  };
+
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
     
@@ -677,6 +699,7 @@ export default function ChatPage() {
               <InputBar
                 onSendMessage={handleSendMessage}
                 onSendMoodClip={handleSendMoodClip}
+                onSendVoiceMessage={handleSendVoiceMessage}
                 onSendImage={handleSendImage}
                 onSendDocument={handleSendDocument}
                 isSending={isLoadingAISuggestion}

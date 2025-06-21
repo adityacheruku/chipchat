@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 interface InputBarProps {
   onSendMessage: (text: string) => void;
   onSendMoodClip: (clipType: MessageClipType, file: File) => void;
+  onSendVoiceMessage: (file: File) => void;
   onSendImage?: (file: File) => void;
   onSendDocument: (file: File) => void;
   isSending?: boolean;
@@ -31,6 +32,7 @@ const MAX_RECORDING_SECONDS = 120; // 2 minutes
 export default function InputBar({
   onSendMessage,
   onSendMoodClip,
+  onSendVoiceMessage,
   onSendImage,
   onSendDocument,
   isSending = false,
@@ -192,11 +194,11 @@ export default function InputBar({
       cleanupRecording();
   };
 
-  const handleSendVoiceMessage = () => {
+  const handleSendRecordedVoiceMessage = () => {
       if (audioBlob) {
         setRecordingStatus('sending');
         const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
-        onSendMoodClip('audio', audioFile);
+        onSendVoiceMessage(audioFile);
 
         setTimeout(() => {
             cleanupRecording();
@@ -255,7 +257,7 @@ export default function InputBar({
                 <Trash2 size={20} />
             </Button>
             <audio src={audioURL} controls className="flex-grow w-full max-w-xs h-10" />
-             <Button size="icon" onClick={handleSendVoiceMessage} className="bg-accent hover:bg-accent/90 rounded-full">
+             <Button size="icon" onClick={handleSendRecordedVoiceMessage} className="bg-accent hover:bg-accent/90 rounded-full">
                 <Send size={20} />
             </Button>
         </div>

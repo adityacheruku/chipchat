@@ -122,3 +122,25 @@ async def upload_chat_document(
     except Exception as e:
         logger.error(f"Cloudinary chat document upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat document upload failed: {str(e)}")
+
+
+@router.post("/voice_message", summary="Upload a voice message for chat, returns URL")
+async def upload_voice_message(
+    file: UploadFile = File(...),
+    current_user: UserPublic = Depends(get_current_active_user),
+):
+    logger.info(f"Route /uploads/voice_message called by user {current_user.id} for file {file.filename}")
+    validate_clip_upload(file)
+
+    try:
+        # Cloudinary's "video" resource type handles audio files well and is recommended for universal transformation/playback features
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder=f"chirpchat_voice_messages/user_{current_user.id}",
+            resource_type="video" 
+        )
+        logger.info(f"Voice message {file.filename} uploaded successfully for user {current_user.id}. URL: {result.get('secure_url')}")
+        return {"file_url": result.get("secure_url"), "clip_type": "audio"}
+    except Exception as e:
+        logger.error(f"Cloudinary voice message upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Voice message upload failed: {str(e)}")
