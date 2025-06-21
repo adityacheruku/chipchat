@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Message, User, SupportedEmoji } from '@/types';
