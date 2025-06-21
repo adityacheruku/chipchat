@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { Loader2, Bell, BellOff } from 'lucide-react';
 import { Separator } from '../ui/separator';
+import { Switch } from '@/components/ui/switch';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -43,6 +44,12 @@ export default function UserProfileModal({
   const [phone, setPhone] = useState(user?.phone || '');
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // State for notification toggles (UI only for now)
+  const [messageNotifications, setMessageNotifications] = useState(true);
+  const [moodNotifications, setMoodNotifications] = useState(true);
+  const [pingNotifications, setPingNotifications] = useState(true);
+
   const { toast } = useToast();
   
   const {
@@ -82,6 +89,7 @@ export default function UserProfileModal({
       if (mood !== user.mood) profileUpdates.mood = mood;
       if (phone !== (user.phone || '')) profileUpdates.phone = phone;
 
+      // Note: Notification settings are not saved to the backend in this version.
       await onSave(profileUpdates, selectedAvatarFile || undefined);
       onClose();
     } catch (error: any) {
@@ -196,10 +204,52 @@ export default function UserProfileModal({
 
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right text-foreground">
-                Notifications
+                Push Alerts
               </Label>
               {renderNotificationButton()}
             </div>
+
+            {isSubscribed && (
+              <div className="col-span-4 grid gap-4 rounded-lg border bg-card p-4 shadow-inner">
+                <p className="text-sm font-medium text-muted-foreground -mt-1 mb-1">Notify me about...</p>
+                <div className="flex items-center justify-between space-x-2">
+                  <Label htmlFor="messages-notif" className="font-normal cursor-pointer">
+                    New Messages
+                  </Label>
+                  <Switch
+                    id="messages-notif"
+                    checked={messageNotifications}
+                    onCheckedChange={setMessageNotifications}
+                    disabled={isSaving || isSubscribing}
+                  />
+                </div>
+                <div className="flex items-center justify-between space-x-2">
+                  <Label htmlFor="mood-notif" className="font-normal cursor-pointer">
+                    Mood Changes
+                  </Label>
+                  <Switch
+                    id="mood-notif"
+                    checked={moodNotifications}
+                    onCheckedChange={setMoodNotifications}
+                    disabled={isSaving || isSubscribing}
+                  />
+                </div>
+                <div className="flex items-center justify-between space-x-2">
+                  <Label htmlFor="pings-notif" className="font-normal cursor-pointer">
+                    "Thinking of You" Pings
+                  </Label>
+                  <Switch
+                    id="pings-notif"
+                    checked={pingNotifications}
+                    onCheckedChange={setPingNotifications}
+                    disabled={isSaving || isSubscribing}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center pt-2">
+                  Note: Granular controls are for UI demonstration and are not yet saved.
+                </p>
+              </div>
+            )}
 
           </div>
           <DialogFooter>
