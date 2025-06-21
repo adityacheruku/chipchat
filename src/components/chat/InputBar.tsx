@@ -1,8 +1,10 @@
 
+"use client";
+
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile, Mic, Plus, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin, Paperclip, Trash2, StopCircle, Play } from 'lucide-react'; 
+import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin, Trash2, StopCircle } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -16,35 +18,35 @@ import { cn } from '@/lib/utils';
 interface InputBarProps {
   onSendMessage: (text: string) => void;
   onSendMoodClip: (clipType: MessageClipType, file: File) => void;
-  onSendImage?: (file: File) => void; 
+  onSendImage?: (file: File) => void;
   onSendDocument: (file: File) => void;
   isSending?: boolean;
   onTyping: (isTyping: boolean) => void;
-  disabled?: boolean; 
+  disabled?: boolean;
 }
 
 const LONG_PRESS_DURATION = 300; // milliseconds
 const MAX_RECORDING_SECONDS = 120; // 2 minutes
 
-export default function InputBar({ 
-  onSendMessage, 
-  onSendMoodClip, 
+export default function InputBar({
+  onSendMessage,
+  onSendMoodClip,
   onSendImage,
   onSendDocument,
-  isSending = false, 
+  isSending = false,
   onTyping,
-  disabled = false 
+  disabled = false
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
-  
+
   // State for voice recording
   type RecordingStatus = 'idle' | 'permission_requested' | 'recording' | 'recorded' | 'sending';
   const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>('idle');
   const [audioURL, setAudioURL] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  
+
   // Refs for recording logic
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -57,9 +59,9 @@ export default function InputBar({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
-  
+
   const { toast } = useToast();
-  
+
   const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (messageText.trim() && !isSending && !disabled) {
@@ -78,7 +80,7 @@ export default function InputBar({
       onTyping(false);
     }
   };
-  
+
   const handleBlur = () => {
     if (disabled) return;
     if (messageText.trim() === '') {
@@ -98,7 +100,7 @@ export default function InputBar({
             } else {
                  toast({variant: 'destructive', title: 'Invalid File', description: 'Please select an image or video file.'});
             }
-        } else if (attachmentType === 'audio') { 
+        } else if (attachmentType === 'audio') {
              if (!file.type.startsWith('audio/')) {
                 toast({variant: 'destructive', title: 'Invalid File', description: 'Please select an audio file.'});
                 return;
@@ -108,7 +110,7 @@ export default function InputBar({
             onSendDocument(file);
         }
     }
-    setShowAttachmentOptions(false); 
+    setShowAttachmentOptions(false);
     if(event.target) event.target.value = "";
   };
 
@@ -129,7 +131,7 @@ export default function InputBar({
       setAudioURL(null);
       setRecordingSeconds(0);
   };
-  
+
   const handleStartRecording = async () => {
     if (recordingStatus !== 'idle') return;
 
@@ -195,7 +197,7 @@ export default function InputBar({
         setRecordingStatus('sending');
         const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
         onSendMoodClip('audio', audioFile);
-        
+
         setTimeout(() => {
             cleanupRecording();
         }, 500);
@@ -204,7 +206,7 @@ export default function InputBar({
 
   const handleButtonPress = () => {
     if (disabled || isSending || messageText.trim() !== '') return;
-    
+
     longPressTimerRef.current = setTimeout(() => {
         handleStartRecording();
     }, LONG_PRESS_DURATION);
@@ -226,7 +228,7 @@ export default function InputBar({
       if (maxDurationTimeoutRef.current) clearTimeout(maxDurationTimeoutRef.current);
     };
   }, []);
-  
+
   const sendButtonIcon = messageText.trim() === '' ? <Mic size={20} /> : <Send size={20} />;
 
   if (recordingStatus === 'recording' || recordingStatus === 'permission_requested') {
@@ -275,10 +277,10 @@ export default function InputBar({
             <TooltipProvider>
                  <Tooltip>
                 <TooltipTrigger asChild>
-                     <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        type="button" 
+                     <Button
+                        variant="ghost"
+                        size="icon"
+                        type="button"
                         onClick={() => setShowAttachmentOptions(!showAttachmentOptions)}
                         className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
                         aria-label={showAttachmentOptions ? "Close attachments menu" : "Open attachments menu"}
@@ -295,10 +297,10 @@ export default function InputBar({
             <TooltipProvider>
                 <Tooltip>
                 <TooltipTrigger asChild>
-                    <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    type="button" 
+                    <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
                     className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
                     aria-label="Open emoji picker (coming soon)"
                     disabled={isSending || disabled}
@@ -340,9 +342,9 @@ export default function InputBar({
                     <TooltipContent><p>Use Camera</p></TooltipContent>
                 </Tooltip>
             </TooltipProvider>
-            <Button 
+            <Button
                 type="button"
-                size="icon" 
+                size="icon"
                 className="bg-accent hover:bg-accent/90 active:bg-accent/80 text-accent-foreground rounded-full focus-visible:ring-ring w-10 h-10 flex-shrink-0"
                 disabled={isSending || disabled}
                 onClick={messageText.trim() ? () => handleFormSubmit(new Event('submit', {cancelable: true}) as unknown as FormEvent<HTMLFormElement>) : undefined}
@@ -367,19 +369,19 @@ export default function InputBar({
                     <FileText size={24} className="mb-1 text-blue-500"/>
                     <span className="text-xs font-normal text-muted-foreground">Document</span>
                 </Button>
-                
+
                 {onSendImage && (
                      <Button variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
                         <ImageIconLucide size={24} className="mb-1 text-purple-500"/>
                          <span className="text-xs font-normal text-muted-foreground">Photo/Video</span>
                     </Button>
                 )}
-               
+
                 <Button variant="outline" size="sm" onClick={() => audioInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
                     <Mic size={24} className="mb-1 text-red-500"/>
                     <span className="text-xs font-normal text-muted-foreground">Audio</span>
                 </Button>
-               
+
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>

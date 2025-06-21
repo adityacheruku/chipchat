@@ -33,7 +33,7 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers }: MessageBubbleProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  
+
   const prevReactionsRef = useRef<Message['reactions']>();
   const [animatedEmojis, setAnimatedEmojis] = useState<Record<SupportedEmoji, boolean>>({});
 
@@ -45,7 +45,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       const prevCount = prevReactionsRef.current?.[emoji]?.length || 0;
       const currentCount = message.reactions?.[emoji]?.length || 0;
 
-      if (currentCount !== prevCount) { 
+      if (currentCount !== prevCount) {
         newAnimations[emoji] = true;
         hasChanges = true;
       }
@@ -53,13 +53,13 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 
     if (hasChanges) {
       setAnimatedEmojis(newAnimations);
-      const timer = setTimeout(() => setAnimatedEmojis({}), 300); 
+      const timer = setTimeout(() => setAnimatedEmojis({}), 300);
       return () => clearTimeout(timer);
     }
 
     prevReactionsRef.current = message.reactions ? JSON.parse(JSON.stringify(message.reactions)) : {};
   }, [message.reactions]);
-  
+
   const handleReactionSelect = (emoji: SupportedEmoji) => {
     onToggleReaction(message.id, emoji);
     setIsPickerOpen(false);
@@ -118,11 +118,11 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       const imageUrl = message.image_thumbnail_url || message.image_url;
       return (
         <a href={message.image_url} target="_blank" rel="noopener noreferrer" className="block max-w-xs">
-          <Image 
-              src={imageUrl} 
-              alt="Chat image" 
-              width={200} 
-              height={150} 
+          <Image
+              src={imageUrl}
+              alt="Chat image"
+              width={200}
+              height={150}
               className="rounded-md object-cover cursor-pointer hover:opacity-80"
               data-ai-hint="chat photo"
           />
@@ -157,7 +157,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           data-ai-hint={sender['data-ai-hint'] || "person portrait"}
           key={sender.avatar_url || sender.id}
         />
-        
+
         <div className="flex flex-col">
           {!isCurrentUser && (
             <p className="text-xs font-semibold text-muted-foreground mb-0.5 ml-2">{sender.display_name}</p>
@@ -175,9 +175,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                 <span className="sr-only">Add reaction</span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent 
-                side="bottom" 
-                align={isCurrentUser ? "end" : "start"} 
+            <PopoverContent
+                side="bottom"
+                align={isCurrentUser ? "end" : "start"}
                 className="flex gap-1 p-1 w-auto rounded-full bg-card shadow-lg border"
             >
               {ALL_SUPPORTED_EMOJIS.map(emoji => (
@@ -195,14 +195,14 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           </Popover>
         </div>
       </div>
-      
+
       <div className={cn('pt-1', isCurrentUser ? 'pr-10' : 'pl-10')}>
         {message.reactions && Object.keys(message.reactions).length > 0 && (
             <div className={cn("flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
             {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
                 const reactors = message.reactions?.[emoji];
                 if (!reactors || reactors.length === 0) return null;
-                
+
                 const currentUserReacted = reactors.includes(currentUserId);
                 const isAnimated = animatedEmojis[emoji];
                 const reactorNames = getReactorNames(reactors);
@@ -215,10 +215,10 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                         onClick={() => onShowReactions(message, allUsers)}
                         className={cn(
                             "text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-all",
-                            currentUserReacted 
+                            currentUserReacted
                             ? "bg-accent text-accent-foreground border-accent/80"
                             : "bg-card/50 border-border hover:bg-muted",
-                            isAnimated && "animate-pop" 
+                            isAnimated && "animate-pop"
                         )}
                         aria-label={`Reacted with ${emoji}: ${reactorNames}. Click to see details.`}
                         >
@@ -235,7 +235,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             })}
             </div>
         )}
-        
+
         <TooltipProvider>
             <Tooltip>
             <TooltipTrigger asChild>
