@@ -8,6 +8,15 @@ class ClipTypeEnum(str, enum.Enum): # Using enum.Enum for proper value access
     AUDIO = "audio"
     VIDEO = "video"
 
+class MessageSubtypeEnum(str, enum.Enum):
+    TEXT = "text"
+    STICKER = "sticker"
+    CLIP = "clip"
+    IMAGE = "image"
+    DOCUMENT = "document"
+    VOICE_MESSAGE = "voice_message"
+    EMOJI_ONLY = "emoji_only"
+
 SUPPORTED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '🤔', '💯'] 
 SupportedEmoji = str # Use Pydantic enum or validator for stricter check
 
@@ -20,10 +29,11 @@ class MessageStatusEnum(str, enum.Enum):
 
 class MessageBase(BaseModel):
     text: Optional[str] = None
-    # Sticker fields
-    sticker_url: Optional[str] = None
+    message_subtype: Optional[MessageSubtypeEnum] = MessageSubtypeEnum.TEXT
+    
+    # Sticker fields - now just sticker_id
     sticker_id: Optional[UUID] = None
-    sticker_pack_id: Optional[UUID] = None
+    
     # Media clip fields
     clip_type: Optional[ClipTypeEnum] = None
     clip_placeholder_text: Optional[str] = None
@@ -54,6 +64,9 @@ class MessageInDB(MessageBase):
     reactions: Optional[Dict[SupportedEmoji, List[UUID]]] = Field(default_factory=dict)
     status: Optional[MessageStatusEnum] = MessageStatusEnum.SENT_TO_SERVER # Default status when fetched/created by server
     client_temp_id: Optional[str] = None # Store the client's temporary ID
+
+    # To show stickers in chat list, we need to join and get the URL
+    sticker_image_url: Optional[str] = None
 
     class Config:
         from_attributes = True

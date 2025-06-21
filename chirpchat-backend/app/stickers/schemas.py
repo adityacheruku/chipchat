@@ -9,8 +9,10 @@ class StickerPack(BaseModel):
     name: str
     description: Optional[str] = None
     thumbnail_url: Optional[str] = None
+    is_premium: bool = False
     is_active: bool
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
@@ -22,9 +24,13 @@ class Sticker(BaseModel):
     image_url: str
     tags: Optional[List[str]] = None
     order_index: Optional[int] = 0
+    created_at: datetime
 
     class Config:
         from_attributes = True
+
+class StickerFavoriteToggle(BaseModel):
+    sticker_id: UUID
 
 class StickerPackResponse(BaseModel):
     packs: List[StickerPack]

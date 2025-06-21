@@ -15,6 +15,7 @@ from app.chat.schemas import (
     ChatParticipant,
     DefaultChatPartnerResponse,
     MessageStatusEnum,
+    MessageSubtypeEnum,
 )
 from app.auth.dependencies import get_current_active_user, get_current_user
 from app.auth.schemas import UserPublic
@@ -24,6 +25,39 @@ from app.utils.logging import logger
 import uuid 
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
+
+async def get_message_with_details_from_db(message_id: UUID) -> Optional[MessageInDB]:
+    """Helper function to fetch a message and join its sticker details."""
+    try:
+        rpc_response = await db_manager.admin_client.rpc(
+            'get_message_with_details', {'p_message_id': str(message_id)}
+        ).maybe_single().execute()
+        
+        if rpc_response and rpc_response.data:
+            return MessageInDB(**rpc_response.data)
+        return None
+    except Exception as e:
+        logger.error(f"Error calling get_message_with_details RPC for message {message_id}: {e}", exc_info=True)
+        return None
+
+async def get_chat_list_for_user(user_id: UUID) -> List[ChatResponse]:
+    """Helper to get a user's chat list, with last message details including sticker URL."""
+    try:
+        rpc_response = await db_manager.admin_client.rpc(
+            'get_user_chat_list', {'p_user_id': str(user_id)}
+        ).execute()
+        
+        if not rpc_response or not rpc_response.data:
+            return []
+
+        # The RPC is expected to return a JSON array of chat objects
+        # We need to parse this into our Pydantic models
+        chat_responses = [ChatResponse.model_validate(chat_data) for chat_data in rpc_response.data]
+        return chat_responses
+
+    except Exception as e:
+        logger.error(f"Error calling get_user_chat_list RPC for user {user_id}: {e}", exc_info=True)
+        return []
 
 @router.post("/", response_model=ChatResponse)
 async def create_chat(
@@ -41,51 +75,21 @@ async def create_chat(
         logger.warning(f"Recipient user {recipient_id} not found for chat creation by {current_user.id}.")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipient user not found")
 
-    user_chats_resp_obj = await db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(current_user.id)).execute()
-    if not user_chats_resp_obj or not user_chats_resp_obj.data:
-        user_chat_ids = []
-    else:
-        user_chat_ids = [row["chat_id"] for row in user_chats_resp_obj.data]
-    logger.debug(f"User {current_user.id} is participant in chat IDs: {user_chat_ids}")
+    # Use the new RPC function to find an existing chat
+    try:
+        find_chat_resp = await db_manager.admin_client.rpc(
+            'find_existing_chat_with_participant_details',
+            {'user1_id': str(current_user.id), 'user2_id': str(recipient_id)}
+        ).maybe_single().execute()
 
+        if find_chat_resp and find_chat_resp.data:
+            logger.info(f"Found existing chat {find_chat_resp.data['id']} between {current_user.id} and {recipient_id}")
+            return ChatResponse.model_validate(find_chat_resp.data)
 
-    if user_chat_ids:
-        for chat_id_uuid_val in user_chat_ids:
-            chat_id_str = str(chat_id_uuid_val)
-            participants_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).execute()
-            if not participants_resp_obj or not participants_resp_obj.data:
-                continue 
-            
-            participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_resp_obj.data] 
-            
-            if len(participant_ids_in_chat) == 2 and recipient_id in participant_ids_in_chat:
-                logger.info(f"Found existing 2-person chat {chat_id_str} between {current_user.id} and {recipient_id}.")
-                chat_detail_resp_obj = await db_manager.get_table("chats").select("*").eq("id", chat_id_str).maybe_single().execute()
-                if not chat_detail_resp_obj or not chat_detail_resp_obj.data: 
-                    logger.error(f"Chat details not found for presumably existing chat ID: {chat_id_str}")
-                    continue 
-
-                chat_data = chat_detail_resp_obj.data
-                
-                participant_details_list = []
-                for p_id_uuid in participant_ids_in_chat:
-                    user_resp_obj_inner = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen").eq("id", str(p_id_uuid)).maybe_single().execute() 
-                    if not user_resp_obj_inner or not user_resp_obj_inner.data:
-                         logger.error(f"Participant user details not found for ID: {p_id_uuid} in chat {chat_id_str}")
-                         continue 
-                    participant_details_list.append(ChatParticipant(**user_resp_obj_inner.data))
-                
-                last_msg_resp_obj = await db_manager.get_table("messages").select("*").eq("chat_id", chat_id_str).order("created_at", desc=True).limit(1).maybe_single().execute()
-                last_message_data = last_msg_resp_obj.data if last_msg_resp_obj else None 
-                last_message = MessageInDB(**last_message_data) if last_message_data else None
-
-                return ChatResponse(
-                    id=chat_data["id"],
-                    participants=participant_details_list,
-                    last_message=last_message,
-                    created_at=chat_data["created_at"],
-                    updated_at=chat_data["updated_at"],
-                )
+    except Exception as e:
+        logger.error(f"Error calling find_existing_chat RPC for users {current_user.id}, {recipient_id}: {e}", exc_info=True)
+        # Fallback to manual creation if RPC fails
+        pass
 
     logger.info(f"No existing 2-person chat found. Creating new chat between {current_user.id} and {recipient_id}.")
     new_chat_id = uuid.uuid4()
@@ -130,60 +134,10 @@ async def list_chats(
     current_user: UserPublic = Depends(get_current_active_user),
 ):
     logger.info(f"Listing chats for user {current_user.id} ({current_user.display_name})")
-    user_chats_resp_obj = await db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(current_user.id)).execute()
-    if not user_chats_resp_obj or not user_chats_resp_obj.data:
-        user_chat_ids = []
-    else:
-        user_chat_ids = list(set([row["chat_id"] for row in user_chats_resp_obj.data]))
-    logger.debug(f"User {current_user.id} is participant in chat IDs (distinct): {user_chat_ids} for list_chats")
-
-    chat_responses = []
-    for chat_id_uuid_val in user_chat_ids:
-        chat_id_str = str(chat_id_uuid_val)
-        logger.debug(f"Processing chat ID {chat_id_str} for user {current_user.id}")
-        chat_detail_resp_obj = await db_manager.get_table("chats").select("*").eq("id", chat_id_str).maybe_single().execute()
-        if not chat_detail_resp_obj or not chat_detail_resp_obj.data:
-            logger.warning(f"Chat details not found for chat ID: {chat_id_str} during list_chats for user {current_user.id}. Skipping.")
-            continue
-        
-        chat_data = chat_detail_resp_obj.data
-        
-        participants_in_chat_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).execute()
-        if not participants_in_chat_resp_obj or not participants_in_chat_resp_obj.data:
-            logger.warning(f"No participants found for chat ID: {chat_id_str} during list_chats. Skipping.")
-            continue
-
-        participant_ids_in_chat = [UUID(str(row["user_id"])) for row in participants_in_chat_resp_obj.data] 
-        logger.debug(f"Participants in chat {chat_id_str}: {participant_ids_in_chat}")
-        
-        participant_details_list = []
-        valid_chat = True
-        for p_id_uuid in participant_ids_in_chat:
-            user_resp_obj_list = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen").eq("id", str(p_id_uuid)).maybe_single().execute() 
-            if not user_resp_obj_list or not user_resp_obj_list.data:
-                logger.error(f"Participant user details not found for ID: {p_id_uuid} in chat {chat_id_str} during list_chats. Skipping chat.")
-                valid_chat = False
-                break
-            participant_details_list.append(ChatParticipant(**user_resp_obj_list.data))
-        
-        if not valid_chat:
-            continue
-
-        last_msg_resp_obj = await db_manager.get_table("messages").select("*").eq("chat_id", chat_id_str).order("created_at", desc=True).limit(1).maybe_single().execute()
-        last_message_data = last_msg_resp_obj.data if last_msg_resp_obj else None 
-        last_message = MessageInDB(**last_message_data) if last_message_data else None
-        logger.debug(f"Last message for chat {chat_id_str}: {'Exists' if last_message else 'None'}")
-        
-        chat_responses.append(
-            ChatResponse(
-                id=chat_data["id"],
-                participants=participant_details_list,
-                last_message=last_message,
-                created_at=chat_data["created_at"],
-                updated_at=chat_data["updated_at"],
-            )
-        )
-    chat_responses.sort(key=lambda c: (c.last_message.created_at if c.last_message else c.created_at), reverse=True)
+    # This entire block can be replaced by the get_chat_list_for_user helper for consistency
+    # and to leverage the more efficient RPC function.
+    chat_responses = await get_chat_list_for_user(current_user.id)
+    
     logger.info(f"Successfully compiled {len(chat_responses)} chats for user {current_user.id}")
     return ChatListResponse(chats=chat_responses)
 
@@ -200,17 +154,26 @@ async def get_messages(
     if not participant_check_resp_obj or not participant_check_resp_obj.data:
         logger.warning(f"User {current_user.id} forbidden to access messages for chat {chat_id} - not a participant.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
+    
+    # Use RPC to get messages with details
+    try:
+        rpc_params = {'p_chat_id': str(chat_id), 'p_limit': limit}
+        if before_timestamp:
+            rpc_params['p_before_timestamp'] = before_timestamp.isoformat()
+        
+        messages_resp = await db_manager.admin_client.rpc(
+            'get_messages_for_chat', rpc_params
+        ).execute()
 
-    query = db_manager.get_table("messages").select("*").eq("chat_id", str(chat_id))
-    if before_timestamp:
-        query = query.lt("created_at", before_timestamp.isoformat())
+        messages_data_list = messages_resp.data if messages_resp and messages_resp.data else []
+        messages_domain_list = [MessageInDB(**m) for m in messages_data_list]
+        logger.info(f"Retrieved {len(messages_domain_list)} messages for chat {chat_id} for user {current_user.id}")
+        return MessageListResponse(messages=messages_domain_list)
+
+    except Exception as e:
+        logger.error(f"Error calling get_messages_for_chat RPC for chat {chat_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not retrieve messages.")
     
-    messages_resp_obj = await query.order("created_at", desc=True).limit(limit).execute()
-    
-    messages_data_list = messages_resp_obj.data if messages_resp_obj and messages_resp_obj.data else []
-    messages_domain_list = [MessageInDB(**m) for m in messages_data_list]
-    logger.info(f"Retrieved {len(messages_domain_list)} messages for chat {chat_id} for user {current_user.id}")
-    return MessageListResponse(messages=messages_domain_list)
 
 @router.post("/{chat_id}/messages", response_model=MessageInDB)
 async def send_message_http(
@@ -218,7 +181,7 @@ async def send_message_http(
     message_create: MessageCreate,
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Payload: text='{message_create.text[:20] if message_create.text else ''}...', image_url='{message_create.image_url}', clip_url='{message_create.clip_url}', document_url='{message_create.document_url}', client_temp_id='{message_create.client_temp_id}'")
+    logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Payload: text='{message_create.text[:20] if message_create.text else ''}...', image_url='{message_create.image_url}', sticker_id='{message_create.sticker_id}', client_temp_id='{message_create.client_temp_id}'")
     participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp_obj or not participant_check_resp_obj.data:
         logger.warning(f"User {current_user.id} forbidden to send message to chat {chat_id} - not a participant.")
@@ -232,9 +195,8 @@ async def send_message_http(
         "chat_id": str(chat_id),
         "user_id": str(current_user.id),
         "text": message_create.text,
-        "sticker_url": message_create.sticker_url,
         "sticker_id": str(message_create.sticker_id) if message_create.sticker_id else None,
-        "sticker_pack_id": str(message_create.sticker_pack_id) if message_create.sticker_pack_id else None,
+        "message_subtype": message_create.message_subtype.value if message_create.message_subtype else MessageSubtypeEnum.TEXT.value,
         "clip_type": message_create.clip_type.value if message_create.clip_type else None,
         "clip_placeholder_text": message_create.clip_placeholder_text,
         "clip_url": message_create.clip_url,
@@ -249,21 +211,36 @@ async def send_message_http(
         "reactions": {},
     }
     
+    if message_create.sticker_id:
+        message_data_to_insert['message_subtype'] = MessageSubtypeEnum.STICKER.value
+        message_data_to_insert['text'] = None # Sticker messages do not have text
+        # Track sticker usage
+        try:
+            await db_manager.admin_client.rpc('upsert_sticker_usage', {
+                'p_user_id': str(current_user.id),
+                'p_sticker_id': str(message_create.sticker_id)
+            }).execute()
+        except Exception as e:
+            logger.error(f"Failed to track sticker usage for user {current_user.id}: {e}", exc_info=True)
+
+
     logger.debug(f"Message data to insert into DB: {message_data_to_insert}")
     insert_resp_obj = await db_manager.get_table("messages").insert(message_data_to_insert).execute()
     if not insert_resp_obj or not insert_resp_obj.data:
         logger.error(f"Failed to insert message into DB for chat {chat_id}. Payload: {message_data_to_insert}")
         raise HTTPException(status_code=500, detail="Failed to send message")
         
-    new_message_db = insert_resp_obj.data[0]
-    logger.info(f"Message {new_message_db['id']} successfully saved to DB for chat {chat_id}.")
+    new_message_db_id = insert_resp_obj.data[0]['id']
+    logger.info(f"Message {new_message_db_id} successfully saved to DB for chat {chat_id}.")
 
     await db_manager.get_table("chats").update({ 
         "updated_at": now.isoformat(),
     }).eq("id", str(chat_id)).execute()
     logger.debug(f"Updated chat {chat_id} updated_at timestamp.")
 
-    message_for_response = MessageInDB(**new_message_db)
+    message_for_response = await get_message_with_details_from_db(new_message_db_id)
+    if not message_for_response:
+        raise HTTPException(status_code=500, detail="Could not retrieve message details after sending.")
     
     await manager.broadcast_chat_message(str(chat_id), message_for_response, db_manager)
     
@@ -311,8 +288,11 @@ async def react_to_message(
         logger.error(f"Failed to update reaction for message {message_id}. Payload: {reactions}")
         raise HTTPException(status_code=500, detail="Failed to update reaction")
         
-    updated_message_db = update_reactions_resp_obj.data[0]
-    message_for_response = MessageInDB(**updated_message_db)
+    updated_message_db_id = update_reactions_resp_obj.data[0]['id']
+    message_for_response = await get_message_with_details_from_db(updated_message_db_id)
+    if not message_for_response:
+        raise HTTPException(status_code=500, detail="Could not retrieve updated message details after reaction.")
+
     logger.info(f"Reaction update successful for message {message_id}. Broadcasting.")
 
     await manager.broadcast_reaction_update(chat_id_str, message_for_response, db_manager)
@@ -380,6 +360,4 @@ async def get_default_chat_partner(
         return None 
     finally:
         logger.info(f"END: get_default_chat_partner for user: {current_user.id} ({current_user.display_name})")
-    
-
     

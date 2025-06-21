@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from uuid import UUID
+from datetime import datetime, timezone
 
 from app.auth.dependencies import get_current_active_user
 from app.auth.schemas import UserPublic
@@ -10,7 +11,8 @@ from app.utils.logging import logger
 from app.stickers.schemas import (
     StickerPackResponse, 
     StickerListResponse, 
-    StickerSearchBody
+    StickerSearchBody,
+    StickerFavoriteToggle,
 )
 
 router = APIRouter(prefix="/stickers", tags=["Stickers"])
@@ -20,12 +22,12 @@ async def get_sticker_packs(
     current_user: UserPublic = Depends(get_current_active_user)
 ):
     """
-    Retrieve all active sticker packs available.
-    In the future, this can be customized to return packs specific to the user.
+    Retrieve all active, non-premium sticker packs.
+    TODO: In the future, this can be customized to also return premium packs the user has unlocked.
     """
     logger.info(f"User {current_user.id} requesting sticker packs.")
     try:
-        packs_resp = await db_manager.get_table("sticker_packs").select("*").eq("is_active", True).execute()
+        packs_resp = await db_manager.get_table("sticker_packs").select("*").eq("is_active", True).eq("is_premium", False).execute()
         if not packs_resp or not packs_resp.data:
             return StickerPackResponse(packs=[])
         
@@ -82,3 +84,75 @@ async def search_stickers(
     except Exception as e:
         logger.error(f"Error searching stickers with query '{query}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An error occurred while searching for stickers.")
+
+@router.get("/recent", response_model=StickerListResponse)
+async def get_recent_stickers(
+    limit: int = 20,
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    """Retrieve user's recently used stickers."""
+    user_id_str = str(current_user.id)
+    logger.info(f"User {user_id_str} requesting recent stickers.")
+    
+    try:
+        recent_usage_resp = await db_manager.get_table("user_sticker_usage").select("sticker_id").eq("user_id", user_id_str).order("last_used", desc=True).limit(limit).execute()
+        
+        if not recent_usage_resp or not recent_usage_resp.data:
+            return StickerListResponse(stickers=[])
+            
+        recent_sticker_ids = [str(row['sticker_id']) for row in recent_usage_resp.data]
+        
+        stickers_resp = await db_manager.get_table("stickers").select("*").in_("id", recent_sticker_ids).execute()
+        
+        if not stickers_resp or not stickers_resp.data:
+            return StickerListResponse(stickers=[])
+            
+        sticker_map = {str(sticker['id']): sticker for sticker in stickers_resp.data}
+        ordered_stickers = [sticker_map[sticker_id] for sticker_id in recent_sticker_ids if sticker_id in sticker_map]
+        
+        return StickerListResponse(stickers=ordered_stickers)
+    except Exception as e:
+        logger.error(f"Error fetching recent stickers for user {user_id_str}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while retrieving recent stickers.")
+
+@router.post("/favorites/toggle", response_model=StickerListResponse)
+async def toggle_favorite_sticker(
+    favorite_toggle: StickerFavoriteToggle,
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    """Adds or removes a sticker from the user's favorites and returns the updated list."""
+    user_id_str = str(current_user.id)
+    sticker_id_str = str(favorite_toggle.sticker_id)
+    
+    try:
+        existing_fav_resp = await db_manager.get_table("user_favorite_stickers").select("sticker_id").eq("user_id", user_id_str).eq("sticker_id", sticker_id_str).maybe_single().execute()
+        
+        if existing_fav_resp and existing_fav_resp.data:
+            await db_manager.get_table("user_favorite_stickers").delete().eq("user_id", user_id_str).eq("sticker_id", sticker_id_str).execute()
+            logger.info(f"User {user_id_str} removed sticker {sticker_id_str} from favorites.")
+        else:
+            await db_manager.get_table("user_favorite_stickers").insert({
+                "user_id": user_id_str,
+                "sticker_id": sticker_id_str,
+                "favorited_at": datetime.now(timezone.utc).isoformat()
+            }).execute()
+            logger.info(f"User {user_id_str} added sticker {sticker_id_str} to favorites.")
+            
+        # Return the user's full list of favorite stickers
+        all_favs_resp = await db_manager.get_table("user_favorite_stickers").select("sticker_id").eq("user_id", user_id_str).order("favorited_at", desc=True).execute()
+        
+        if not all_favs_resp or not all_favs_resp.data:
+            return StickerListResponse(stickers=[])
+            
+        favorite_sticker_ids = [str(row['sticker_id']) for row in all_favs_resp.data]
+        
+        stickers_resp = await db_manager.get_table("stickers").select("*").in_("id", favorite_sticker_ids).execute()
+        
+        sticker_map = {str(sticker['id']): sticker for sticker in stickers_resp.data}
+        ordered_stickers = [sticker_map[sticker_id] for sticker_id in favorite_sticker_ids if sticker_id in sticker_map]
+
+        return StickerListResponse(stickers=ordered_stickers)
+
+    except Exception as e:
+        logger.error(f"Error toggling favorite sticker for user {user_id_str}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not update sticker favorites.")

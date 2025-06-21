@@ -8,7 +8,7 @@ import asyncio # Added for throttled last_seen
 
 from app.websocket.manager import manager
 from app.auth.schemas import UserPublic, TokenData
-from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, SupportedEmoji, MessageStatusEnum, SUPPORTED_EMOJIS
+from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, SupportedEmoji, MessageStatusEnum, SUPPORTED_EMOJIS, MessageSubtypeEnum
 from app.database import db_manager
 from app.utils.logging import logger
 
@@ -192,10 +192,9 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     new_message_payload = {
                         "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
                         "text": data.get("text"),
-                        # Sticker fields
-                        "sticker_url": data.get("sticker_url"),
-                        "sticker_id": data.get("sticker_id"), # Will be null if not provided
-                        "sticker_pack_id": data.get("sticker_pack_id"), # Will be null if not provided
+                        "message_subtype": data.get("message_subtype", MessageSubtypeEnum.TEXT.value),
+                        # Sticker ID
+                        "sticker_id": data.get("sticker_id"),
                         # Other media fields
                         "clip_type": data.get("clip_type"),
                         "clip_placeholder_text": data.get("clip_placeholder_text"),
@@ -215,6 +214,24 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         "audio_format": data.get("audio_format"),
                         "transcription": data.get("transcription"), # Initially null
                     }
+                    
+                    # Handle sticker-specific logic
+                    sticker_id_from_client = data.get("sticker_id")
+                    if sticker_id_from_client:
+                        new_message_payload["message_subtype"] = MessageSubtypeEnum.STICKER.value
+                        new_message_payload["text"] = None # Sticker messages don't have text
+                        
+                        # Asynchronously track sticker usage
+                        try:
+                            await db_manager.admin_client.rpc('upsert_sticker_usage', {
+                                'p_user_id': str(user_id),
+                                'p_sticker_id': sticker_id_from_client
+                            }).execute()
+                            logger.info(f"User {user_id} used sticker {sticker_id_from_client}. Usage tracked.")
+                        except Exception as e:
+                            logger.error(f"Failed to track sticker usage for user {user_id}: {e}", exc_info=True)
+
+
                     insert_result_obj = await db_manager.get_table("messages").insert(new_message_payload).execute()
                     
                     if not insert_result_obj or not insert_result_obj.data: 
@@ -225,7 +242,18 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     user_message_timestamps[user_id].append(current_time_for_rate_limit) 
 
                     await db_manager.get_table("chats").update({"updated_at": msg_now.isoformat()}).eq("id", str(chat_id)).execute()
-                    message_out = MessageInDB(**insert_result_obj.data[0])
+                    
+                    # Fetch message with sticker_image_url for broadcast
+                    new_msg_id = insert_result_obj.data[0]['id']
+                    final_msg_resp = await db_manager.admin_client.rpc('get_message_with_details', {'p_message_id': new_msg_id}).maybe_single().execute()
+                    
+                    if not final_msg_resp or not final_msg_resp.data:
+                        logger.error(f"Could not retrieve message details for broadcast after insert. Message ID: {new_msg_id}")
+                        # Fallback to sending without sticker url
+                        message_out = MessageInDB(**insert_result_obj.data[0])
+                    else:
+                        message_out = MessageInDB(**final_msg_resp.data)
+
                     await manager.broadcast_chat_message(str(chat_id), message_out, db_manager)
 
                 elif event_type == "toggle_reaction":
@@ -385,5 +413,3 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
         # For now, it's kept.
 
         logger.info(f"WS user {user_id}: Graceful disconnect initiated.")
-
-    
