@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException, status
 from typing import List, Optional, Dict, Any
 from uuid import UUID, uuid4
@@ -300,8 +301,10 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                 elif event_type == "ping_thinking_of_you":
                     recipient_user_id_str = data.get("recipient_user_id")
                     if not recipient_user_id_str: raise ValueError("Missing recipient_user_id for ping")
-                    recipient_user_id = UUID(recipient_user_id_str) 
+                    recipient_user_id = UUID(recipient_user_id_str)
                     
+                    logger.info(f"WS user {current_user.id} ({current_user.display_name}) is sending 'Thinking of You' ping to user {recipient_user_id}.")
+
                     recipient_check_resp_obj = await db_manager.get_table("users").select("id, display_name").eq("id", str(recipient_user_id)).maybe_single().execute()
                     if not recipient_check_resp_obj or not recipient_check_resp_obj.data:
                         logger.warning(f"WS user {user_id}: Recipient user {recipient_user_id} not found for ping.")
@@ -316,6 +319,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         },
                         recipient_user_id,
                     )
+                    logger.info(f"WS: 'Thinking of You' event dispatched from user {current_user.id} to {recipient_user_id}.")
+
                 elif event_type == "HEARTBEAT":
                     logger.debug(f"WS user {user_id}: Received HEARTBEAT.")
                     # `update_user_last_seen_throttled` already called at the start of the loop for any message.
@@ -362,3 +367,5 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
         # For now, it's kept.
 
         logger.info(f"WS user {user_id}: Graceful disconnect initiated.")
+
+    
