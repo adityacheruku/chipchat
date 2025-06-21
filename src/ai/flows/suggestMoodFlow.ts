@@ -15,12 +15,12 @@ import { ALL_MOODS } from '@/types';
 
 const SuggestMoodInputSchema = z.object({
   messageText: z.string().describe('The text of the message sent by the user.'),
-  currentMood: z.enum(ALL_MOODS as [Mood, ...Mood[]]).describe('The current mood of the user.'),
+  currentMood: z.string().describe('The current mood of the user, which could be a custom value.'),
 });
 export type SuggestMoodInput = z.infer<typeof SuggestMoodInputSchema>;
 
 const SuggestMoodOutputSchema = z.object({
-  suggestedMood: z.enum(ALL_MOODS as [Mood, ...Mood[]]).optional().describe('The suggested mood based on the message text. If no strong mood is detected or it matches the current mood, this may be undefined.'),
+  suggestedMood: z.enum(ALL_MOODS as [string, ...string[]]).optional().describe('The suggested mood based on the message text. If no strong mood is detected or it matches the current mood, this may be undefined.'),
   confidence: z.number().optional().describe('A confidence score (0-1) for the suggestion, if a mood is suggested.'),
   reasoning: z.string().optional().describe('A brief explanation for the mood suggestion.'),
 });
@@ -35,7 +35,7 @@ const prompt = ai.definePrompt({
   input: {schema: SuggestMoodInputSchema},
   output: {schema: SuggestMoodOutputSchema},
   prompt: `You are an empathetic assistant helping to identify a user's mood based on their chat message.
-The user's current mood is {{currentMood}}.
+The user's current mood is "{{currentMood}}".
 The user just sent the following message: "{{messageText}}"
 
 Analyze the message text. If the message strongly suggests a mood DIFFERENT from their current mood, suggest one of the following moods: ${ALL_MOODS.join(', ')}.
