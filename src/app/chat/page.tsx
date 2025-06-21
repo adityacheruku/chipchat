@@ -713,7 +713,12 @@ export default function ChatPage() {
                 isOpen={showNotificationPrompt}
                 onEnable={handleEnableNotifications}
                 onDismiss={handleDismissNotificationPrompt}
-                partnerName={otherUser?.display_name}
+                title="Enable Notifications"
+                message={
+                    otherUser
+                    ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.`
+                    : 'Stay connected even when ChirpChat is closed.'
+                }
               />
               <ChatHeader
                 currentUser={currentUser}

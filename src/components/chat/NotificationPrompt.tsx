@@ -9,22 +9,20 @@ interface NotificationPromptProps {
   isOpen: boolean;
   onEnable: () => void;
   onDismiss: () => void;
-  partnerName?: string | null;
+  title: string;
+  message: string;
 }
 
 export default function NotificationPrompt({
   isOpen,
   onEnable,
   onDismiss,
-  partnerName,
+  title,
+  message,
 }: NotificationPromptProps) {
   if (!isOpen) {
     return null;
   }
-
-  const message = partnerName
-    ? `Don't miss messages from ${partnerName}.`
-    : "Stay updated with your conversations.";
 
   return (
     <div
@@ -39,7 +37,7 @@ export default function NotificationPrompt({
           <Bell className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h3 className="font-semibold text-card-foreground">Enable Notifications</h3>
+          <h3 className="font-semibold text-card-foreground">{title}</h3>
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
       </div>
