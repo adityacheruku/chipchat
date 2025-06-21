@@ -8,4 +8,4 @@ export const MAX_AVATAR_SIZE_KB = 500;
  * If false, this feature is disabled.
  * Defaults to false.
  */
-export const ENABLE_AI_MOOD_SUGGESTION = false;
+export const ENABLE_AI_MOOD_SUGGESTION = true;
