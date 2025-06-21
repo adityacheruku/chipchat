@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Slider } from "@/components/ui/slider";
 import { useState, useEffect, useRef, memo } from 'react';
 
 interface MessageBubbleProps {
@@ -32,11 +33,90 @@ interface MessageBubbleProps {
 }
 
 function formatDuration(seconds: number | null | undefined): string {
-    if (seconds === null || seconds === undefined) return '';
+    if (seconds === null || seconds === undefined || isNaN(seconds)) return '0:00';
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
+
+const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string; initialDuration: number | null | undefined, isCurrentUser: boolean }) => {
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [duration, setDuration] = useState(initialDuration || 0);
+    const [currentTime, setCurrentTime] = useState(0);
+
+    const handlePlayPause = () => {
+        if (!audioRef.current) return;
+        if (isPlaying) {
+            audioRef.current.pause();
+        } else {
+            audioRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    const handleTimeUpdate = () => {
+        if (audioRef.current) {
+            setCurrentTime(audioRef.current.currentTime);
+        }
+    };
+
+    const handleLoadedMetadata = () => {
+        if (audioRef.current) {
+            setDuration(audioRef.current.duration);
+        }
+    };
+    
+    const handleSeek = (value: number[]) => {
+        if (audioRef.current) {
+            audioRef.current.currentTime = value[0];
+            setCurrentTime(value[0]);
+        }
+    };
+
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (audio) {
+            audio.addEventListener('timeupdate', handleTimeUpdate);
+            audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+            audio.addEventListener('ended', () => setIsPlaying(false));
+
+            return () => {
+                audio.removeEventListener('timeupdate', handleTimeUpdate);
+                audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                audio.removeEventListener('ended', () => setIsPlaying(false));
+            };
+        }
+    }, []);
+
+    const playerColorClass = isCurrentUser ? 'text-primary-foreground' : 'text-secondary-foreground';
+    
+    return (
+        <div className={cn("flex items-center gap-3 w-full max-w-[250px]", playerColorClass)}>
+            <audio ref={audioRef} src={src} preload="metadata" />
+            <Button
+                variant="ghost"
+                size="icon"
+                onClick={handlePlayPause}
+                className={cn("w-8 h-8 rounded-full flex-shrink-0", isCurrentUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-secondary-foreground/20')}
+            >
+                {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+            </Button>
+            <div className="flex-grow flex flex-col justify-center gap-1">
+                 <Slider
+                    value={[currentTime]}
+                    max={duration}
+                    step={1}
+                    onValueChange={handleSeek}
+                    className={cn(isCurrentUser ? '[&>span>span]:bg-primary-foreground' : '[&>span>span]:bg-secondary-foreground')}
+                 />
+                 <div className="text-xs opacity-80 text-right">
+                     {formatDuration(currentTime)} / {formatDuration(duration)}
+                 </div>
+            </div>
+        </div>
+    );
+});
 
 
 function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers }: MessageBubbleProps) {
@@ -102,23 +182,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 
   const renderMessageContent = () => {
     if (message.clip_url && message.clip_type === 'audio') {
-        return (
-            <div className="flex items-center gap-2">
-                <audio
-                    controls
-                    src={message.clip_url}
-                    className="w-full max-w-[250px] h-10"
-                >
-                    Your browser does not support the audio element.
-                </audio>
-                {message.duration_seconds && (
-                    <div className="flex items-center text-xs text-muted-foreground ml-2">
-                         <Clock size={12} className="mr-1" />
-                        <span>{formatDuration(message.duration_seconds)}</span>
-                    </div>
-                )}
-            </div>
-        );
+        return <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} />;
     }
     if (message.clip_url && message.clip_type === 'video') {
       return (
