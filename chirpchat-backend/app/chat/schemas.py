@@ -1,4 +1,3 @@
-
 from typing import List, Optional, Dict
 from uuid import UUID
 from pydantic import BaseModel, Field
@@ -9,7 +8,7 @@ class ClipTypeEnum(str, enum.Enum): # Using enum.Enum for proper value access
     AUDIO = "audio"
     VIDEO = "video"
 
-SUPPORTED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢'] 
+SUPPORTED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '🤔', '💯'] 
 SupportedEmoji = str # Use Pydantic enum or validator for stricter check
 
 class MessageStatusEnum(str, enum.Enum):
@@ -89,4 +88,3 @@ class DefaultChatPartnerResponse(BaseModel):
 
     class Config:
         from_attributes = True
-

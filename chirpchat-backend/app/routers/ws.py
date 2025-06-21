@@ -1,6 +1,5 @@
-
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException, status
-from typing import List, Optional, Dict 
+from typing import List, Optional, Dict, Any
 from uuid import UUID, uuid4
 from datetime import datetime, timezone, timedelta 
 import json
@@ -8,7 +7,7 @@ import asyncio # Added for throttled last_seen
 
 from app.websocket.manager import manager
 from app.auth.schemas import UserPublic, TokenData
-from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, SupportedEmoji, MessageStatusEnum
+from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, SupportedEmoji, MessageStatusEnum, SUPPORTED_EMOJIS
 from app.database import db_manager
 from app.utils.logging import logger
 
@@ -19,9 +18,15 @@ from starlette.websockets import WebSocketState
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
+# Server-Side Rate Limiting
 MAX_MESSAGES_PER_WINDOW = 20
 MESSAGE_WINDOW_SECONDS = 60
 user_message_timestamps: Dict[UUID, List[datetime]] = {}
+
+MAX_REACTIONS_PER_WINDOW = 15
+REACTION_WINDOW_SECONDS = 10
+user_reaction_timestamps: Dict[UUID, List[datetime]] = {}
+
 
 # For throttled last_seen updates on heartbeat/activity
 user_last_activity_update_db: Dict[UUID, datetime] = {}
@@ -211,6 +216,30 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     if not all([message_id_str, chat_id_str, emoji_str]):
                         raise ValueError("Missing message_id, chat_id, or emoji for toggle_reaction")
                     
+                    # --- SERVER-SIDE INPUT VALIDATION ---
+                    if emoji_str not in SUPPORTED_EMOJIS:
+                        logger.warning(f"WS user {user_id}: Invalid emoji '{emoji_str}' received for reaction.")
+                        await websocket.send_json({"event_type": "error", "detail": "Invalid emoji provided."})
+                        continue
+
+                    # --- SERVER-SIDE RATE LIMITING ---
+                    current_time_for_rate_limit = datetime.now(timezone.utc)
+                    if user_id not in user_reaction_timestamps:
+                        user_reaction_timestamps[user_id] = []
+                    
+                    user_reaction_timestamps[user_id] = [
+                        ts for ts in user_reaction_timestamps[user_id]
+                        if current_time_for_rate_limit - ts < timedelta(seconds=REACTION_WINDOW_SECONDS)
+                    ]
+
+                    if len(user_reaction_timestamps[user_id]) >= MAX_REACTIONS_PER_WINDOW:
+                        logger.warning(f"WS user {user_id}: Rate limit exceeded for toggling reactions.")
+                        await websocket.send_json({
+                            "event_type": "error",
+                            "detail": "You are reacting too quickly. Please wait a moment."
+                        })
+                        continue
+                    
                     message_id = UUID(message_id_str)
                     chat_id = UUID(chat_id_str) 
                     emoji = SupportedEmoji(emoji_str) 
@@ -250,6 +279,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         await websocket.send_json({"event_type": "error", "detail": "Failed to save your reaction."})
                         continue
                     
+                    user_reaction_timestamps[user_id].append(current_time_for_rate_limit)
+
                     updated_message_out = MessageInDB(**update_reaction_result_obj.data[0])
                     await manager.broadcast_reaction_update(str(chat_id), updated_message_out, db_manager)
 
@@ -314,12 +345,14 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
         
         if user_id in user_message_timestamps:
             del user_message_timestamps[user_id]
-            logger.info(f"WS user {user_id}: Cleared rate limit timestamps on disconnect.")
+            logger.info(f"WS user {user_id}: Cleared message rate limit timestamps on disconnect.")
+        if user_id in user_reaction_timestamps:
+            del user_reaction_timestamps[user_id]
+            logger.info(f"WS user {user_id}: Cleared reaction rate limit timestamps on disconnect.")
+
         
         # user_last_activity_update_db is a global cache, might not need clearing per disconnect
         # unless it grows too large or contains stale data for very long offline users.
         # For now, it's kept.
 
         logger.info(f"WS user {user_id}: Graceful disconnect initiated.")
-
-    

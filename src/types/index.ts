@@ -1,9 +1,8 @@
-
 export type Mood = "Happy" | "Sad" | "Neutral" | "Excited" | "Thoughtful" | "Chilling" | "Angry" | "Anxious" | "Content";
 export const ALL_MOODS: Mood[] = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"];
 
-export type SupportedEmoji = '👍' | '❤️' | '😂' | '😮' | '😢';
-export const ALL_SUPPORTED_EMOJIS: SupportedEmoji[] = ['👍', '❤️', '😂', '😮', '😢'];
+export type SupportedEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '🙏' | '🔥' | '🎉' | '🤔' | '💯';
+export const ALL_SUPPORTED_EMOJIS: SupportedEmoji[] = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '🤔', '💯'];
 
 // User types aligned with backend schemas
 export interface User {
@@ -152,4 +151,3 @@ export interface UserCreateFrontend {
   display_name: string;
   email?: string; // Optional email
 }
-

@@ -1,4 +1,3 @@
-
 import type { Message, User, SupportedEmoji } from '@/types';
 import { ALL_SUPPORTED_EMOJIS } from '@/types';
 import { format, parseISO } from 'date-fns';
@@ -25,7 +24,7 @@ interface MessageBubbleProps {
   isCurrentUser: boolean;
   currentUserId: string;
   onToggleReaction: (messageId: string, emoji: SupportedEmoji) => void;
-  onShowReactions: (message: Message) => void;
+  onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
   allUsers: Record<string, User>;
 }
 
@@ -92,7 +91,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-1 bg-card border shadow-lg rounded-full">
-        <div className="flex space-x-1">
+        <div className="flex flex-wrap gap-1 max-w-[180px] justify-center">
           {ALL_SUPPORTED_EMOJIS.map(emoji => (
             <Button
               key={emoji}
@@ -156,6 +155,7 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
             
             const currentUserReacted = reactors.includes(currentUserId);
             const isAnimated = animatedEmojis[emoji];
+            const reactorNames = getReactorNames(reactors);
 
             return (
               <TooltipProvider key={emoji} delayDuration={100}>
@@ -170,14 +170,14 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
                           : (isCurrentUser ? "bg-background/10 border-primary-foreground/30 text-primary-foreground/80 hover:bg-background/20" : "bg-background/50 border-border hover:bg-muted"),
                         isAnimated && "animate-pop" 
                       )}
-                      aria-label={`Reacted with ${emoji}, count ${reactors.length}. Click to see who reacted.`}
+                      aria-label={`Reacted with ${emoji}: ${reactorNames}. Click to see details.`}
                     >
                       <span>{emoji}</span>
                       <span className="font-medium">{reactors.length}</span>
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{getReactorNames(reactors)}</p>
+                    <p>{reactorNames}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
