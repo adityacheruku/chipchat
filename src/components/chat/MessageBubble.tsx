@@ -220,6 +220,8 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const alignmentClass = isCurrentUser ? 'items-end' : 'items-start';
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
+  const contentBubbleColor = message.sticker_url ? 'bg-transparent' : cn(bubbleColorClass, bubbleBorderRadius);
+
 
   let formattedTime = "sending...";
   try {
@@ -234,6 +236,17 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   }
 
   const renderMessageContent = () => {
+    if (message.sticker_url) {
+      return (
+        <Image
+          src={message.sticker_url}
+          alt="sticker"
+          width={128}
+          height={128}
+          className="bg-transparent"
+        />
+      );
+    }
     if (message.clip_url && message.clip_type === 'audio') {
         return <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} />;
     }
@@ -295,7 +308,10 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           {!isCurrentUser && (
             <p className="text-xs font-semibold text-muted-foreground mb-0.5 ml-2">{sender.display_name}</p>
           )}
-          <div className={cn('p-3 rounded-xl shadow min-w-[80px]', bubbleColorClass, bubbleBorderRadius)}>
+          <div className={cn(
+            'p-3 rounded-xl shadow min-w-[80px]',
+            message.sticker_url ? 'bg-transparent p-0 shadow-none' : cn(bubbleColorClass, bubbleBorderRadius)
+            )}>
             {renderMessageContent()}
           </div>
         </div>

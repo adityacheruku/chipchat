@@ -4,19 +4,22 @@
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin, Trash2, StopCircle } from 'lucide-react';
+import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin, Trash2, StopCircle, StickyNote } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import StickerPicker from './StickerPicker';
 import type { MessageClipType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 interface InputBarProps {
   onSendMessage: (text: string) => void;
+  onSendSticker: (stickerUrl: string) => void;
   onSendMoodClip: (clipType: MessageClipType, file: File) => void;
   onSendVoiceMessage: (file: File) => void;
   onSendImage?: (file: File) => void;
@@ -31,6 +34,7 @@ const MAX_RECORDING_SECONDS = 120; // 2 minutes
 
 export default function InputBar({
   onSendMessage,
+  onSendSticker,
   onSendMoodClip,
   onSendVoiceMessage,
   onSendImage,
@@ -41,6 +45,7 @@ export default function InputBar({
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
 
   // State for voice recording
   type RecordingStatus = 'idle' | 'permission_requested' | 'recording' | 'recorded' | 'sending';
@@ -88,6 +93,12 @@ export default function InputBar({
     if (messageText.trim() === '') {
         onTyping(false);
     }
+  };
+
+  const handleStickerSelect = (stickerUrl: string) => {
+    if (disabled) return;
+    onSendSticker(stickerUrl);
+    setIsStickerPickerOpen(false);
   };
 
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, attachmentType: 'audio' | 'media' | 'document') => {
@@ -306,25 +317,24 @@ export default function InputBar({
                 </TooltipContent>
                 </Tooltip>
             </TooltipProvider>
-            <TooltipProvider>
-                <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                    variant="ghost"
-                    size="icon"
-                    type="button"
-                    className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
-                    aria-label="Open emoji picker (coming soon)"
-                    disabled={isSending || disabled}
-                    >
-                    <Smile size={22} />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                    <p>Emoji - Coming Soon!</p>
-                </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
+
+            <Popover open={isStickerPickerOpen} onOpenChange={setIsStickerPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
+                  className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
+                  aria-label="Open sticker picker"
+                  disabled={isSending || disabled}
+                >
+                  <Smile size={22} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 border-none mb-2" side="top" align="start">
+                <StickerPicker onStickerSelect={handleStickerSelect} />
+              </PopoverContent>
+            </Popover>
 
             <Input
                 type="text"

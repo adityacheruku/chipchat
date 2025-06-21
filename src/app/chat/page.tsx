@@ -361,6 +361,33 @@ export default function ChatPage() {
     }
   };
 
+  const handleSendSticker = (stickerUrl: string) => {
+    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+
+    const clientTempId = `temp_sticker_${Date.now()}`;
+    const optimisticMessage: MessageType = {
+      id: clientTempId,
+      user_id: currentUser.id,
+      chat_id: activeChat.id,
+      sticker_url: stickerUrl,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      reactions: {},
+      client_temp_id: clientTempId,
+      status: "sending" as MessageStatus,
+    };
+    setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+
+    sendWsMessage({
+      event_type: "send_message",
+      chat_id: activeChat.id,
+      sticker_url: stickerUrl,
+      client_temp_id: clientTempId,
+    });
+    addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
+  };
+
+
   const handleSendMoodClip = async (clipType: MessageClipType, file: File) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
     toast({ title: "Uploading clip..."});
@@ -705,6 +732,7 @@ export default function ChatPage() {
               )}
               <InputBar
                 onSendMessage={handleSendMessage}
+                onSendSticker={handleSendSticker}
                 onSendMoodClip={handleSendMoodClip}
                 onSendVoiceMessage={handleSendVoiceMessage}
                 onSendImage={handleSendImage}
