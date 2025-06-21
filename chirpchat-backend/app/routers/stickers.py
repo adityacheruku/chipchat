@@ -82,4 +82,3 @@ async def search_stickers(
     except Exception as e:
         logger.error(f"Error searching stickers with query '{query}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An error occurred while searching for stickers.")
-

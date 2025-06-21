@@ -89,6 +89,7 @@ async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> Opti
         elif token_data.phone: 
             logger.info(f"WS Auth: Attempting to fetch user by phone: {token_data.phone}")
             response = await db_manager.get_table("users").select("*").eq("phone", token_data.phone).maybe_single().execute()
+            response = await db_manager.get_table("users").select("*").eq("phone", token_data.phone).maybe_single().execute()
             user_dict = response.data
     except Exception as e: 
         logger.error(f"WS Auth: Database error while fetching user for token validation: {e}", exc_info=True)
