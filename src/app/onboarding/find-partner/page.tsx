@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
-import { Loader2, UserPlus, Mail, Share2, Check, X, BellRing, Send, Clock } from 'lucide-react';
+import { Loader2, UserPlus, Mail, Share2, Check, X, BellRing, Send, Clock, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function FindPartnerPage() {
-    const { currentUser, isLoading: isAuthLoading, isAuthenticated, fetchAndUpdateUser } = useAuth();
+    const { currentUser, isLoading: isAuthLoading, isAuthenticated, fetchAndUpdateUser, logout } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
 
@@ -134,7 +134,17 @@ export default function FindPartnerPage() {
 
     return (
         <div className="flex min-h-screen flex-col items-center justify-center p-2 sm:p-4 bg-background relative">
-            <Card className="w-full max-w-lg shadow-xl">
+             <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+                aria-label="Log out"
+            >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+            </Button>
+            <Card className="w-full max-w-lg shadow-xl mt-16 sm:mt-0">
                 <CardHeader className="text-center">
                     <CardTitle className="text-3xl font-headline text-primary">Choose Your Partner</CardTitle>
                     <CardDescription className="text-muted-foreground max-w-sm mx-auto">
