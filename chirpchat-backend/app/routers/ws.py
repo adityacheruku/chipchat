@@ -264,14 +264,17 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
 
                     reactions = message_db.get("reactions", {}) or {} 
                     user_id_str_for_reaction = str(user_id)
+                    action_taken = "added"
 
                     if emoji not in reactions: reactions[emoji] = []
                     
                     if user_id_str_for_reaction in reactions[emoji]:
                         reactions[emoji].remove(user_id_str_for_reaction)
                         if not reactions[emoji]: del reactions[emoji] 
+                        action_taken = "removed"
                     else:
                         reactions[emoji].append(user_id_str_for_reaction)
+                        action_taken = "added"
                     
                     update_reaction_result_obj = await db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
                     if not update_reaction_result_obj or not update_reaction_result_obj.data: 
@@ -279,6 +282,9 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                         await websocket.send_json({"event_type": "error", "detail": "Failed to save your reaction."})
                         continue
                     
+                    # Audit Log
+                    logger.info(f"AUDIT: ReactionToggle - User '{user_id}' {action_taken} reaction '{emoji}' on message '{message_id}' in chat '{chat_id}'.")
+
                     user_reaction_timestamps[user_id].append(current_time_for_rate_limit)
 
                     updated_message_out = MessageInDB(**update_reaction_result_obj.data[0])

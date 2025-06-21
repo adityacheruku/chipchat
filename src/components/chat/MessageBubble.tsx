@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 
 interface MessageBubbleProps {
   message: Message;
@@ -28,7 +28,8 @@ interface MessageBubbleProps {
   allUsers: Record<string, User>;
 }
 
-export default function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers }: MessageBubbleProps) {
+function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers }: MessageBubbleProps) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const alignmentClass = isCurrentUser ? 'items-end' : 'items-start';
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   const bubbleBorderRadius = isCurrentUser ? 'rounded-br-none' : 'rounded-bl-none';
@@ -73,16 +74,17 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
 
   const handleReactionClick = (emoji: SupportedEmoji) => {
     onToggleReaction(message.id, emoji);
+    setPopoverOpen(false); // FIX: Manually close popover after selection
   };
 
   const reactionPopover = (
-    <Popover>
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
           className={cn(
-            "absolute -top-3 p-1 h-7 w-7 rounded-full bg-card text-muted-foreground opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shadow-md hover:text-accent active:text-accent",
+            "absolute -top-3 p-1 h-7 w-7 rounded-full bg-card text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shadow-md hover:text-accent active:text-accent",
             isCurrentUser ? "-left-2" : "-right-2"
           )}
           aria-label="Add reaction"
@@ -234,3 +236,5 @@ export default function MessageBubble({ message, sender, isCurrentUser, currentU
     </div>
   );
 }
+
+export default memo(MessageBubble);
