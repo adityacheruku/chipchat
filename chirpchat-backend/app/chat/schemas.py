@@ -20,6 +20,7 @@ class MessageStatusEnum(str, enum.Enum):
 
 class MessageBase(BaseModel):
     text: Optional[str] = None
+    sticker_url: Optional[str] = None
     clip_type: Optional[ClipTypeEnum] = None
     clip_placeholder_text: Optional[str] = None
     clip_url: Optional[str] = None

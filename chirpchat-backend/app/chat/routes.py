@@ -232,6 +232,7 @@ async def send_message_http(
         "chat_id": str(chat_id),
         "user_id": str(current_user.id),
         "text": message_create.text,
+        "sticker_url": message_create.sticker_url,
         "clip_type": message_create.clip_type.value if message_create.clip_type else None,
         "clip_placeholder_text": message_create.clip_placeholder_text,
         "clip_url": message_create.clip_url,

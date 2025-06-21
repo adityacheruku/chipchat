@@ -191,6 +191,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     new_message_payload = {
                         "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
                         "text": data.get("text"),
+                        "sticker_url": data.get("sticker_url"),
                         "clip_type": data.get("clip_type"),
                         "clip_placeholder_text": data.get("clip_placeholder_text"),
                         "clip_url": data.get("clip_url"),

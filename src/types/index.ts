@@ -40,6 +40,7 @@ export interface Message {
   image_thumbnail_url?: string | null; // For optimized image loading
   document_url?: string | null;
   document_name?: string | null;
+  sticker_url?: string | null;
   client_temp_id?: string | null; // Client-generated temporary ID
   status?: MessageStatus | null; // Message status
   // Voice message metadata
@@ -168,4 +169,29 @@ export interface UserCreateFrontend {
   password_plaintext: string; // To match AuthContext
   display_name: string;
   email?: string; // Optional email
+}
+
+// Sticker System Types
+export interface StickerPack {
+  id: string; // UUID
+  name: string;
+  description?: string | null;
+  thumbnail_url?: string | null;
+  is_active: boolean;
+  created_at: string; // ISO Date string
+}
+
+export interface Sticker {
+  id: string; // UUID
+  pack_id: string; // UUID of the sticker pack
+  name?: string | null;
+  image_url: string;
+  tags?: string[] | null;
+  order_index?: number;
+}
+
+export interface UserStickerPack {
+    user_id: string; // UUID
+    pack_id: string; // UUID
+    unlocked_at: string; // ISO Date string
 }
