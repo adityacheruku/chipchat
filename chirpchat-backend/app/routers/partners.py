@@ -132,22 +132,31 @@ async def respond_to_partner_request(
             ).execute()
         except Exception as e:
             logger.error(f"RPC accept_partner_request failed for user {current_user.id} on request {request_id}: {e}", exc_info=True)
-            raise HTTPException(status_code=400, detail=str(e))
+            detail_message = getattr(e, 'message', str(e))
+            raise HTTPException(status_code=400, detail=detail_message)
     
     elif action == "reject":
         try:
             # Verify the current user is the recipient before rejecting
-            req_resp = await db_manager.get_table("partner_requests").select("recipient_id").eq("id", str(request_id)).single().execute()
-            if req_resp.data['recipient_id'] != str(current_user.id):
-                raise HTTPException(status_code=403, detail="You are not the recipient of this request.")
+            req_resp = await db_manager.admin_client.table("partner_requests").select("recipient_id, status").eq("id", str(request_id)).maybe_single().execute()
             
-            await db_manager.get_table("partner_requests").update({
+            if not req_resp.data:
+                raise HTTPException(status_code=404, detail="Request not found.")
+                
+            if req_resp.data.get('recipient_id') != str(current_user.id):
+                raise HTTPException(status_code=403, detail="You are not the recipient of this request.")
+
+            if req_resp.data.get('status') != 'pending':
+                raise HTTPException(status_code=400, detail="This request is no longer pending and cannot be rejected.")
+
+            await db_manager.admin_client.table("partner_requests").update({
                 "status": "rejected",
                 "updated_at": "now()"
             }).eq("id", str(request_id)).execute()
+        except HTTPException:
+            raise # Re-raise our own HTTP exceptions
         except Exception as e:
             logger.error(f"Error rejecting request {request_id} by user {current_user.id}: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Could not reject request.")
     
     return None # Returns 204 No Content on success
-
