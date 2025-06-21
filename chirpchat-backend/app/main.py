@@ -15,7 +15,7 @@ from app.routers.ws import router as ws_router
 from app.routers.ai import router as ai_router # Ensure AI router is included if used
 from app.routers.stickers import router as stickers_router # Import the new sticker router
 from app.notifications.routes import router as notifications_router # Import the notifications router
-
+from app.routers.partners import router as partners_router # Import the new partners router
 
 app = FastAPI(
     title="ChirpChat API",
@@ -87,6 +87,7 @@ app.include_router(ws_router) # Prefix is /ws
 app.include_router(ai_router) # Prefix is /ai
 app.include_router(stickers_router) # Prefix is /stickers
 app.include_router(notifications_router) # Prefix is /notifications
+app.include_router(partners_router) # Prefix is /partners
 
 # Mount WebSocket endpoint (Alternative: include ws_router which already defines it)
 # from app.routers.ws import websocket_endpoint

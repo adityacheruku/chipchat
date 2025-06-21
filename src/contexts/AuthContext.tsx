@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { api } from '@/services/api';
 import type { UserInToken, AuthResponse } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -28,11 +28,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
+
+  const isAuthenticated = !!token && !!currentUser;
+
+  const handleAuthSuccess = (data: AuthResponse) => {
+    localStorage.setItem('chirpChatToken', data.access_token);
+    localStorage.setItem('chirpChatUser', JSON.stringify(data.user));
+    setCurrentUser(data.user);
+    setToken(data.access_token);
+    if (data.user.partner_id) {
+      router.push('/chat');
+    } else {
+      router.push('/onboarding/find-partner');
+    }
+  };
 
   const loadUserFromToken = useCallback(async (storedToken: string) => {
     setIsLoading(true);
     try {
+      api.setAuthToken(storedToken); // Ensure API client has token for subsequent calls
       const userProfile = await api.getCurrentUserProfile();
       setCurrentUser(userProfile);
       setToken(storedToken);
@@ -40,12 +56,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("Failed to load user from token", error);
       localStorage.removeItem('chirpChatToken');
       localStorage.removeItem('chirpChatUser');
+      api.setAuthToken(null);
       setToken(null);
       setCurrentUser(null);
+      if (pathname !== '/') router.push('/');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [pathname, router]);
 
 
   useEffect(() => {
@@ -57,20 +75,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [loadUserFromToken]);
 
-  const login = async (phone: string, password_plaintext: string) => { // Changed from username_email
+  useEffect(() => {
+    // This effect handles redirection after the user is loaded.
+    if (!isLoading && isAuthenticated && currentUser) {
+      const isAuthPage = pathname === '/';
+      const isOnboardingPage = pathname === '/onboarding/find-partner';
+
+      if (currentUser.partner_id) {
+        // If partnered, should be on chat page
+        if (isAuthPage || isOnboardingPage) {
+          router.push('/chat');
+        }
+      } else {
+        // If not partnered, should be on onboarding page
+        if (!isOnboardingPage) {
+          router.push('/onboarding/find-partner');
+        }
+      }
+    }
+  }, [isLoading, isAuthenticated, currentUser, pathname, router]);
+
+  const login = async (phone: string, password_plaintext: string) => { 
     setIsLoading(true);
     try {
-      const data: AuthResponse = await api.login(phone, password_plaintext); // Use phone
-      localStorage.setItem('chirpChatToken', data.access_token);
-      localStorage.setItem('chirpChatUser', JSON.stringify(data.user));
-      setCurrentUser(data.user);
-      setToken(data.access_token);
-      router.push('/chat');
+      const data: AuthResponse = await api.login(phone, password_plaintext); 
+      handleAuthSuccess(data);
     } catch (error: any) {
-      console.error("AuthContext.login - Error during login:", error);
-      if (error.message) console.error("AuthContext.login - Error message:", error.message);
-      if (error.name) console.error("AuthContext.login - Error name:", error.name); // e.g., TypeError for "Failed to fetch"
-      if (error.cause) console.error("AuthContext.login - Error cause:", error.cause);
       toast({ variant: 'destructive', title: 'Login Failed', description: error.message || 'Please check your credentials.' });
       throw error;
     } finally {
@@ -78,21 +108,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const register = async (userData: BackendUserCreate) => { // userData matches backend schema
+  const register = async (userData: BackendUserCreate) => {
     setIsLoading(true);
     try {
       const data: AuthResponse = await api.register(userData);
-      localStorage.setItem('chirpChatToken', data.access_token);
-      localStorage.setItem('chirpChatUser', JSON.stringify(data.user));
-      setCurrentUser(data.user);
-      setToken(data.access_token);
-      router.push('/chat');
+      handleAuthSuccess(data);
        toast({ title: 'Registration Successful!', description: 'Welcome to ChirpChat.' });
     } catch (error: any) {
-      console.error("AuthContext.register - Error during registration:", error);
-      if (error.message) console.error("AuthContext.register - Error message:", error.message);
-      if (error.name) console.error("AuthContext.register - Error name:", error.name); // e.g., TypeError for "Failed to fetch"
-      if (error.cause) console.error("AuthContext.register - Error cause:", error.cause);
       toast({ variant: 'destructive', title: 'Registration Failed', description: error.message || 'Please try again.' });
       throw error;
     } finally {
@@ -104,6 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = useCallback(() => {
     setCurrentUser(null);
     setToken(null);
+    api.setAuthToken(null);
     localStorage.removeItem('chirpChatToken');
     localStorage.removeItem('chirpChatUser');
     router.push('/');
@@ -122,7 +145,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [token, logout]);
 
-  const isAuthenticated = !!token && !!currentUser;
+
 
 
   return (

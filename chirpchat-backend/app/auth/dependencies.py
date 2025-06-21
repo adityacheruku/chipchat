@@ -68,18 +68,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPublic:
         raise credentials_exception
     
     try:
-        user_public_data = {
-            "id": user_dict.get("id"),
-            "display_name": user_dict.get("display_name"),
-            "avatar_url": user_dict.get("avatar_url"),
-            "mood": user_dict.get("mood"),
-            "phone": user_dict.get("phone"),
-            "email": user_dict.get("email"), 
-            "is_online": user_dict.get("is_online"),
-            "last_seen": user_dict.get("last_seen"),
-        }
-        # Validate with Pydantic model
-        user_for_return = UserPublic(**user_public_data)
+        # Pydantic will ignore extra fields from DB, so we can pass user_dict directly
+        user_for_return = UserPublic(**user_dict)
         logger.info(f"Successfully authenticated user: {user_for_return.id} ({user_for_return.display_name})")
         return user_for_return
     except ValidationError as e:
@@ -94,11 +84,4 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPublic:
 async def get_current_active_user(current_user: UserPublic = Depends(get_current_user)) -> UserPublic:
     # This is where you might check if a user account is active (e.g., not banned or soft-deleted)
     # For now, it just returns the current_user if get_current_user succeeds.
-    # Example: Fetch 'is_active' from DB if UserPublic doesn't have it
-    # user_in_db_resp = await db_manager.get_table("users").select("is_active").eq("id", str(current_user.id)).single().execute()
-    # if not user_in_db_resp.data or not user_in_db_resp.data.get("is_active"):
-    #     logger.warning(f"User {current_user.id} is inactive.")
-    #     raise HTTPException(status_code=400, detail="Inactive user")
-    # logger.info(f"User {current_user.id} is active.")
     return current_user
-

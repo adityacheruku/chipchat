@@ -1,0 +1,133 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List
+from uuid import UUID
+from app.database import db_manager
+from app.auth.dependencies import get_current_active_user
+from app.auth.schemas import UserPublic
+from app.utils.logging import logger
+from . import partners
+from app.partners.schemas import (
+    PartnerRequestCreate, 
+    PartnerRequestResponse, 
+    PartnerRequestAction,
+    PartnerSuggestionResponse,
+    IncomingRequestsResponse
+)
+
+router = APIRouter(prefix="/partners", tags=["Partners"])
+
+@router.get("/suggestions", response_model=PartnerSuggestionResponse)
+async def get_partner_suggestions(current_user: UserPublic = Depends(get_current_active_user)):
+    """
+    Get a list of users who are not the current user and do not have a partner yet.
+    """
+    logger.info(f"User {current_user.id} requesting partner suggestions.")
+    try:
+        # Exclude self and users who already have a partner
+        response = await db_manager.get_table("users").select(
+            "id, display_name, avatar_url, mood, phone, email, is_online, last_seen, partner_id"
+        ).is_("partner_id", "NULL").neq("id", str(current_user.id)).execute()
+        
+        users = [UserPublic(**user_data) for user_data in response.data] if response.data else []
+        return PartnerSuggestionResponse(users=users)
+    except Exception as e:
+        logger.error(f"Error fetching partner suggestions for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not retrieve partner suggestions.")
+
+@router.post("/request", response_model=PartnerRequestResponse)
+async def send_partner_request(
+    request_data: PartnerRequestCreate,
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    """
+    Send a partner request to another user.
+    """
+    recipient_id = request_data.recipient_id
+    if recipient_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot send a partner request to yourself.")
+
+    logger.info(f"User {current_user.id} sending partner request to {recipient_id}.")
+    
+    # Check if sender or recipient already has a partner
+    user_check_resp = await db_manager.get_table("users").select("id, partner_id").in_("id", [str(current_user.id), str(recipient_id)]).execute()
+    for user in user_check_resp.data:
+        if user['partner_id'] is not None:
+             raise HTTPException(status_code=400, detail=f"User {user['id']} is already in a partnership.")
+
+    new_request_data = {
+        "sender_id": str(current_user.id),
+        "recipient_id": str(recipient_id)
+    }
+    try:
+        insert_resp = await db_manager.get_table("partner_requests").insert(new_request_data).execute()
+        
+        # To return a full response, we need to fetch the sender and recipient details
+        created_request_id = insert_resp.data[0]['id']
+        request_resp = await db_manager.get_table("partner_requests").select("*, sender:sender_id(*), recipient:recipient_id(*)").eq("id", created_request_id).single().execute()
+        
+        return PartnerRequestResponse.model_validate(request_resp.data)
+    except Exception as e:
+        logger.error(f"Error sending partner request from {current_user.id} to {recipient_id}: {e}", exc_info=True)
+        if "unique constraint" in str(e).lower():
+            raise HTTPException(status_code=400, detail="A pending request to this user already exists.")
+        raise HTTPException(status_code=500, detail="Could not send partner request.")
+
+@router.get("/requests/incoming", response_model=IncomingRequestsResponse)
+async def get_incoming_requests(current_user: UserPublic = Depends(get_current_active_user)):
+    """
+    Get all pending partner requests for the current user.
+    """
+    logger.info(f"Fetching incoming partner requests for user {current_user.id}")
+    try:
+        response = await db_manager.get_table("partner_requests").select(
+            "*, sender:sender_id(*), recipient:recipient_id(*)"
+        ).eq("recipient_id", str(current_user.id)).eq("status", "pending").execute()
+        
+        requests = [PartnerRequestResponse.model_validate(req) for req in response.data] if response.data else []
+        return IncomingRequestsResponse(requests=requests)
+    except Exception as e:
+        logger.error(f"Error fetching incoming requests for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not retrieve incoming requests.")
+
+
+@router.post("/requests/{request_id}/respond", status_code=status.HTTP_204_NO_CONTENT)
+async def respond_to_partner_request(
+    request_id: UUID,
+    action_data: PartnerRequestAction,
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    """
+    Accept or reject a partner request.
+    """
+    action = action_data.action.lower()
+    if action not in ["accept", "reject"]:
+        raise HTTPException(status_code=400, detail="Invalid action. Must be 'accept' or 'reject'.")
+
+    logger.info(f"User {current_user.id} responding '{action}' to request {request_id}")
+
+    if action == "accept":
+        try:
+            await db_manager.admin_client.rpc(
+                'accept_partner_request', 
+                {'p_request_id': str(request_id), 'p_accepter_id': str(current_user.id)}
+            ).execute()
+        except Exception as e:
+            logger.error(f"RPC accept_partner_request failed for user {current_user.id} on request {request_id}: {e}", exc_info=True)
+            raise HTTPException(status_code=400, detail=str(e))
+    
+    elif action == "reject":
+        try:
+            # Verify the current user is the recipient before rejecting
+            req_resp = await db_manager.get_table("partner_requests").select("recipient_id").eq("id", str(request_id)).single().execute()
+            if req_resp.data['recipient_id'] != str(current_user.id):
+                raise HTTPException(status_code=403, detail="You are not the recipient of this request.")
+            
+            await db_manager.get_table("partner_requests").update({
+                "status": "rejected",
+                "updated_at": "now()"
+            }).eq("id", str(request_id)).execute()
+        except Exception as e:
+            logger.error(f"Error rejecting request {request_id} by user {current_user.id}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Could not reject request.")
+    
+    return None # Returns 204 No Content on success

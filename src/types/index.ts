@@ -12,11 +12,12 @@ export interface User {
   display_name: string;
   avatar_url: string | null;
   mood: Mood;
-  phone: string; // Phone is now the primary identifier from client perspective for login/signup
-  email?: string | null; // Email is optional
+  phone: string; 
+  email?: string | null; 
   is_online?: boolean;
   last_seen?: string | null; // ISO Date string
   "data-ai-hint"?: string; 
+  partner_id?: string | null; // UUID
 }
 
 export interface UserInToken extends User {}
@@ -161,12 +162,6 @@ export type WebSocketEventData =
   | HeartbeatClientEvent; // Client sends this, server acknowledges or just uses it for activity
 
 
-export interface DefaultChatPartnerResponse {
-    user_id: string; 
-    display_name: string;
-    avatar_url: string | null;
-}
-
 // For frontend form, matching backend UserCreate with phone
 export interface UserCreateFrontend {
   phone: string;
@@ -236,4 +231,13 @@ export interface NotificationSettings {
   quiet_hours_end: string | null;   // e.g., "08:00:00"
   quiet_hours_weekdays_only: boolean;
   timezone: string;
+}
+
+// Partner System Types
+export interface PartnerRequest {
+    id: string;
+    sender: User;
+    recipient: User;
+    status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+    created_at: string;
 }

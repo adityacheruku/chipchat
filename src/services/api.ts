@@ -5,7 +5,6 @@ import type {
   UserInToken,
   Chat,
   Message,
-  DefaultChatPartnerResponse,
   ApiErrorResponse,
   SupportedEmoji,
   VoiceMessageUploadResponse,
@@ -13,14 +12,20 @@ import type {
   StickerListResponse,
   PushSubscriptionJSON,
   NotificationSettings,
+  PartnerRequest,
 } from '@/types';
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://192.168.29.167:8000';
 
+let currentAuthToken: string | null = null;
+
 function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('chirpChatToken');
+  if (currentAuthToken) return currentAuthToken;
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('chirpChatToken');
+  }
+  return null;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -53,6 +58,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 
 export const api = {
+  setAuthToken: (token: string | null) => {
+    currentAuthToken = token;
+  },
   // AUTH
   login: async (phone: string, password_plaintext: string): Promise<AuthResponse> => {
     const formData = new URLSearchParams();
@@ -70,7 +78,6 @@ export const api = {
   },
 
   register: async (userData: BackendUserCreate): Promise<AuthResponse> => {
-    console.log(userData)
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -122,19 +129,51 @@ export const api = {
     return handleResponse<UserInToken>(response);
   },
 
-  // CHATS
-  getDefaultChatPartner: async (): Promise<DefaultChatPartnerResponse | null> => {
+  // PARTNERS
+  getPartnerSuggestions: async (): Promise<{users: User[]}> => {
     const token = getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/chats/me/default-chat-partner`, {
-        headers: { Authorization: `Bearer ${token}` },
+    const response = await fetch(`${API_BASE_URL}/partners/suggestions`, {
+      headers: { Authorization: `Bearer ${token}` },
     });
-    if (response.status === 200 && response.headers.get("content-length") === "0") {
-        return null;
-    }
-     if (response.status === 204) return null;
-    return handleResponse<DefaultChatPartnerResponse | null>(response);
+    return handleResponse<{users: User[]}>(response);
   },
 
+  getIncomingRequests: async (): Promise<{requests: PartnerRequest[]}> => {
+     const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/partners/requests/incoming`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return handleResponse<{requests: PartnerRequest[]}>(response);
+  },
+
+  sendPartnerRequest: async (recipientId: string): Promise<PartnerRequest> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/partners/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ recipient_id: recipientId }),
+    });
+    return handleResponse<PartnerRequest>(response);
+  },
+
+  respondToPartnerRequest: async (requestId: string, action: 'accept' | 'reject'): Promise<void> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/partners/requests/${requestId}/respond`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ action }),
+    });
+    return handleResponse<void>(response);
+  },
+
+
+  // CHATS
   createOrGetChat: async (recipientId: string): Promise<Chat> => {
     const token = getAuthToken();
     const response = await fetch(`${API_BASE_URL}/chats/`, {

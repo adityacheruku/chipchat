@@ -13,7 +13,6 @@ from app.chat.schemas import (
     MessageListResponse,
     ReactionToggle,
     ChatParticipant,
-    DefaultChatPartnerResponse,
     MessageStatusEnum,
     MessageSubtypeEnum,
 )
@@ -68,13 +67,10 @@ async def create_chat(
     recipient_id = chat_create.recipient_id
     logger.info(f"User {current_user.id} attempting to create/get chat with recipient {recipient_id}")
     
-    if recipient_id == current_user.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot create a chat with yourself.")
-
-    recipient_user_resp_obj = await db_manager.get_table("users").select("id").eq("id", str(recipient_id)).maybe_single().execute()
-    if not recipient_user_resp_obj or not recipient_user_resp_obj.data:
-        logger.warning(f"Recipient user {recipient_id} not found for chat creation by {current_user.id}.")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipient user not found")
+    # In a partnered system, the recipient should be the user's partner.
+    if not current_user.partner_id or current_user.partner_id != recipient_id:
+        logger.warning(f"Chat creation denied: User {current_user.id} tried to create chat with {recipient_id}, but their partner is {current_user.partner_id}.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only create a chat with your designated partner.")
 
     # Use the new RPC function to find an existing chat
     try:
@@ -118,7 +114,7 @@ async def create_chat(
     participant_ids_to_fetch = [current_user.id, recipient_id]
     final_participant_details = []
     for user_uuid_to_fetch in participant_ids_to_fetch:
-        user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen").eq("id", str(user_uuid_to_fetch)).maybe_single().execute() 
+        user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen, partner_id").eq("id", str(user_uuid_to_fetch)).maybe_single().execute() 
         if not user_resp_obj_final or not user_resp_obj_final.data:
              logger.error(f"Participant user details for new chat not found for ID: {user_uuid_to_fetch}")
              raise HTTPException(status_code=500, detail="Error fetching participant details for new chat.")
@@ -137,8 +133,6 @@ async def list_chats(
     current_user: UserPublic = Depends(get_current_active_user),
 ):
     logger.info(f"Listing chats for user {current_user.id} ({current_user.display_name})")
-    # This entire block can be replaced by the get_chat_list_for_user helper for consistency
-    # and to leverage the more efficient RPC function.
     chat_responses = await get_chat_list_for_user(current_user.id)
     
     logger.info(f"Successfully compiled {len(chat_responses)} chats for user {current_user.id}")
@@ -310,65 +304,3 @@ async def react_to_message(
     
     return message_for_response
 
-
-@router.get("/me/default-chat-partner", response_model=Optional[DefaultChatPartnerResponse])
-async def get_default_chat_partner(
-    current_user: UserPublic = Depends(get_current_active_user),
-):
-    try:
-        logger.info(f"BEGIN: get_default_chat_partner for user: ID '{current_user.id}' (Name: '{current_user.display_name}')")
-        
-        all_users_resp_obj = await db_manager.get_table("users").select("id, display_name, avatar_url").execute()
-        
-        if not all_users_resp_obj or not all_users_resp_obj.data: 
-            logger.warning(f"No users found in DB or DB response error for {current_user.id}.")
-            return None
-
-        all_users_from_db = all_users_resp_obj.data
-        logger.info(f"Total users fetched from DB: {len(all_users_from_db)}")
-        
-        current_user_uuid_obj = current_user.id 
-        logger.info(f"Current User UUID (type: {type(current_user_uuid_obj)}): {current_user_uuid_obj}")
-
-        other_partners_data = []
-        for user_data_from_db in all_users_from_db:
-            db_user_uuid_str = str(user_data_from_db["id"])
-            logger.info(f"  Processing DB User: ID (str) '{db_user_uuid_str}', Name: '{user_data_from_db['display_name']}'")
-            
-            try:
-                db_user_uuid_obj = UUID(db_user_uuid_str)
-            except ValueError:
-                logger.error(f"  Could not parse DB User ID '{db_user_uuid_str}' as UUID. Skipping this user.")
-                continue
-                
-            logger.info(f"    DB User UUID (type: {type(db_user_uuid_obj)}): {db_user_uuid_obj}")
-            
-            are_different = db_user_uuid_obj != current_user_uuid_obj
-            logger.info(f"    Comparing DB User ({db_user_uuid_obj}) with Current User ({current_user_uuid_obj}). Are they different? {are_different}")
-            
-            if are_different:
-                logger.info(f"    -> NOT current user. Adding '{user_data_from_db['display_name']}' to potential partners.")
-                other_partners_data.append(user_data_from_db)
-            else:
-                logger.info(f"    -> IS current user. Filtering out '{user_data_from_db['display_name']}'.")
-        
-        logger.info(f"Found {len(other_partners_data)} potential other partners after filtering.")
-
-        if not other_partners_data:
-            logger.warning(f"No OTHER users found for {current_user.id} ({current_user.display_name}) to be a default chat partner.")
-            return None 
-        
-        default_partner_data = other_partners_data[0] 
-        logger.info(f"Default chat partner selected for {current_user.id} ({current_user.display_name}): ID {default_partner_data['id']} ({default_partner_data['display_name']})")
-        
-        return DefaultChatPartnerResponse(
-            user_id=UUID(str(default_partner_data["id"])), 
-            display_name=default_partner_data["display_name"],
-            avatar_url=default_partner_data.get("avatar_url") 
-        )
-    except Exception as e:
-        logger.error(f"Error in get_default_chat_partner for user {current_user.id}: {str(e)}", exc_info=True)
-        return None 
-    finally:
-        logger.info(f"END: get_default_chat_partner for user: {current_user.id} ({current_user.display_name})")
-    

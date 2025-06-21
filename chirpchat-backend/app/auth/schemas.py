@@ -18,6 +18,7 @@ class UserBase(BaseModel):
     mood: Optional[Mood] = "Neutral"
     is_online: Optional[bool] = False
     last_seen: Optional[datetime] = None
+    partner_id: Optional[UUID] = None
 
 class UserCreate(BaseModel):
     phone: str
@@ -54,6 +55,7 @@ class UserPublic(BaseModel):
     last_seen: Optional[datetime] = None
     phone: Optional[str] = None # Include phone in public for display if needed (e.g. in ChatHeader if desired)
     email: Optional[EmailStr] = None # Include optional email if needed
+    partner_id: Optional[UUID] = None
 
     class Config:
         from_attributes = True
