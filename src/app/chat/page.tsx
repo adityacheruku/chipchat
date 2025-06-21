@@ -293,7 +293,10 @@ export default function ChatPage() {
 }, [isAuthenticated, isAuthLoading, currentUser, router]);
 
   const handleSendMessage = (text: string) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected) {
+        toast({ variant: 'destructive', title: 'Cannot Send Message', description: 'You are not connected to the chat service.' });
+        return;
+    }
 
     const clientTempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const optimisticMessage: MessageType = {
@@ -336,7 +339,10 @@ export default function ChatPage() {
   };
 
   const handleSendSticker = (stickerId: string) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected) {
+        toast({ variant: 'destructive', title: 'Cannot Send Sticker', description: 'You are not connected to the chat service.' });
+        return;
+    }
 
     const clientTempId = `temp_sticker_${Date.now()}`;
     // No optimistic update for stickers, as we need the sticker_image_url from the backend.
@@ -354,7 +360,10 @@ export default function ChatPage() {
 
 
   const handleSendMoodClip = async (clipType: MessageClipType, file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected) {
+        toast({ variant: 'destructive', title: 'Cannot Send Clip', description: 'You are not connected to the chat service.' });
+        return;
+    }
     toast({ title: "Uploading clip..."});
     const clientTempId = `temp_clip_${Date.now()}`;
     try {
@@ -379,7 +388,10 @@ export default function ChatPage() {
   };
 
    const handleSendImage = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected) {
+        toast({ variant: 'destructive', title: 'Cannot Send Image', description: 'You are not connected to the chat service.' });
+        return;
+    }
     toast({ title: "Uploading image..." });
     const clientTempId = `temp_img_${Date.now()}`;
     try {
@@ -400,7 +412,10 @@ export default function ChatPage() {
   };
 
   const handleSendDocument = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected) {
+        toast({ variant: 'destructive', title: 'Cannot Send Document', description: 'You are not connected to the chat service.' });
+        return;
+    }
     toast({ title: "Uploading document..." });
     const clientTempId = `temp_doc_${Date.now()}`;
     try {
@@ -421,7 +436,10 @@ export default function ChatPage() {
   };
 
   const handleSendVoiceMessage = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected) {
+        toast({ variant: 'destructive', title: 'Cannot Send Voice Message', description: 'You are not connected to the chat service.' });
+        return;
+    }
     toast({ title: "Uploading voice message..." });
     const clientTempId = `temp_audio_${Date.now()}`;
     try {
@@ -451,7 +469,10 @@ export default function ChatPage() {
   };
 
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
-    if (!currentUser || !activeChat || !isWsConnected) return;
+    if (!currentUser || !activeChat || !isWsConnected) {
+        toast({ variant: 'destructive', title: 'Cannot React', description: 'Not connected to chat service.' });
+        return;
+    }
     
     const RATE_LIMIT_MS = 500;
     const key = `${messageId}_${emoji}`;
@@ -492,7 +513,7 @@ export default function ChatPage() {
     });
 
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
-  }, [currentUser, activeChat, isWsConnected, sendWsMessage, addAppEvent]);
+  }, [currentUser, activeChat, isWsConnected, sendWsMessage, addAppEvent, toast]);
 
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
     if (!currentUser) return;
@@ -611,20 +632,6 @@ export default function ChatPage() {
     sessionStorage.setItem('notificationPromptDismissed', 'true');
   }, []);
 
-  const getPlaceholderAndDisabledState = useCallback(() => {
-    if (!isBrowserOnline) {
-      return { placeholder: "You are offline. Please reconnect.", disabled: true };
-    }
-    if (!isWsConnected) {
-      return { placeholder: "Connecting to chat service...", disabled: true };
-    }
-    if (!otherUser || !activeChat) {
-      return { placeholder: "Initializing chat...", disabled: true };
-    }
-    return { placeholder: "Type a message...", disabled: false };
-  }, [isBrowserOnline, isWsConnected, otherUser, activeChat]);
-
-  const { placeholder: inputPlaceholder, disabled: isInputDisabled } = getPlaceholderAndDisabledState();
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
 
   if (isLoadingPage) {
@@ -713,8 +720,8 @@ export default function ChatPage() {
                 onSendDocument={handleSendDocument}
                 isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
-                disabled={isInputDisabled}
-                placeholder={inputPlaceholder}
+                disabled={false}
+                placeholder="Enter text..."
               />
             </div>
           </ErrorBoundary>
