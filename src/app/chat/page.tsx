@@ -119,44 +119,28 @@ export default function ChatPage() {
 
     setIsChatLoading(true);
     setChatSetupErrorMessage(null);
-    console.log('[ChatPage] performLoadChatData: Starting. CurrentUser ID:', currentUser?.id, 'DisplayName:', currentUser?.display_name);
+    console.log('[ChatPage] performLoadChatData: Starting. CurrentUser ID:', currentUser?.id);
 
     try {
       const partner = await api.getDefaultChatPartner();
       console.log('[ChatPage] performLoadChatData: Default partner response:', partner);
 
+      const isSoloChat = !partner;
+      const partnerId = isSoloChat ? currentUser.id : partner!.user_id;
 
-      if (!partner) {
-        console.log('[ChatPage] performLoadChatData: No default partner found. Setting up for solo/waiting state.');
-        setOtherUser(null);
-        setActiveChat(null);
-        setMessages([]);
-        if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
-        if (typeof window !== 'undefined' && currentUser.mood) {
-            const moodPrompted = sessionStorage.getItem('moodPromptedThisSession');
-            if (moodPrompted !== 'true') {
-            setInitialMoodOnLoad(currentUser.mood);
-            setIsMoodModalOpen(true);
-            }
-        }
-        setIsChatLoading(false);
-        return;
-      }
-
-      const otherUserDetails = await api.getUserProfile(partner.user_id);
-      console.log('[ChatPage] performLoadChatData: Fetched otherUser details:', otherUserDetails);
+      const otherUserDetails = isSoloChat ? currentUser : await api.getUserProfile(partnerId);
       setOtherUser(otherUserDetails);
+      
       if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
 
-      const chatSession = await api.createOrGetChat(partner.user_id);
-      console.log('[ChatPage] performLoadChatData: Created/Got chat session:', chatSession);
+      const chatSession = await api.createOrGetChat(partnerId);
       setActiveChat(chatSession);
 
       if (chatSession) {
         const messagesData = await api.getMessages(chatSession.id);
         setMessages(messagesData.messages.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
       } else {
-        throw new Error("Failed to establish a chat session even with a partner.");
+        throw new Error("Failed to establish a chat session.");
       }
 
       if (typeof window !== 'undefined' && currentUser.mood) {
@@ -171,7 +155,6 @@ export default function ChatPage() {
       const apiErrorMsg = `Failed to load chat data: ${error.message}`;
       console.error('[ChatPage] performLoadChatData: Error -', apiErrorMsg, error);
       toast({ variant: 'destructive', title: 'API Error', description: apiErrorMsg, duration: 7000 });
-      addAppEvent('apiError', 'Failed to load initial chat data', currentUser?.id, currentUser?.display_name, { error: error.message });
       setChatSetupErrorMessage(apiErrorMsg);
       setOtherUser(null);
       setActiveChat(null);
@@ -334,7 +317,7 @@ export default function ChatPage() {
   }, [isAuthenticated, isAuthLoading, currentUser, token, router]); 
 
   const handleSendMessage = (text: string) => {
-    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    if (!currentUser || !activeChat || !isWsConnected) return;
 
     const clientTempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const optimisticMessage: MessageType = {
@@ -377,7 +360,7 @@ export default function ChatPage() {
   };
 
   const handleSendSticker = (stickerId: string) => {
-    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    if (!currentUser || !activeChat || !isWsConnected) return;
 
     const clientTempId = `temp_sticker_${Date.now()}`;
     // No optimistic update for stickers, as we need the sticker_image_url from the backend.
@@ -395,7 +378,7 @@ export default function ChatPage() {
 
 
   const handleSendMoodClip = async (clipType: MessageClipType, file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    if (!currentUser || !activeChat || !isWsConnected) return;
     toast({ title: "Uploading clip..."});
     const clientTempId = `temp_clip_${Date.now()}`;
     try {
@@ -420,7 +403,7 @@ export default function ChatPage() {
   };
 
    const handleSendImage = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    if (!currentUser || !activeChat || !isWsConnected) return;
     toast({ title: "Uploading image..." });
     const clientTempId = `temp_img_${Date.now()}`;
     try {
@@ -441,7 +424,7 @@ export default function ChatPage() {
   };
 
   const handleSendDocument = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    if (!currentUser || !activeChat || !isWsConnected) return;
     toast({ title: "Uploading document..." });
     const clientTempId = `temp_doc_${Date.now()}`;
     try {
@@ -462,7 +445,7 @@ export default function ChatPage() {
   };
 
   const handleSendVoiceMessage = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    if (!currentUser || !activeChat || !isWsConnected) return;
     toast({ title: "Uploading voice message..." });
     const clientTempId = `temp_audio_${Date.now()}`;
     try {
@@ -492,7 +475,7 @@ export default function ChatPage() {
   };
 
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
-    if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
+    if (!currentUser || !activeChat || !isWsConnected) return;
     
     const RATE_LIMIT_MS = 500;
     const key = `${messageId}_${emoji}`;
@@ -533,7 +516,7 @@ export default function ChatPage() {
     });
 
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
-  }, [currentUser, activeChat, isWsConnected, otherUser, sendWsMessage, addAppEvent]);
+  }, [currentUser, activeChat, isWsConnected, sendWsMessage, addAppEvent]);
 
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
     if (!currentUser) return;
@@ -595,7 +578,7 @@ export default function ChatPage() {
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const handleTyping = useCallback((isTyping: boolean) => {
-    if (!activeChat || !isWsConnected || !otherUser) return;
+    if (!activeChat || !isWsConnected) return;
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -614,7 +597,7 @@ export default function ChatPage() {
             });
         }, 3000);
     }
-  }, [activeChat, isWsConnected, sendWsMessage, otherUser]);
+  }, [activeChat, isWsConnected, sendWsMessage]);
 
   const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
     if (currentUser) {
@@ -652,7 +635,7 @@ export default function ChatPage() {
     sessionStorage.setItem('notificationPromptDismissed', 'true');
   }, []);
 
-  const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !otherUser && !activeChat);
+  const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !activeChat);
   if (isLoadingPage) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -701,9 +684,9 @@ export default function ChatPage() {
     );
   }
 
-  const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
+  const otherUserIsTyping = otherUser && otherUser.id !== currentUser.id && typingUsers[otherUser.id]?.isTyping;
   const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : (currentUser ? {[currentUser.id]: currentUser} : {});
-  const disabled = !otherUser || !activeChat || !isWsConnected;
+  const disabled = !activeChat || !isWsConnected;
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
@@ -722,9 +705,9 @@ export default function ChatPage() {
                 onDismiss={handleDismissNotificationPrompt}
                 title="Enable Notifications"
                 message={
-                    otherUser
+                    otherUser && otherUser.id !== currentUser.id
                     ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.`
-                    : 'Stay connected even when ChirpChat is closed.'
+                    : 'Get notified about important activity.'
                 }
               />
               <ChatHeader
@@ -736,7 +719,7 @@ export default function ChatPage() {
                 onOtherUserAvatarClick={handleOtherUserAvatarClick}
                 isOtherUserTyping={!!otherUserIsTyping}
               />
-              {otherUser && activeChat ? (
+              {activeChat ? (
                 <MemoizedMessageArea
                   messages={messages}
                   currentUser={currentUser}
@@ -748,15 +731,15 @@ export default function ChatPage() {
                 <div className="flex-grow flex flex-col items-center justify-center p-4 text-center bg-transparent">
                     <MessagesSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
                     <h3 className="text-xl font-semibold text-foreground mb-2">
-                        {isChatLoading ? "Looking for chats..." : "No one to chat with yet."}
+                        {isChatLoading ? "Looking for chats..." : "Your Personal Journal"}
                     </h3>
                     <p className="text-muted-foreground">
-                        {isChatLoading ? "Please wait a moment." : "When another user joins, or if you want to try again:"}
+                        {isChatLoading ? "Please wait a moment." : "Send a message to start your first entry."}
                     </p>
                      {!isChatLoading && (
                         <Button onClick={performLoadChatData} variant="outline" className="mt-4">
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" hidden={!isChatLoading} />
-                            Refresh / Find Partner
+                            Refresh
                         </Button>
                     )}
                 </div>

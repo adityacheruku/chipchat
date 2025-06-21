@@ -33,6 +33,8 @@ export default function ChatHeader({
   isOtherUserTyping,
 }: ChatHeaderProps) {
   
+  const isSoloChat = !!(currentUser && otherUser && currentUser.id === otherUser.id);
+  
   let presenceStatusText = otherUser ? `${otherUser.display_name} is offline.` : "";
   let formattedLastSeen = otherUser ? "Last seen: N/A" : "";
   let srPresenceText = otherUser ? `${otherUser.display_name} is offline. Last seen information not available.` : "No other user connected.";
@@ -62,8 +64,8 @@ export default function ChatHeader({
   }
 
   const displayNameOrTyping = otherUser 
-    ? (isOtherUserTyping ? <span className="italic text-primary">typing...</span> : otherUser.display_name)
-    : "Waiting for partner...";
+    ? (isOtherUserTyping && !isSoloChat ? <span className="italic text-primary">typing...</span> : (isSoloChat ? "My Journal" : otherUser.display_name))
+    : "Chat";
 
   return (
     <header className="flex items-center justify-between p-3 sm:p-4 border-b border-border bg-card rounded-t-lg h-16">
@@ -134,7 +136,7 @@ export default function ChatHeader({
 
       {/* Right Section: Action Icons */}
       <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 w-1/5 justify-end">
-        {otherUser && otherUser.phone && (
+        {!isSoloChat && otherUser && otherUser.phone && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -155,7 +157,7 @@ export default function ChatHeader({
             </Tooltip>
           </TooltipProvider>
         )}
-        {otherUser && (
+        {!isSoloChat && otherUser && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
