@@ -32,9 +32,7 @@ export default function ChatHeader({
   onOtherUserAvatarClick,
   isOtherUserTyping,
 }: ChatHeaderProps) {
-  
-  const isSoloChat = !!(currentUser && otherUser && currentUser.id === otherUser.id);
-  
+    
   let presenceStatusText = otherUser ? `${otherUser.display_name} is offline.` : "";
   let formattedLastSeen = otherUser ? "Last seen: N/A" : "";
   let srPresenceText = otherUser ? `${otherUser.display_name} is offline. Last seen information not available.` : "No other user connected.";
@@ -64,7 +62,7 @@ export default function ChatHeader({
   }
 
   const displayNameOrTyping = otherUser 
-    ? (isOtherUserTyping && !isSoloChat ? <span className="italic text-primary">typing...</span> : (isSoloChat ? "My Journal" : otherUser.display_name))
+    ? (isOtherUserTyping ? <span className="italic text-primary">typing...</span> : otherUser.display_name)
     : "Chat";
 
   return (
@@ -136,7 +134,7 @@ export default function ChatHeader({
 
       {/* Right Section: Action Icons */}
       <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 w-1/5 justify-end">
-        {!isSoloChat && otherUser && otherUser.phone && (
+        {otherUser && otherUser.phone && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -157,7 +155,7 @@ export default function ChatHeader({
             </Tooltip>
           </TooltipProvider>
         )}
-        {!isSoloChat && otherUser && (
+        {otherUser && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>

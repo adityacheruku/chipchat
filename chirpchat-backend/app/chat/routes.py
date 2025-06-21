@@ -68,13 +68,13 @@ async def create_chat(
     recipient_id = chat_create.recipient_id
     logger.info(f"User {current_user.id} attempting to create/get chat with recipient {recipient_id}")
     
-    # Allow users to create chats with themselves for journaling
-    is_solo_chat = recipient_id == current_user.id
-    if not is_solo_chat:
-        recipient_user_resp_obj = await db_manager.get_table("users").select("id").eq("id", str(recipient_id)).maybe_single().execute()
-        if not recipient_user_resp_obj or not recipient_user_resp_obj.data:
-            logger.warning(f"Recipient user {recipient_id} not found for chat creation by {current_user.id}.")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipient user not found")
+    if recipient_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot create a chat with yourself.")
+
+    recipient_user_resp_obj = await db_manager.get_table("users").select("id").eq("id", str(recipient_id)).maybe_single().execute()
+    if not recipient_user_resp_obj or not recipient_user_resp_obj.data:
+        logger.warning(f"Recipient user {recipient_id} not found for chat creation by {current_user.id}.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipient user not found")
 
     # Use the new RPC function to find an existing chat
     try:
@@ -107,14 +107,15 @@ async def create_chat(
     created_chat_data = new_chat_insert_resp_obj.data[0]
     logger.info(f"New chat entry created with ID: {created_chat_data['id']}")
 
-    participants_to_add = [{"chat_id": str(created_chat_data["id"]), "user_id": str(current_user.id), "joined_at": datetime.now(timezone.utc).isoformat()}]
-    if not is_solo_chat:
-        participants_to_add.append({"chat_id": str(created_chat_data["id"]), "user_id": str(recipient_id), "joined_at": datetime.now(timezone.utc).isoformat()})
+    participants_to_add = [
+        {"chat_id": str(created_chat_data["id"]), "user_id": str(current_user.id), "joined_at": datetime.now(timezone.utc).isoformat()},
+        {"chat_id": str(created_chat_data["id"]), "user_id": str(recipient_id), "joined_at": datetime.now(timezone.utc).isoformat()}
+    ]
     
     await db_manager.get_table("chat_participants").insert(participants_to_add).execute() 
     logger.info(f"Added participants to chat_participants for chat {created_chat_data['id']}")
 
-    participant_ids_to_fetch = [current_user.id] if is_solo_chat else [current_user.id, recipient_id]
+    participant_ids_to_fetch = [current_user.id, recipient_id]
     final_participant_details = []
     for user_uuid_to_fetch in participant_ids_to_fetch:
         user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen").eq("id", str(user_uuid_to_fetch)).maybe_single().execute() 

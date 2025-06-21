@@ -125,15 +125,29 @@ export default function ChatPage() {
       const partner = await api.getDefaultChatPartner();
       console.log('[ChatPage] performLoadChatData: Default partner response:', partner);
 
-      const isSoloChat = !partner;
-      const partnerId = isSoloChat ? currentUser.id : partner!.user_id;
+      if (!partner) {
+        console.log('[ChatPage] performLoadChatData: No default partner found. Setting up for waiting state.');
+        setOtherUser(null);
+        setActiveChat(null);
+        setMessages([]);
+        if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
+        if (typeof window !== 'undefined' && currentUser.mood) {
+            const moodPrompted = sessionStorage.getItem('moodPromptedThisSession');
+            if (moodPrompted !== 'true') {
+              setInitialMoodOnLoad(currentUser.mood);
+              setIsMoodModalOpen(true);
+            }
+        }
+        setIsChatLoading(false);
+        return; // Exit here
+      }
 
-      const otherUserDetails = isSoloChat ? currentUser : await api.getUserProfile(partnerId);
+      const otherUserDetails = await api.getUserProfile(partner.user_id);
       setOtherUser(otherUserDetails);
       
       if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
 
-      const chatSession = await api.createOrGetChat(partnerId);
+      const chatSession = await api.createOrGetChat(partner.user_id);
       setActiveChat(chatSession);
 
       if (chatSession) {
@@ -635,7 +649,7 @@ export default function ChatPage() {
     sessionStorage.setItem('notificationPromptDismissed', 'true');
   }, []);
 
-  const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !activeChat);
+  const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading && !chatSetupErrorMessage && !activeChat && !otherUser);
   if (isLoadingPage) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -684,9 +698,9 @@ export default function ChatPage() {
     );
   }
 
-  const otherUserIsTyping = otherUser && otherUser.id !== currentUser.id && typingUsers[otherUser.id]?.isTyping;
+  const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
   const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : (currentUser ? {[currentUser.id]: currentUser} : {});
-  const disabled = !activeChat || !isWsConnected;
+  const disabled = !otherUser || !activeChat || !isWsConnected;
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
@@ -705,7 +719,7 @@ export default function ChatPage() {
                 onDismiss={handleDismissNotificationPrompt}
                 title="Enable Notifications"
                 message={
-                    otherUser && otherUser.id !== currentUser.id
+                    otherUser
                     ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.`
                     : 'Get notified about important activity.'
                 }
@@ -719,7 +733,7 @@ export default function ChatPage() {
                 onOtherUserAvatarClick={handleOtherUserAvatarClick}
                 isOtherUserTyping={!!otherUserIsTyping}
               />
-              {activeChat ? (
+              {otherUser && activeChat ? (
                 <MemoizedMessageArea
                   messages={messages}
                   currentUser={currentUser}
@@ -731,15 +745,15 @@ export default function ChatPage() {
                 <div className="flex-grow flex flex-col items-center justify-center p-4 text-center bg-transparent">
                     <MessagesSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
                     <h3 className="text-xl font-semibold text-foreground mb-2">
-                        {isChatLoading ? "Looking for chats..." : "Your Personal Journal"}
+                        {isChatLoading ? "Looking for chats..." : "No one to chat with yet."}
                     </h3>
                     <p className="text-muted-foreground">
-                        {isChatLoading ? "Please wait a moment." : "Send a message to start your first entry."}
+                        {isChatLoading ? "Please wait a moment." : "When another user joins, you can start chatting."}
                     </p>
                      {!isChatLoading && (
                         <Button onClick={performLoadChatData} variant="outline" className="mt-4">
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" hidden={!isChatLoading} />
-                            Refresh
+                            Refresh / Find Partner
                         </Button>
                     )}
                 </div>
