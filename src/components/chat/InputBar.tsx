@@ -208,6 +208,16 @@ export default function InputBar({
 
   const handleButtonPress = () => {
     if (disabled || isSending || messageText.trim() !== '') return;
+    
+    // Device compatibility check
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        toast({
+            variant: 'destructive',
+            title: 'Unsupported Device',
+            description: 'Your browser does not support voice recording.',
+        });
+        return;
+    }
 
     longPressTimerRef.current = setTimeout(() => {
         handleStartRecording();
