@@ -45,8 +45,8 @@ export default function ReactionSummaryModal({
           <Tabs defaultValue={defaultTab} className="w-full">
             <TabsList className="grid w-full grid-cols-5 bg-muted">
               {reactionEntries.map(([emoji, userIds]) => (
-                <TabsTrigger key={emoji} value={emoji} className="text-xl">
-                  {emoji} <span className="text-sm font-normal ml-1">({userIds.length})</span>
+                <TabsTrigger key={emoji} value={emoji} className="text-xl flex items-center gap-1">
+                  {emoji} <span className="text-sm font-normal text-muted-foreground">({userIds.length})</span>
                 </TabsTrigger>
               ))}
             </TabsList>
