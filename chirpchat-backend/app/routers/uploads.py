@@ -139,6 +139,8 @@ async def upload_voice_message(
             folder=f"chirpchat_voice_messages/user_{current_user.id}",
             resource_type="video" 
         )
+        # Detailed logging of the Cloudinary response
+        logger.info(f"Cloudinary voice message response for user {current_user.id}: public_id={result.get('public_id')}, duration={result.get('duration')}, format={result.get('format')}")
         logger.info(f"Voice message {file.filename} uploaded successfully for user {current_user.id}. URL: {result.get('secure_url')}")
         return {"file_url": result.get("secure_url"), "clip_type": "audio"}
     except Exception as e:
