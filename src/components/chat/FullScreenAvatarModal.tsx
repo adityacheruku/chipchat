@@ -53,12 +53,6 @@ export default function FullScreenAvatarModal({
       <DialogContent className="sm:max-w-lg p-0 bg-card border-none shadow-2xl rounded-lg overflow-hidden">
         <DialogHeader className="p-4 border-b bg-muted/30">
           <DialogTitle className="text-xl font-semibold text-card-foreground">{user.display_name}'s Profile</DialogTitle>
-          <DialogClose asChild>
-             <Button variant="ghost" size="icon" className="absolute right-3 top-3 rounded-full opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-              <X className="h-5 w-5" />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DialogClose>
         </DialogHeader>
         <div className="flex flex-col items-center p-6 space-y-6">
           <Image

@@ -2,7 +2,7 @@
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile, Mic, Plus, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin } from 'lucide-react'; 
+import { Send, Smile, Mic, Plus, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin, Paperclip } from 'lucide-react'; 
 import {
   Tooltip,
   TooltipContent,
@@ -172,11 +172,11 @@ export default function InputBar({
                         aria-label={showAttachmentOptions ? "Close attachments menu" : "Open attachments menu"}
                         disabled={isSending || disabled || isLongPressActive}
                         >
-                        {showAttachmentOptions ? <X size={22} /> : <Plus size={22} />}
+                        {showAttachmentOptions ? <X size={22} /> : <Paperclip size={22} />}
                     </Button>
                 </TooltipTrigger>
                  <TooltipContent>
-                    <p>{showAttachmentOptions ? "Close Attachments" : "Attach File"}</p>
+                    <p>{showAttachmentOptions ? "Close" : "Attach File"}</p>
                 </TooltipContent>
                 </Tooltip>
             </TooltipProvider>
