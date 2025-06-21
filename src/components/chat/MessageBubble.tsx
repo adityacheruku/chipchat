@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -44,13 +44,21 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(initialDuration || 0);
     const [currentTime, setCurrentTime] = useState(0);
+    const [hasBeenPlayed, setHasBeenPlayed] = useState(false);
 
     const handlePlayPause = () => {
         if (!audioRef.current) return;
+        
         if (isPlaying) {
             audioRef.current.pause();
         } else {
+            // Dispatch event to pause other players
+            const playEvent = new CustomEvent('audio-play', { detail: { player: audioRef.current } });
+            document.dispatchEvent(playEvent);
             audioRef.current.play();
+            if (!hasBeenPlayed) {
+                setHasBeenPlayed(true);
+            }
         }
         setIsPlaying(!isPlaying);
     };
@@ -76,17 +84,27 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
 
     useEffect(() => {
         const audio = audioRef.current;
-        if (audio) {
-            audio.addEventListener('timeupdate', handleTimeUpdate);
-            audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-            audio.addEventListener('ended', () => setIsPlaying(false));
+        if (!audio) return;
 
-            return () => {
-                audio.removeEventListener('timeupdate', handleTimeUpdate);
-                audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                audio.removeEventListener('ended', () => setIsPlaying(false));
-            };
-        }
+        const handleGlobalPlay = (event: Event) => {
+            const customEvent = event as CustomEvent;
+            if (customEvent.detail.player !== audio) {
+                audio.pause();
+                setIsPlaying(false);
+            }
+        };
+        
+        document.addEventListener('audio-play', handleGlobalPlay);
+        audio.addEventListener('timeupdate', handleTimeUpdate);
+        audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.addEventListener('ended', () => setIsPlaying(false));
+
+        return () => {
+            document.removeEventListener('audio-play', handleGlobalPlay);
+            audio.removeEventListener('timeupdate', handleTimeUpdate);
+            audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+            audio.removeEventListener('ended', () => setIsPlaying(false));
+        };
     }, []);
 
     const playerColorClass = isCurrentUser ? 'text-primary-foreground' : 'text-secondary-foreground';
@@ -94,19 +112,27 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
     return (
         <div className={cn("flex items-center gap-3 w-full max-w-[250px]", playerColorClass)}>
             <audio ref={audioRef} src={src} preload="metadata" />
-            <Button
-                variant="ghost"
-                size="icon"
-                onClick={handlePlayPause}
-                className={cn("w-8 h-8 rounded-full flex-shrink-0", isCurrentUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-secondary-foreground/20')}
-            >
-                {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-            </Button>
+            <div className="relative">
+                 <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handlePlayPause}
+                    className={cn("w-8 h-8 rounded-full flex-shrink-0", isCurrentUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-secondary-foreground/20')}
+                >
+                    {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                </Button>
+                 {!hasBeenPlayed && (
+                    <span className="absolute -top-1 -right-1 block h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" title="Unheard message"></span>
+                    </span>
+                 )}
+            </div>
             <div className="flex-grow flex flex-col justify-center gap-1">
                  <Slider
                     value={[currentTime]}
-                    max={duration}
-                    step={1}
+                    max={duration || 1} // Use 1 as a fallback to prevent division by zero
+                    step={0.1}
                     onValueChange={handleSeek}
                     className={cn(isCurrentUser ? '[&>span>span]:bg-primary-foreground' : '[&>span>span]:bg-secondary-foreground')}
                  />
@@ -117,6 +143,7 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
         </div>
     );
 });
+AudioPlayer.displayName = "AudioPlayer";
 
 
 function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers }: MessageBubbleProps) {
@@ -336,3 +363,5 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 }
 
 export default memo(MessageBubble);
+
+    
