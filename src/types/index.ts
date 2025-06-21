@@ -41,8 +41,8 @@ export interface Message {
   image_thumbnail_url?: string | null; // For optimized image loading
   document_url?: string | null;
   document_name?: string | null;
-  sticker_id?: string | null;
-  sticker_image_url?: string | null; // Joined from stickers table on the backend
+  sticker_id?: string | null; // The ID of the sticker sent
+  sticker_image_url?: string | null; // The actual image URL, joined from the backend
   client_temp_id?: string | null; // Client-generated temporary ID
   status?: MessageStatus | null; // Message status
   // Voice message metadata

@@ -361,28 +361,18 @@ export default function ChatPage() {
     }
   };
 
-  const handleSendSticker = (stickerUrl: string) => {
+  const handleSendSticker = (stickerId: string) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
 
     const clientTempId = `temp_sticker_${Date.now()}`;
-    const optimisticMessage: MessageType = {
-      id: clientTempId,
-      user_id: currentUser.id,
-      chat_id: activeChat.id,
-      sticker_url: stickerUrl,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      reactions: {},
-      client_temp_id: clientTempId,
-      status: "sending" as MessageStatus,
-    };
-    setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
-
+    // No optimistic update for stickers, as we need the sticker_image_url from the backend.
+    // The message will appear once the WebSocket roundtrip is complete.
+    
     sendWsMessage({
-      event_type: "send_message",
-      chat_id: activeChat.id,
-      sticker_url: stickerUrl,
-      client_temp_id: clientTempId,
+        event_type: "send_message",
+        chat_id: activeChat.id,
+        sticker_id: stickerId,
+        client_temp_id: clientTempId,
     });
     addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
   };
