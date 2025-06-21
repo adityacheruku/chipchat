@@ -382,22 +382,50 @@ export default function ChatPage() {
 
   const handleToggleReaction = (messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat || !isWsConnected || !otherUser) return;
-    const RATE_LIMIT_MS = 1000;
+    const RATE_LIMIT_MS = 500; // Allow toggles a bit faster for better UX
     const key = `${messageId}_${emoji}`;
     const now = Date.now();
+
     if (lastReactionToggleTimes.current[key] && (now - lastReactionToggleTimes.current[key] < RATE_LIMIT_MS)) {
-      toast({ title: "Woah there!", description: "You're reacting a bit too quickly.", duration: 2000 });
+      // Silently ignore rapid toggles to prevent spamming the optimistic UI and backend
       return;
     }
     lastReactionToggleTimes.current[key] = now;
 
+    // Optimistic UI Update
+    setMessages(prevMessages => 
+      prevMessages.map(msg => {
+        if (msg.id === messageId) {
+          const newReactions = JSON.parse(JSON.stringify(msg.reactions || {}));
+          if (!newReactions[emoji]) newReactions[emoji] = [];
+          
+          const userReactedIndex = newReactions[emoji].indexOf(currentUser.id);
+
+          if (userReactedIndex > -1) {
+            // User is removing their reaction
+            newReactions[emoji].splice(userReactedIndex, 1);
+            if (newReactions[emoji].length === 0) {
+              delete newReactions[emoji];
+            }
+          } else {
+            // User is adding a reaction
+            newReactions[emoji].push(currentUser.id);
+          }
+          return { ...msg, reactions: newReactions };
+        }
+        return msg;
+      })
+    );
+
+    // Send update to the server in the background
     sendWsMessage({
       event_type: "toggle_reaction",
       message_id: messageId,
       chat_id: activeChat.id,
       emoji: emoji,
     });
-    addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, {messageId});
+
+    addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
   };
 
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
