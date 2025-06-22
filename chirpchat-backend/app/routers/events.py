@@ -94,9 +94,9 @@ async def sync_events(
     user_id_str = str(current_user.id)
     
     try:
-        # zrange with WITHSCORES returns a flat list [member1, score1, member2, score2, ...]
+        # Use zrangebyscore to fetch from the sorted set by score.
         # The range `(since` means exclusive (score > since).
-        event_score_pairs = await redis.zrange(EVENT_LOG_KEY, f"({since}", "+inf", withscores=True)
+        event_score_pairs = await redis.zrangebyscore(EVENT_LOG_KEY, f"({since}", "+inf", withscores=True)
         
         authorized_events = []
         for event_json, score in event_score_pairs:

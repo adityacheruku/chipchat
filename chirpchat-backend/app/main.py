@@ -45,7 +45,7 @@ origins = [
     "http://localhost:3000",
     "http://localhost:9002",
     "https://ef9e-49-43-230-78.ngrok-free.app", # Updated ngrok link
-    "https://*.vercel.app", # Allow any vercel subdomain
+    "https://chipchat.vercel.app", # Allow any vercel subdomain
 ]
 
 allowed_origins = ["*"] if settings.DEBUG else origins
