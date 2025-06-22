@@ -11,9 +11,10 @@ interface MessageAreaProps {
   allUsers: Record<string, User>;
   onToggleReaction: (messageId: string, emoji: SupportedEmoji) => void;
   onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
+  onShowMedia: (url: string, type: 'image' | 'video') => void; // Added for full-screen media
 }
 
-export default function MessageArea({ messages, currentUser, allUsers, onToggleReaction, onShowReactions }: MessageAreaProps) {
+export default function MessageArea({ messages, currentUser, allUsers, onToggleReaction, onShowReactions, onShowMedia }: MessageAreaProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null); 
   const viewportRef = useRef<HTMLDivElement>(null); 
 
@@ -39,6 +40,7 @@ export default function MessageArea({ messages, currentUser, allUsers, onToggleR
               currentUserId={currentUser.id}
               onToggleReaction={onToggleReaction}
               onShowReactions={(message) => onShowReactions(message, allUsers)}
+              onShowMedia={onShowMedia} // Pass down the handler
               allUsers={allUsers}
             />
           );
