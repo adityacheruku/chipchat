@@ -8,7 +8,7 @@ import asyncio
 
 from app.websocket import manager as ws_manager
 from app.auth.schemas import UserPublic, TokenData
-from app.chat.schemas import Message, MessageCreate, MessageStatusEnum, SUPPORTED_EMOJIS, MessageSubtypeEnum
+from app.chat.schemas import MessageCreate, MessageStatusEnum, SUPPORTED_EMOJIS, MessageSubtypeEnum
 from app.database import db_manager
 from app.utils.logging import logger
 from app.notifications.service import notification_service
@@ -133,12 +133,20 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
     client_temp_id = message_create.client_temp_id
     user_id = current_user.id
 
+    if not client_temp_id:
+        logger.warning(f"WS user {user_id}: Message received without client_temp_id. Ignoring.")
+        return
+
     if await ws_manager.is_message_processed(client_temp_id):
         logger.warning(f"Duplicate message from user {user_id} with client_temp_id: {client_temp_id}")
         await ws_manager.send_ack(websocket, client_temp_id)
         return
 
     chat_id = message_create.chat_id
+    if not chat_id:
+        logger.warning(f"WS user {user_id}: send_message event missing chat_id.")
+        return
+
     is_participant = await ws_manager.is_user_in_chat(user_id, chat_id)
     if not is_participant:
         logger.warning(f"User {user_id} not in chat {chat_id}")
@@ -152,7 +160,7 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
         "chat_id": str(chat_id),
         "user_id": str(user_id),
         "text": message_create.text,
-        "message_subtype": message_create.message_subtype.value,
+        "message_subtype": message_create.message_subtype.value if message_create.message_subtype else 'text',
         "sticker_id": str(message_create.sticker_id) if message_create.sticker_id else None,
         "clip_type": message_create.clip_type.value if message_create.clip_type else None,
         "clip_placeholder_text": message_create.clip_placeholder_text,

@@ -52,6 +52,7 @@ class MessageBase(BaseModel):
 
 
 class MessageCreate(MessageBase):
+    chat_id: Optional[UUID] = None # Added for WebSocket payload validation
     recipient_id: Optional[UUID] = None # For HTTP creation, if directly targeting a user to start a chat
     client_temp_id: Optional[str] = None # Client-generated temporary ID for deduplication and optimistic UI
 
