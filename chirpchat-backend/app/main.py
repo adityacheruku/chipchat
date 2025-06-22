@@ -18,6 +18,7 @@ from app.routers.ai import router as ai_router
 from app.routers.stickers import router as stickers_router
 from app.notifications.routes import router as notifications_router
 from app.routers.partners import router as partners_router
+from app.routers.events import router as events_router # Import the new events router
 
 app = FastAPI(
     title="ChirpChat API",
@@ -31,7 +32,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",
     "http://localhost:9002",
-    "https://a93b-49-43-230-78.ngrok-free.app",
+    "https://ded3-49-43-230-78.ngrok-free.app", # Updated ngrok link
     "https://*.vercel.app", # Allow any vercel subdomain
 ]
 
@@ -81,3 +82,4 @@ app.include_router(ai_router)
 app.include_router(stickers_router)
 app.include_router(notifications_router)
 app.include_router(partners_router)
+app.include_router(events_router) # Include the new events router

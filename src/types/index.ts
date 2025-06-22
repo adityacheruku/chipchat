@@ -95,12 +95,7 @@ export interface VoiceMessageUploadResponse {
 }
 
 
-// WebSocket message types
-export interface WebSocketMessagePayload {
-  event_type: string;
-  [key: string]: any;
-}
-
+// WebSocket and SSE message types
 export interface NewMessageEventData {
   event_type: "new_message";
   message: Message;
@@ -113,7 +108,6 @@ export interface MessageReactionUpdateEventData {
   chat_id: string;
   reactions: Partial<Record<SupportedEmoji, string[]>>;
 }
-
 
 export interface UserPresenceUpdateEventData {
   event_type: "user_presence_update";
@@ -151,11 +145,10 @@ export interface HeartbeatClientEvent {
 export interface MessageAckEventData {
     event_type: "message_ack";
     client_temp_id: string;
-    server_assigned_id: string; // The permanent UUID from the DB
+    server_assigned_id: string;
     status: MessageStatus;
-    timestamp: string; // ISO string of when server processed it
+    timestamp: string;
 }
-
 
 export type WebSocketEventData =
   | NewMessageEventData
@@ -167,7 +160,16 @@ export type WebSocketEventData =
   | MessageAckEventData
   | { event_type: "error", detail: string }
   | { event_type: "authenticated" }
+  | { event_type: "sse_connected", data: string }
+  | { event_type: "ping", data: string }
   | HeartbeatClientEvent;
+
+// Constant to help SSE client subscribe to all relevant events
+export const ALL_EVENT_TYPES = [
+    "new_message", "message_reaction_update", "user_presence_update",
+    "typing_indicator", "thinking_of_you_received", "user_profile_update",
+    "message_ack", "error", "sse_connected", "ping"
+];
 
 
 // For frontend form, matching backend UserCreate with phone

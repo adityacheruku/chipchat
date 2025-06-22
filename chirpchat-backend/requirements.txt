@@ -21,3 +21,4 @@ fastapi-mail==1.4.1
 pywebpush==1.15.0
 pytz==2024.1
 redis[hiredis]==5.0.1
+sse-starlette==2.1.0

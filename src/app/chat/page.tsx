@@ -24,8 +24,8 @@ import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
-import { useWebSocket } from '@/hooks/useWebSocket';
-import { Loader2, MessagesSquare, WifiOff } from 'lucide-react';
+import { useRealtime, type RealtimeProtocol } from '@/hooks/useRealtime';
+import { Loader2, MessagesSquare, Wifi, WifiOff } from 'lucide-react';
 import ReactionSummaryModal from '@/components/chat/ReactionSummaryModal';
 
 const MemoizedMessageArea = memo(MessageArea);
@@ -111,7 +111,6 @@ export default function ChatPage() {
 
   const performLoadChatData = useCallback(async () => {
     if (!currentUser?.partner_id) {
-        // This case is handled by AuthContext redirect, but as a safeguard:
         setIsChatLoading(false);
         setChatSetupErrorMessage("You don't have a partner yet. Redirecting to find one.");
         router.push('/onboarding/find-partner');
@@ -122,13 +121,10 @@ export default function ChatPage() {
     setChatSetupErrorMessage(null);
 
     try {
-        // Fetch partner details
         const partnerDetails = await api.getUserProfile(currentUser.partner_id);
         setOtherUser(partnerDetails);
-
         if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
 
-        // Establish chat session with the confirmed partner
         const chatSession = await api.createOrGetChat(currentUser.partner_id);
         setActiveChat(chatSession);
 
@@ -154,7 +150,7 @@ export default function ChatPage() {
     } finally {
         setIsChatLoading(false);
     }
-}, [currentUser, router, setAvatarPreview, toast]);
+  }, [currentUser, router, setAvatarPreview, toast]);
 
   const handleWSMessageAck = useCallback((ackData: MessageAckEventData) => {
       setMessages(prevMessages => 
@@ -168,7 +164,6 @@ export default function ChatPage() {
 
   const handleWSMessageReceived = useCallback((newMessageFromServer: MessageType) => {
       setMessages(prevMessages => {
-        // Check if message with same client_temp_id or id already exists
         if (prevMessages.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)) {
             return prevMessages.map(m => 
                 (m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)
@@ -176,7 +171,6 @@ export default function ChatPage() {
                 : m
             ).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         }
-        // If not, add the new message
         return [...prevMessages, { ...newMessageFromServer, status: newMessageFromServer.status || 'sent_to_server' }]
             .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
@@ -212,28 +206,13 @@ export default function ChatPage() {
     }
   }, [currentUser, otherUser, fetchAndUpdateUser]);
 
-
   const handleWSTypingUpdate = useCallback((data: TypingIndicatorEventData) => {
     if (activeChat && data.chat_id === activeChat.id) {
-      setTypingUsers(prev => ({
-        ...prev,
-        [data.user_id]: { userId: data.user_id, isTyping: data.is_typing },
-      }));
+      setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }));
     }
   }, [activeChat]);
 
-  // Define handleSendThought AFTER useWebSocket to use its return values
-  const handleSendThought = useCallback(async () => {
-    if (!currentUser || !otherUser) return;
-    // The implementation will be defined after the WebSocket hook is initialized.
-    // This empty shell with a ref ensures the function exists for dependencies.
-  }, [currentUser, otherUser]);
-  
-  const handleSendThoughtRef = useRef(handleSendThought);
-  useEffect(() => {
-    handleSendThoughtRef.current = handleSendThought;
-  }, [handleSendThought]);
-
+  const handleSendThoughtRef = useRef<() => void>(() => {});
 
   const handleWSThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
     if (otherUser && data.sender_id === otherUser.id) {
@@ -250,7 +229,7 @@ export default function ChatPage() {
     }
   }, [otherUser, toast]); 
 
-  const { isConnected: isWsConnected, sendMessage: sendWsMessage, isBrowserOnline } = useWebSocket({
+  const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     token,
     onMessageReceived: handleWSMessageReceived,
     onReactionUpdate: handleWSReactionUpdate,
@@ -259,27 +238,16 @@ export default function ChatPage() {
     onThinkingOfYouReceived: handleWSThinkingOfYou,
     onUserProfileUpdate: handleWSUserProfileUpdate,
     onMessageAck: handleWSMessageAck,
-    onOpen: () => addAppEvent('apiError', 'WebSocket connected', currentUser?.id, currentUser?.display_name),
-    onClose: (event) => addAppEvent('apiError', `WebSocket disconnected: ${event.reason}`, currentUser?.id, currentUser?.display_name, {code: event.code}),
   });
 
-  // Now, redefine handleSendThought with the actual logic, using values from the hook.
   handleSendThoughtRef.current = useCallback(async () => {
     if (!currentUser || !otherUser) return;
-    try {
-      sendWsMessage({
-          event_type: "ping_thinking_of_you",
-          recipient_user_id: otherUser.id,
-      });
-      initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
-      addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
-    } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Ping Failed', description: error.message });
-    }
-  }, [currentUser, otherUser, sendWsMessage, initiateThoughtNotification, addAppEvent, toast]);
+    sendMessage({ event_type: "ping_thinking_of_you", recipient_user_id: otherUser.id });
+    initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
+    addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
+  }, [currentUser, otherUser, sendMessage, initiateThoughtNotification, addAppEvent]);
 
-
- useEffect(() => {
+  useEffect(() => {
     if (!isAuthenticated && !isAuthLoading) {
         router.push('/');
         return;
@@ -291,99 +259,58 @@ export default function ChatPage() {
             // AuthContext will handle the redirect
         }
     }
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [isAuthenticated, isAuthLoading, currentUser, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isAuthLoading, currentUser, router]);
 
  const handleSendMessage = (text: string) => {
-    if (!currentUser || !activeChat) {
-      toast({ variant: 'destructive', title: 'Cannot Send Message', description: 'Chat not initialized.' });
-      return;
-    }
+    if (!currentUser || !activeChat) return;
     if (!text.trim()) return;
 
     handleTyping(false);
-
     const clientTempId = uuidv4();
     const optimisticMessage: MessageType = {
-      id: clientTempId,
-      user_id: currentUser.id,
-      chat_id: activeChat.id,
-      text,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      reactions: {},
-      client_temp_id: clientTempId,
-      status: "sending",
-      message_subtype: "text",
+      id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, text,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text",
     };
     setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
 
-    sendWsMessage({
-        event_type: "send_message",
-        chat_id: activeChat.id,
-        text,
-        client_temp_id: clientTempId,
-        message_subtype: "text",
+    sendMessage({
+        event_type: "send_message", chat_id: activeChat.id, text,
+        client_temp_id: clientTempId, message_subtype: "text",
     });
 
     addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0, 30)}"`, currentUser.id, currentUser.display_name);
 
     if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) {
-      lastMessageTextRef.current = text;
-      aiSuggestMood(text);
+      lastMessageTextRef.current = text; aiSuggestMood(text);
     }
-    
-    // Progressive disclosure for notifications
     if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
-        const hasSentFirstMessage = localStorage.getItem(FIRST_MESSAGE_SENT_KEY) === 'true';
-        if (!hasSentFirstMessage) {
+        if (localStorage.getItem(FIRST_MESSAGE_SENT_KEY) !== 'true') {
             localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true');
-            setTimeout(() => setShowNotificationPrompt(true), 2000); // Show prompt after a short delay
+            setTimeout(() => setShowNotificationPrompt(true), 2000);
         }
     }
-
   };
 
   const handleSendSticker = (stickerId: string) => {
-    if (!currentUser || !activeChat) {
-      toast({ variant: 'destructive', title: 'Cannot Send Sticker', description: 'Chat not initialized.' });
-      return;
-    }
+    if (!currentUser || !activeChat) return;
     const clientTempId = uuidv4();
-    sendWsMessage({
-        event_type: "send_message",
-        chat_id: activeChat.id,
-        sticker_id: stickerId,
-        client_temp_id: clientTempId,
-        message_subtype: "sticker",
-    });
+    sendMessage({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker" });
     addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
   };
 
-
   const handleSendMoodClip = async (clipType: MessageClipType, file: File) => {
-    if (!currentUser || !activeChat) {
-      toast({ variant: 'destructive', title: 'Cannot Send Clip', description: 'Chat not initialized.' });
-      return;
-    }
+    if (!currentUser || !activeChat) return;
     toast({ title: "Uploading clip..."});
     const clientTempId = uuidv4();
     try {
-        const uploadResponse = await api.uploadMoodClip(file, clipType);
-        const placeholderText = clipType === 'audio'
-            ? `${currentUser.display_name} sent an audio mood clip.`
-            : `${currentUser.display_name} sent a video mood clip.`;
-        
-        const messagePayload = {
-            event_type: "send_message",
-            chat_id: activeChat.id,
-            clip_type: clipType,
-            clip_url: uploadResponse.file_url,
-            clip_placeholder_text: placeholderText,
-            client_temp_id: clientTempId,
-            message_subtype: "clip" as const,
-        };
-        sendWsMessage(messagePayload);
+        const { file_url } = await api.uploadMoodClip(file, clipType);
+        sendMessage({
+            event_type: "send_message", chat_id: activeChat.id, clip_type, clip_url: file_url,
+            clip_placeholder_text: `${currentUser.display_name} sent a ${clipType} clip.`,
+            client_temp_id: clientTempId, message_subtype: "clip" as const,
+        });
         addAppEvent('moodClipSent', `${currentUser.display_name} sent a ${clipType} clip.`, currentUser.id, currentUser.display_name);
         toast({ title: "Mood Clip Sent!" });
     } catch (error: any) {
@@ -392,24 +319,15 @@ export default function ChatPage() {
   };
 
    const handleSendImage = async (file: File) => {
-    if (!currentUser || !activeChat) {
-        toast({ variant: 'destructive', title: 'Cannot Send Image', description: 'Chat not initialized.' });
-        return;
-    }
+    if (!currentUser || !activeChat) return;
     toast({ title: "Uploading image..." });
     const clientTempId = uuidv4();
     try {
       const { image_url, image_thumbnail_url } = await api.uploadChatImage(file);
-      const messagePayload = {
-        event_type: "send_message",
-        chat_id: activeChat.id,
-        image_url,
-        image_thumbnail_url,
-        client_temp_id: clientTempId,
-        message_subtype: "image" as const,
-      };
-
-      sendWsMessage(messagePayload);
+      sendMessage({
+        event_type: "send_message", chat_id: activeChat.id, image_url, image_thumbnail_url,
+        client_temp_id: clientTempId, message_subtype: "image" as const,
+      });
       addAppEvent('messageSent', `${currentUser.display_name} sent an image.`, currentUser.id, currentUser.display_name);
       toast({ title: "Image Sent!" });
     } catch (error: any) {
@@ -418,24 +336,16 @@ export default function ChatPage() {
   };
 
   const handleSendDocument = async (file: File) => {
-    if (!currentUser || !activeChat) {
-        toast({ variant: 'destructive', title: 'Cannot Send Document', description: 'Chat not initialized.' });
-        return;
-    }
+    if (!currentUser || !activeChat) return;
     toast({ title: "Uploading document..." });
     const clientTempId = uuidv4();
     try {
-      const uploadResponse = await api.uploadChatDocument(file);
-      const messagePayload = {
-          event_type: "send_message",
-          chat_id: activeChat.id,
-          document_url: uploadResponse.file_url,
-          document_name: uploadResponse.file_name,
-          client_temp_id: clientTempId,
-          message_subtype: "document" as const,
-      };
-      sendWsMessage(messagePayload);
-      addAppEvent('messageSent', `${currentUser.display_name} sent a document: ${uploadResponse.file_name}.`, currentUser.id, currentUser.display_name);
+      const { file_url, file_name } = await api.uploadChatDocument(file);
+      sendMessage({
+          event_type: "send_message", chat_id: activeChat.id, document_url: file_url, document_name: file_name,
+          client_temp_id: clientTempId, message_subtype: "document" as const,
+      });
+      addAppEvent('messageSent', `${currentUser.display_name} sent a document: ${file_name}.`, currentUser.id, currentUser.display_name);
       toast({ title: "Document Sent!" });
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Document Upload Failed', description: error.message });
@@ -443,28 +353,17 @@ export default function ChatPage() {
   };
 
   const handleSendVoiceMessage = async (file: File) => {
-    if (!currentUser || !activeChat) {
-        toast({ variant: 'destructive', title: 'Cannot Send Voice Message', description: 'Chat not initialized.' });
-        return;
-    }
+    if (!currentUser || !activeChat) return;
     toast({ title: "Uploading voice message..." });
     const clientTempId = uuidv4();
     try {
-      const uploadResponse = await api.uploadVoiceMessage(file);
-      const messagePayload = {
-          event_type: "send_message",
-          chat_id: activeChat.id,
-          message_subtype: "voice_message" as const,
-          clip_type: 'audio' as const,
-          clip_url: uploadResponse.file_url,
+      const { file_url, duration_seconds, file_size_bytes, audio_format } = await api.uploadVoiceMessage(file);
+      sendMessage({
+          event_type: "send_message", chat_id: activeChat.id, message_subtype: "voice_message" as const,
+          clip_type: 'audio' as const, clip_url: file_url,
           clip_placeholder_text: `${currentUser.display_name} sent a voice message.`,
-          client_temp_id: clientTempId,
-          duration_seconds: uploadResponse.duration_seconds,
-          file_size_bytes: uploadResponse.file_size_bytes,
-          audio_format: uploadResponse.audio_format,
-      };
-      
-      sendWsMessage(messagePayload);
+          client_temp_id: clientTempId, duration_seconds, file_size_bytes, audio_format,
+      });
       addAppEvent('messageSent', `${currentUser.display_name} sent a voice message.`, currentUser.id, currentUser.display_name);
       toast({ title: "Voice Message Sent!" });
     } catch (error: any) {
@@ -474,14 +373,10 @@ export default function ChatPage() {
 
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat) return;
-    
     const RATE_LIMIT_MS = 500;
     const key = `${messageId}_${emoji}`;
     const now = Date.now();
-
-    if (lastReactionToggleTimes.current[key] && (now - lastReactionToggleTimes.current[key] < RATE_LIMIT_MS)) {
-      return; 
-    }
+    if (lastReactionToggleTimes.current[key] && (now - lastReactionToggleTimes.current[key] < RATE_LIMIT_MS)) return;
     lastReactionToggleTimes.current[key] = now;
 
     setMessages(prevMessages => 
@@ -489,14 +384,10 @@ export default function ChatPage() {
         if (msg.id === messageId) {
           const newReactions = JSON.parse(JSON.stringify(msg.reactions || {}));
           if (!newReactions[emoji]) newReactions[emoji] = [];
-          
           const userReactedIndex = newReactions[emoji].indexOf(currentUser.id);
-
           if (userReactedIndex > -1) {
             newReactions[emoji].splice(userReactedIndex, 1);
-            if (newReactions[emoji].length === 0) {
-              delete newReactions[emoji];
-            }
+            if (newReactions[emoji].length === 0) delete newReactions[emoji];
           } else {
             newReactions[emoji].push(currentUser.id);
           }
@@ -505,28 +396,19 @@ export default function ChatPage() {
         return msg;
       })
     );
-
-    sendWsMessage({
-        event_type: "toggle_reaction",
-        message_id: messageId,
-        chat_id: activeChat.id,
-        emoji: emoji,
-    });
-    
+    sendMessage({ event_type: "toggle_reaction", message_id: messageId, chat_id: activeChat.id, emoji });
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
-  }, [currentUser, activeChat, sendWsMessage, addAppEvent]);
+  }, [currentUser, activeChat, sendMessage, addAppEvent]);
 
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
     if (!currentUser) return;
     try {
       if (newAvatarFile) {
         toast({title: "Uploading avatar..."});
-        const avatarUploadResponse = await api.uploadAvatar(newAvatarFile); 
-        setAvatarPreview(avatarUploadResponse.avatar_url); 
+        await api.uploadAvatar(newAvatarFile); 
       }
-      const textUpdates = { ...updatedProfileData };
-      if (Object.keys(textUpdates).length > 0) {
-         await api.updateUserProfile(textUpdates);
+      if (Object.keys(updatedProfileData).length > 0) {
+         await api.updateUserProfile(updatedProfileData);
       }
       await fetchAndUpdateUser(); 
       toast({ title: "Profile Updated", description: "Your profile has been saved." });
@@ -544,9 +426,7 @@ export default function ChatPage() {
     if ( (mood1 === 'Chilling' || mood1 === 'Neutral' || mood1 === 'Thoughtful' || mood1 === 'Content') &&
          (mood2 === 'Chilling' || mood2 === 'Neutral' || mood2 === 'Thoughtful' || mood2 === 'Content') ) {
         const calmMoods = ['Chilling', 'Neutral', 'Thoughtful', 'Content'];
-        if (calmMoods.includes(mood1) && calmMoods.includes(mood2)) {
-           return 'bg-mood-calm-calm';
-        }
+        if (calmMoods.includes(mood1) && calmMoods.includes(mood2)) return 'bg-mood-calm-calm';
     }
     if (mood1 === 'Sad' && mood2 === 'Sad') return 'bg-mood-sad-sad';
     if (mood1 === 'Angry' && mood2 === 'Angry') return 'bg-mood-angry-angry';
@@ -560,42 +440,24 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (currentUser?.mood && otherUser?.mood) {
-      setDynamicBgClass(getDynamicBackgroundClass(currentUser.mood, otherUser.mood));
-    } else {
-      setDynamicBgClass('bg-mood-default-chat-area');
-    }
+    setDynamicBgClass(currentUser?.mood && otherUser?.mood ? getDynamicBackgroundClass(currentUser.mood, otherUser.mood) : 'bg-mood-default-chat-area');
   }, [currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
 
   const handleOtherUserAvatarClick = useCallback(() => {
-    if (otherUser) {
-      setFullScreenUserData(otherUser);
-      setIsFullScreenAvatarOpen(true);
-    }
+    if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); }
   }, [otherUser]);
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const handleTyping = useCallback((isTyping: boolean) => {
     if (!activeChat) return;
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    sendWsMessage({
-        event_type: isTyping ? "start_typing" : "stop_typing",
-        chat_id: activeChat.id,
-    });
-
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChat.id });
     if (isTyping) {
         typingTimeoutRef.current = setTimeout(() => {
-            sendWsMessage({
-                event_type: "stop_typing",
-                chat_id: activeChat.id,
-            });
+            sendMessage({ event_type: "stop_typing", chat_id: activeChat.id });
         }, 3000);
     }
-  }, [activeChat, sendWsMessage]);
+  }, [activeChat, sendMessage]);
 
   const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
     if (currentUser) {
@@ -622,146 +484,56 @@ export default function ChatPage() {
     }
   }, []);
 
-  const handleEnableNotifications = useCallback(() => {
-    subscribeToPush();
-    setShowNotificationPrompt(false);
-  }, [subscribeToPush]);
-
-  const handleDismissNotificationPrompt = useCallback(() => {
-    setShowNotificationPrompt(false);
-    // Optionally, set a flag in sessionStorage to not ask again this session
-    sessionStorage.setItem('notificationPromptDismissed', 'true');
-  }, []);
+  const handleEnableNotifications = useCallback(() => { subscribeToPush(); setShowNotificationPrompt(false); }, [subscribeToPush]);
+  const handleDismissNotificationPrompt = useCallback(() => { setShowNotificationPrompt(false); sessionStorage.setItem('notificationPromptDismissed', 'true'); }, []);
 
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
+  const isInputDisabled = protocol === 'disconnected';
+
+  const ConnectionStatusBanner = () => {
+    if (protocol === 'disconnected' && !isBrowserOnline) {
+      return <div className="fixed top-0 left-0 right-0 bg-destructive text-destructive-foreground p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><WifiOff size={16} />You are offline. Features may be limited.</div>;
+    }
+    if (protocol === 'sse') {
+      return <div className="fixed top-0 left-0 right-0 bg-amber-500 text-black p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Wifi size={16} />Connected via fallback. Some features may be slower.</div>;
+    }
+    if (protocol === 'connecting') {
+      return <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" />Connecting...</div>;
+    }
+    return null;
+  };
 
   if (isLoadingPage) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="text-foreground ml-4">Loading your profile...</p>
-      </div>
-    );
+    return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-foreground ml-4">Loading your profile...</p></div>;
   }
-
-
   if (!isAuthenticated && !isAuthLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
-        <div>
-          <p className="text-destructive text-lg mb-4">Authentication required.</p>
-          <Button onClick={() => router.push('/')} variant="outline">Go to Login</Button>
-        </div>
-      </div>
-    );
+    return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><p className="text-destructive text-lg mb-4">Authentication required.</p><Button onClick={() => router.push('/')} variant="outline">Go to Login</Button></div></div>;
   }
-  
-  // This state is rendered while the page determines if a partner exists and loads their data.
   if (!otherUser || !activeChat) {
-      return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
-        <div>
-          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-lg text-foreground">Loading your chat...</p>
-          {chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}
-        </div>
-      </div>
-    );
+      return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Loading your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}</div></div>;
   }
 
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
   const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {};
-  const isInputDisabled = !isBrowserOnline;
-
+  
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
-        {!isBrowserOnline && (
-            <div className="fixed top-0 left-0 right-0 bg-destructive text-destructive-foreground p-2 text-center text-sm z-50 flex items-center justify-center">
-                <WifiOff size={16} className="mr-2" />
-                You are offline. Features may be limited.
-            </div>
-        )}
-        <div className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass, !isBrowserOnline ? 'pt-10' : '')}>
-          <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try resetting or refreshing the page.">
+        <ConnectionStatusBanner />
+        <div className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass, (protocol !== 'websocket' && protocol !== 'disconnected') && 'pt-10')}>
+          <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try refreshing the page.">
             <div className="w-full max-w-2xl h-[95vh] sm:h-[90vh] md:h-[85vh] flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
-              <NotificationPrompt
-                isOpen={showNotificationPrompt}
-                onEnable={handleEnableNotifications}
-                onDismiss={handleDismissNotificationPrompt}
-                title="Enable Notifications"
-                message={
-                    otherUser
-                    ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.`
-                    : 'Get notified about important activity.'
-                }
-              />
-              <ChatHeader
-                currentUser={currentUser}
-                otherUser={otherUser}
-                onProfileClick={() => setIsProfileModalOpen(true)}
-                onSendThinkingOfYou={() => handleSendThoughtRef.current?.()}
-                isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)}
-                onOtherUserAvatarClick={handleOtherUserAvatarClick}
-                isOtherUserTyping={!!otherUserIsTyping}
-              />
-              
-              <MemoizedMessageArea
-                messages={messages}
-                currentUser={currentUser}
-                allUsers={allUsersForMessageArea}
-                onToggleReaction={handleToggleReaction}
-                onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)}
-              />
-              
-              <InputBar
-                onSendMessage={handleSendMessage}
-                onSendSticker={handleSendSticker}
-                onSendMoodClip={handleSendMoodClip}
-                onSendVoiceMessage={handleSendVoiceMessage}
-                onSendImage={handleSendImage}
-                onSendDocument={handleSendDocument}
-                isSending={isLoadingAISuggestion}
-                onTyping={handleTyping}
-                disabled={isInputDisabled}
-              />
+              <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
+              <ChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={() => setIsProfileModalOpen(true)} onSendThinkingOfYou={() => handleSendThoughtRef.current?.()} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
+              <MemoizedMessageArea messages={messages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)}/>
+              <InputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendMoodClip={handleSendMoodClip} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled}/>
             </div>
           </ErrorBoundary>
         </div>
-      {isProfileModalOpen && currentUser && (
-        <UserProfileModal
-          isOpen={isProfileModalOpen}
-          onClose={() => setIsProfileModalOpen(false)}
-          user={currentUser}
-          onSave={handleSaveProfile}
-          avatarPreview={avatarPreview || currentUser.avatar_url}
-          onAvatarFileChange={handleAvatarFileChangeHook}
-        />
-      )}
-      {fullScreenUserData && (
-        <FullScreenAvatarModal
-          isOpen={isFullScreenAvatarOpen}
-          onClose={() => setIsFullScreenAvatarOpen(false)}
-          user={fullScreenUserData}
-        />
-      )}
-      {currentUser && initialMoodOnLoad && (
-        <MoodEntryModal
-          isOpen={isMoodModalOpen}
-          onClose={() => setIsMoodModalOpen(false)}
-          onSetMood={handleSetMoodFromModal}
-          currentMood={initialMoodOnLoad}
-          onContinueWithCurrent={handleContinueWithCurrentMood}
-        />
-      )}
+      {isProfileModalOpen && currentUser && <UserProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} user={currentUser} onSave={handleSaveProfile} avatarPreview={avatarPreview || currentUser.avatar_url} onAvatarFileChange={handleAvatarFileChangeHook}/>}
+      {fullScreenUserData && <FullScreenAvatarModal isOpen={isFullScreenAvatarOpen} onClose={() => setIsFullScreenAvatarOpen(false)} user={fullScreenUserData}/>}
+      {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={() => setIsMoodModalOpen(false)} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}
       <ReasoningDialog />
-      {reactionModalData && (
-        <ReactionSummaryModal
-          isOpen={!!reactionModalData}
-          onClose={() => setReactionModalData(null)}
-          reactions={reactionModalData.reactions}
-          allUsers={reactionModalData.allUsers}
-        />
-      )}
+      {reactionModalData && <ReactionSummaryModal isOpen={!!reactionModalData} onClose={() => setReactionModalData(null)} reactions={reactionModalData.reactions} allUsers={reactionModalData.allUsers}/>}
     </div>
   );
 }

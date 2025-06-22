@@ -1,5 +1,4 @@
-
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt, ExpiredSignatureError, JWTClaimsError
 from pydantic import ValidationError, EmailStr
@@ -11,9 +10,32 @@ from app.auth.schemas import TokenData, UserPublic
 from app.database import db_manager
 from app.utils.logging import logger # Ensure logger is imported
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login") # Matches your login endpoint path
+# Set auto_error to False. This means if the token is not found in the header,
+# it won't immediately raise an error, allowing our custom dependency to check the query params.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPublic:
+async def get_token_from_header_or_query(
+    token_from_header: Optional[str] = Depends(oauth2_scheme),
+    token_from_query: Optional[str] = Query(None, alias="token")
+) -> str:
+    """
+    Dependency that extracts a JWT token from either the Authorization header or a 'token' query parameter.
+    This is necessary to support authentication for protocols like Server-Sent Events (SSE)
+    where setting custom headers is not possible in the browser.
+    """
+    if token_from_header:
+        return token_from_header
+    if token_from_query:
+        return token_from_query
+    # If neither token is present, raise the 401 error.
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated: No token provided in header or query parameter.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def get_current_user(token: str = Depends(get_token_from_header_or_query)) -> UserPublic:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
