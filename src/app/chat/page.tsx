@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -364,9 +364,7 @@ export default function ChatPage() {
   const handleSendImage = (file: File) => handleFileUpload(file, 'image', api.uploadChatImage);
   const handleSendDocument = (file: File) => handleFileUpload(file, 'document', api.uploadChatDocument);
   const handleSendVoiceMessage = (file: File) => handleFileUpload(file, 'voice_message', api.uploadVoiceMessage);
-  const handleSendMoodClip = (clipType: MessageClipType, file: File) => handleFileUpload(file, 'clip', (file, onProgress) => api.uploadMoodClip(file, clipType, onProgress));
-
-
+  
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat) return;
     const RATE_LIMIT_MS = 500;
@@ -522,7 +520,7 @@ export default function ChatPage() {
               <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
               <ChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={() => setIsProfileModalOpen(true)} onSendThinkingOfYou={() => handleSendThoughtRef.current?.()} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
               <MemoizedMessageArea messages={messages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)}/>
-              <InputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendMoodClip={handleSendMoodClip} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled}/>
+              <InputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled}/>
             </div>
           </ErrorBoundary>
         </div>

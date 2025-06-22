@@ -3,8 +3,8 @@
 
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, ArrowRight, CornerDownLeft, Gift } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
@@ -17,7 +17,6 @@ import { ScrollArea } from '../ui/scroll-area';
 interface InputBarProps {
   onSendMessage: (text: string) => void;
   onSendSticker: (stickerId: string) => void;
-  onSendMoodClip: (clipType: MessageClipType, file: File) => void;
   onSendVoiceMessage: (file: File) => void;
   onSendImage: (file: File) => void;
   onSendDocument: (file: File) => void;
@@ -36,6 +35,11 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
     <div className="relative w-16 h-16 rounded-md overflow-hidden border bg-muted flex-shrink-0">
       {file.type.startsWith('image/') ? (
         <Image src={fileUrl} alt={file.name} layout="fill" objectFit="cover" />
+      ) : file.type.startsWith('audio/') ? (
+         <div className="flex flex-col items-center justify-center h-full p-1 text-center bg-primary/20">
+          <Mic className="w-6 h-6 text-primary" />
+          <span className="text-xs truncate text-primary/80">Voice</span>
+        </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-full p-1 text-center">
           <FileText className="w-6 h-6 text-muted-foreground" />
@@ -59,7 +63,6 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
 export default function InputBar({
   onSendMessage,
   onSendSticker,
-  onSendMoodClip,
   onSendVoiceMessage,
   onSendImage,
   onSendDocument,
@@ -89,8 +92,20 @@ export default function InputBar({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null); 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
 
   const { toast } = useToast();
+
+  // Handle textarea auto-resizing
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+        textarea.style.height = 'auto';
+        const scrollHeight = textarea.scrollHeight;
+        textarea.style.height = `${scrollHeight}px`;
+    }
+  }, [messageText]);
 
   // Load recent emojis from local storage on mount
   useEffect(() => {
@@ -112,7 +127,7 @@ export default function InputBar({
     });
   };
 
-  const handleTypingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTypingChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessageText(e.target.value);
     if (disabled) return;
     onTyping(e.target.value.trim() !== '');
@@ -207,12 +222,13 @@ export default function InputBar({
 
   const handleCompositeSend = (e: FormEvent) => {
     e.preventDefault();
+    if (disabled || isSending) return;
+    
     if (messageText.trim()) {
       onSendMessage(messageText.trim());
     }
     stagedAttachments.forEach(file => {
       if (file.type.startsWith('image/')) onSendImage(file);
-      else if (file.type.startsWith('video/')) onSendMoodClip('video', file);
       else if (file.type.startsWith('audio/')) onSendVoiceMessage(file);
       else onSendDocument(file);
     });
@@ -230,7 +246,9 @@ export default function InputBar({
     const filtered: typeof PICKER_EMOJIS = {};
     for (const category in PICKER_EMOJIS) {
         const cat = category as keyof typeof PICKER_EMOJIS;
-        const matchingEmojis = PICKER_EMOJIS[cat].emojis.filter(emoji => emoji.includes(lowerCaseSearch) || PICKER_EMOJIS[cat].keywords?.some(kw => kw.includes(lowerCaseSearch)));
+        const matchingEmojis = PICKER_EMOJIS[cat].emojis.filter(emoji => 
+            PICKER_EMOJIS[cat].keywords.some(kw => kw.includes(lowerCaseSearch))
+        );
         if (matchingEmojis.length > 0) {
             filtered[cat] = { ...PICKER_EMOJIS[cat], emojis: matchingEmojis };
         }
@@ -248,7 +266,7 @@ export default function InputBar({
               <Mic className="relative h-16 w-16 text-destructive" />
           </div>
           <p className="text-muted-foreground mt-4">Recording...</p>
-          <Button variant="destructive" size="lg" className="mt-8 rounded-full" onClick={cleanupRecording}>
+          <Button variant="destructive" size="lg" className="mt-8 rounded-full" onClick={() => mediaRecorderRef.current?.stop()}>
             <StopCircle /> Stop
           </Button>
         </>
@@ -290,7 +308,7 @@ export default function InputBar({
       <form onSubmit={handleCompositeSend} className="flex items-center space-x-2">
         <Sheet open={isAttachmentSheetOpen} onOpenChange={setIsAttachmentSheetOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Attach file" disabled={isSending || disabled}>
+            <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file" disabled={isSending || disabled}>
               <Paperclip size={22} />
             </Button>
           </SheetTrigger>
@@ -323,62 +341,73 @@ export default function InputBar({
           </SheetContent>
         </Sheet>
         
-        <Sheet open={isToolsSheetOpen} onOpenChange={setIsToolsSheetOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}>
-              <Smile size={22} />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col">
-              <Tabs defaultValue="emoji" className="w-full flex flex-col h-full">
-                <SheetHeader className="p-2 border-b">
-                    <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="emoji"><Smile size={18}/></TabsTrigger>
-                        <TabsTrigger value="sticker"><StickyNote size={18}/></TabsTrigger>
-                        <TabsTrigger value="gif" disabled><Gift size={18}/></TabsTrigger>
-                    </TabsList>
-                </SheetHeader>
-                <TabsContent value="emoji" className="flex-grow overflow-hidden mt-0">
-                    <div className="p-2">
-                        <Input placeholder="Search emojis..." value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} className="w-full bg-muted border-none focus-visible:ring-ring" />
-                    </div>
-                    {recentEmojis.length > 0 && !emojiSearch && (
-                        <div className="px-2 pb-2 border-b">
-                            <h3 className="text-xs font-semibold text-muted-foreground mb-1">Recent</h3>
-                            <div className="flex gap-1">
-                                {recentEmojis.map(emoji => (
-                                    <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)}>{emoji}</Button>
-                                ))}
+        <div className="flex-grow relative">
+             <Textarea
+                ref={textareaRef}
+                placeholder="Type a message..."
+                value={messageText}
+                onChange={handleTypingChange}
+                onBlur={handleBlur}
+                className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[40px] max-h-[120px]"
+                autoComplete="off"
+                disabled={isSending || disabled}
+                rows={1}
+             />
+             <Sheet open={isToolsSheetOpen} onOpenChange={setIsToolsSheetOpen}>
+                <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-8 w-8 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}>
+                        <Smile size={20} />
+                    </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col">
+                    <Tabs defaultValue="emoji" className="w-full flex flex-col h-full">
+                        <SheetHeader className="p-2 border-b">
+                            <TabsList className="grid w-full grid-cols-3">
+                                <TabsTrigger value="emoji"><Smile size={18}/></TabsTrigger>
+                                <TabsTrigger value="sticker"><StickyNote size={18}/></TabsTrigger>
+                                <TabsTrigger value="gif" disabled><Gift size={18}/></TabsTrigger>
+                            </TabsList>
+                        </SheetHeader>
+                        <TabsContent value="emoji" className="flex-grow overflow-hidden mt-0">
+                            <div className="p-2">
+                                <Input placeholder="Search emojis..." value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} className="w-full bg-muted border-none focus-visible:ring-ring" />
                             </div>
-                        </div>
-                    )}
-                    <ScrollArea className="h-[calc(100%-110px)]">
-                        <div className="p-2">
-                            {Object.entries(filteredEmojis).map(([category, data]) => (
-                                <div key={category}>
-                                    <h3 className="text-sm font-medium text-muted-foreground py-1">{category}</h3>
-                                    <div className="grid grid-cols-8 gap-1">
-                                        {data.emojis.map(emoji => (
+                            {recentEmojis.length > 0 && !emojiSearch && (
+                                <div className="px-2 pb-2 border-b">
+                                    <h3 className="text-xs font-semibold text-muted-foreground mb-1">Recent</h3>
+                                    <div className="flex gap-1">
+                                        {recentEmojis.map(emoji => (
                                             <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)}>{emoji}</Button>
                                         ))}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </ScrollArea>
-                </TabsContent>
-                <TabsContent value="sticker" className="flex-grow overflow-hidden mt-0">
-                    <StickerPicker onStickerSelect={handleStickerSelect} />
-                </TabsContent>
-                <TabsContent value="gif" className="flex-grow mt-0 flex items-center justify-center">
-                    <p className="text-muted-foreground">GIFs are coming soon!</p>
-                </TabsContent>
-              </Tabs>
-          </SheetContent>
-        </Sheet>
+                            )}
+                            <ScrollArea className="h-[calc(100%-110px)]">
+                                <div className="p-2">
+                                    {Object.entries(filteredEmojis).map(([category, data]) => (
+                                        <div key={category}>
+                                            <h3 className="text-sm font-medium text-muted-foreground py-1">{category}</h3>
+                                            <div className="grid grid-cols-8 gap-1">
+                                                {data.emojis.map(emoji => (
+                                                    <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)}>{emoji}</Button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        </TabsContent>
+                        <TabsContent value="sticker" className="flex-grow overflow-hidden mt-0">
+                            <StickerPicker onStickerSelect={handleStickerSelect} />
+                        </TabsContent>
+                        <TabsContent value="gif" className="flex-grow mt-0 flex items-center justify-center">
+                            <p className="text-muted-foreground">GIFs are coming soon!</p>
+                        </TabsContent>
+                    </Tabs>
+                </SheetContent>
+            </Sheet>
+        </div>
         
-        <Input type="text" placeholder="Type a message..." value={messageText} onChange={handleTypingChange} onBlur={handleBlur} className="flex-grow bg-card border-input focus-visible:ring-ring" autoComplete="off" disabled={isSending || disabled}/>
-
         <Button type="submit" size="icon" className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-full w-10 h-10 flex-shrink-0" disabled={!showSendButton || isSending || disabled} aria-label="Send message">
           {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
         </Button>
