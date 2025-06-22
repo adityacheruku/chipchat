@@ -31,9 +31,9 @@ origins = [
     "http://localhost:3000",      # Common React dev port
     "http://localhost:9002",      # Your specified Next.js dev port
     "https://ded3-49-43-230-78.ngrok-free.app", # Your provided ngrok URL
-    # TODO: Add your Vercel URLs when you deploy
-    # "https://your-app-name.vercel.app",
-    # "https://your-app-name-*.vercel.app", # For preview deployments
+    # Add your Vercel URLs when you deploy
+    "https://your-app-name.vercel.app", # Replace 'your-app-name'
+    "https://your-app-name-*.vercel.app", # For preview deployments
 ]
 
 # If in a debug/development environment, allow all origins for convenience.
