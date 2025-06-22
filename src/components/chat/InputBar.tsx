@@ -4,7 +4,7 @@
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, ArrowRight, CornerDownLeft, Gif } from 'lucide-react';
+import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, ArrowRight, CornerDownLeft, Gift } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
@@ -335,7 +335,7 @@ export default function InputBar({
                     <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="emoji"><Smile size={18}/></TabsTrigger>
                         <TabsTrigger value="sticker"><StickyNote size={18}/></TabsTrigger>
-                        <TabsTrigger value="gif" disabled><Gif size={18}/></TabsTrigger>
+                        <TabsTrigger value="gif" disabled><Gift size={18}/></TabsTrigger>
                     </TabsList>
                 </SheetHeader>
                 <TabsContent value="emoji" className="flex-grow overflow-hidden mt-0">
