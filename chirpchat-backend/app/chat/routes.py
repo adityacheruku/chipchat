@@ -157,7 +157,21 @@ async def get_messages(
         ).execute()
 
         messages_data_list = messages_resp.data if messages_resp and messages_resp.data else []
-        messages_domain_list = [MessageInDB(**m) for m in messages_data_list]
+        
+        # Data migration layer: Handle old status enums from DB before Pydantic validation
+        status_map = {
+            "sent_to_server": MessageStatusEnum.SENT.value,
+            "delivered_to_recipient": MessageStatusEnum.DELIVERED.value,
+            "read_by_recipient": MessageStatusEnum.READ.value,
+        }
+        
+        cleaned_messages_data = []
+        for m in messages_data_list:
+            if m.get("status") in status_map:
+                m["status"] = status_map[m["status"]]
+            cleaned_messages_data.append(m)
+
+        messages_domain_list = [MessageInDB(**m) for m in cleaned_messages_data]
         logger.info(f"Retrieved {len(messages_domain_list)} messages for chat {chat_id} for user {current_user.id}")
         return MessageListResponse(messages=messages_domain_list)
 
