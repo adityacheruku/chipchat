@@ -7,7 +7,8 @@ import json
 import asyncio
 
 from app.websocket import manager as ws_manager
-from app.auth.schemas import UserPublic, TokenData
+from app.auth.schemas import UserPublic
+from app.auth.dependencies import try_get_user_from_token
 from app.chat.schemas import MessageCreate, MessageStatusEnum, SUPPORTED_EMOJIS, MessageSubtypeEnum
 from app.database import db_manager
 from app.utils.logging import logger
@@ -21,56 +22,13 @@ from starlette.websockets import WebSocketState
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
-async def get_user_from_token_for_ws(token: Optional[str] = Query(None)) -> Optional[UserPublic]:
-    if not token:
-        logger.warning("WS Auth: Token not provided in query parameters.")
-        return None
-
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        phone: Optional[str] = payload.get("sub")
-        user_id_str: Optional[str] = payload.get("user_id")
-
-        if phone is None and user_id_str is None:
-            logger.warning("WS Auth: Token missing both phone (sub) and user_id.")
-            return None
-        
-        token_data = TokenData(phone=phone, user_id=UUID(user_id_str) if user_id_str else None)
-        logger.info(f"WS Auth: Token decoded for user_id='{token_data.user_id}', phone='{token_data.phone}'")
-
-    except (JWTError, ValidationError) as e:
-        logger.warning(f"WS Auth: Token validation error: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"WS Auth: Unexpected error during token decoding: {e}", exc_info=True)
-        return None
-    
-    user_dict = None
-    try:
-        if token_data.user_id:
-            response = await db_manager.get_table("users").select("*").eq("id", str(token_data.user_id)).maybe_single().execute()
-            user_dict = response.data
-    except Exception as e:
-        logger.error(f"WS Auth: Database error fetching user: {e}", exc_info=True)
-        return None
-    
-    if user_dict is None:
-        logger.warning(f"WS Auth: User not found in DB for token: {token_data}")
-        return None
-    
-    try:
-        return UserPublic(**user_dict)
-    except ValidationError as e:
-        logger.error(f"WS Auth: Pydantic validation error for UserPublic: {e}")
-        return None
-
 @router.websocket("/connect") 
 async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
-    current_user: Optional[UserPublic] = await get_user_from_token_for_ws(token=token)
+    current_user: Optional[UserPublic] = await try_get_user_from_token(token)
 
     if not current_user:
         await websocket.accept() 
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION) 
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid or missing token") 
         return
 
     user_id = current_user.id

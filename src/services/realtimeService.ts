@@ -198,19 +198,34 @@ class RealtimeService {
   private connectSSE = async () => {
     if (!this.token) return;
     console.log("WebSocket failed. Falling back to SSE.");
-    await this.syncEvents();
-
+    
     this.setProtocol('sse');
     const sseUrl = `${EVENTS_BASE_URL}/events/subscribe?token=${encodeURIComponent(this.token)}`;
     this.sse = new EventSource(sseUrl, { withCredentials: false });
 
-    this.sse.onopen = () => console.log("SSE connection established.");
+    this.sse.onopen = async () => {
+      console.log("SSE connection established.");
+      await this.syncEvents();
+      this.setProtocol('sse'); // Move back to SSE state after sync
+    };
+
     this.sse.onerror = (err) => {
       console.error("SSE connection error:", err);
       this.sse?.close();
       this.sse = null;
       this.scheduleReconnect();
     };
+    
+    this.sse.addEventListener("auth_error", () => {
+        console.error("SSE Authentication failed.");
+        this.emit('auth-error');
+        this.disconnect();
+    });
+
+    this.sse.addEventListener("sse_connected", (event: MessageEvent) => {
+        // This confirms the generator has started successfully on the backend.
+        console.log("SSE stream connected by server:", event.data);
+    });
 
     const sseMessageHandler = (event: MessageEvent) => {
       try {
@@ -222,7 +237,7 @@ class RealtimeService {
     };
 
     // Use a set of known event types to add listeners
-    const ALL_EVENT_TYPES = ["new_message", "message_reaction_update", "user_presence_update", "typing_indicator", "thinking_of_you_received", "user_profile_update", "message_ack", "error", "sse_connected", "ping"];
+    const ALL_EVENT_TYPES = ["new_message", "message_reaction_update", "user_presence_update", "typing_indicator", "thinking_of_you_received", "user_profile_update", "message_ack", "error", "ping"];
     ALL_EVENT_TYPES.forEach(type => this.sse?.addEventListener(type, sseMessageHandler));
   }
 
@@ -252,7 +267,7 @@ class RealtimeService {
     if(this.activityTimeout) clearTimeout(this.activityTimeout);
     this.activityTimeout = setTimeout(() => {
       console.warn('Realtime: Server activity timeout. Closing connection.');
-      this.ws?.close(1006, 'Server activity timeout');
+      this.ws?.close(1000, 'Server activity timeout'); // Use valid close code
     }, SERVER_ACTIVITY_TIMEOUT);
   };
 
