@@ -1,13 +1,16 @@
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi import Request
 import asyncio
+import redis.asyncio as redis
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.middleware.logging import LoggingMiddleware
 from app.config import settings
 from app.websocket import manager as ws_manager
+from app.utils.logging import logger
+from app.redis_client import redis_manager
 
 # Import routers
 from app.auth.routes import auth_router, user_router
@@ -27,6 +30,15 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# Instrument the app with Prometheus metrics.
+# This exposes a /metrics endpoint.
+Instrumentator(
+    should_instrument_requests=True,
+    should_instrument_responses=True,
+    excluded_handlers=["/metrics", "/health"],
+).instrument(app).expose(app)
+
 
 # Define allowed origins for CORS.
 origins = [
@@ -59,7 +71,6 @@ app.add_middleware(LoggingMiddleware)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    from app.utils.logging import logger
     import traceback
     logger.error(f"Unhandled error: {exc}\nTraceback: {traceback.format_exc()}")
     return JSONResponse(
@@ -70,7 +81,36 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Health check endpoint
 @app.get("/health", tags=["System"])
 async def health_check():
-    return {"status": "healthy", "service": "chirpchat-api", "version": app.version}
+    """
+    Performs a health check of the API and its critical dependencies (e.g., Redis).
+    Returns HTTP 200 if healthy, HTTP 503 if a dependency is down.
+    """
+    redis_healthy = False
+    try:
+        redis_client = await redis_manager.get_client()
+        await redis_client.ping()
+        redis_healthy = True
+    except (redis.ConnectionError, ConnectionRefusedError, redis.TimeoutError) as e:
+        logger.error(f"Health check failed: Redis connection error - {e}")
+        redis_healthy = False
+    except Exception as e:
+        logger.error(f"Health check failed: An unexpected error occurred with Redis - {e}")
+        redis_healthy = False
+
+    response_content = {
+        "status": "healthy" if redis_healthy else "unhealthy",
+        "service": "chirpchat-api",
+        "version": app.version,
+        "dependencies": {
+            "redis": "healthy" if redis_healthy else "unhealthy"
+        }
+    }
+    
+    if not redis_healthy:
+        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=response_content)
+    
+    return JSONResponse(status_code=status.HTTP_200_OK, content=response_content)
+
 
 # Include all routers
 app.include_router(auth_router)
