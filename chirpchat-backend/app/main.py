@@ -43,7 +43,7 @@ Instrumentator(
 origins = [
     "http://localhost:3000",
     "http://localhost:9002",
-    "https://a93b-49-43-230-78.ngrok-free.app", # Current ngrok for testing
+    "https://ef9e-49-43-230-78.ngrok-free.app", # Current ngrok for testing
     "https://chipchat.vercel.app", # Production frontend
 ]
 
