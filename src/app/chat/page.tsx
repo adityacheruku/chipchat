@@ -110,9 +110,12 @@ export default function ChatPage() {
   });
 
   const performLoadChatData = useCallback(async () => {
-    if (!currentUser?.partner_id) {
+    if (!currentUser) return; // Guard against missing currentUser
+
+    if (!currentUser.partner_id) {
         setIsChatLoading(false);
-        setChatSetupErrorMessage("You don't have a partner yet. Redirecting to find one.");
+        setChatSetupErrorMessage("No partner found. Redirecting to partner selection...");
+        // The AuthContext now handles this redirection logic, but we can be explicit here too.
         router.push('/onboarding/find-partner');
         return;
     }
@@ -151,6 +154,7 @@ export default function ChatPage() {
         setIsChatLoading(false);
     }
   }, [currentUser, router, setAvatarPreview, toast]);
+
 
   const handleWSMessageAck = useCallback((ackData: MessageAckEventData) => {
       setMessages(prevMessages => 
@@ -247,19 +251,16 @@ export default function ChatPage() {
   }, [currentUser, otherUser, sendMessage, initiateThoughtNotification, addAppEvent]);
 
   useEffect(() => {
-    if (!isAuthenticated && !isAuthLoading) {
+    if (!isAuthLoading && !isAuthenticated) {
         router.push('/');
         return;
     }
     if (isAuthenticated && currentUser) {
-        if (currentUser.partner_id) {
-            performLoadChatData();
-        } else {
-            // AuthContext will handle the redirect
-        }
+        performLoadChatData();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAuthLoading, currentUser, router]);
+  }, [isAuthenticated, isAuthLoading, currentUser?.id]);
+
 
  const handleSendMessage = (text: string) => {
     if (!currentUser || !activeChat) return;
@@ -506,7 +507,7 @@ export default function ChatPage() {
     return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><p className="text-destructive text-lg mb-4">Authentication required.</p><Button onClick={() => router.push('/')} variant="outline">Go to Login</Button></div></div>;
   }
   if (!otherUser || !activeChat) {
-      return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Loading your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}</div></div>;
+      return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}<Button variant="link" className="mt-4" onClick={() => router.push('/onboarding/find-partner')}>Find a Partner</Button></div></div>;
   }
 
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
