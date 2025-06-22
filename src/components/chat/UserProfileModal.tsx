@@ -131,32 +131,32 @@ export default function UserProfileModal({
   const renderNotificationButton = () => {
     if (!isPushApiSupported) {
       return (
-        <div className="col-span-3 flex items-center text-sm text-muted-foreground gap-2">
-            <AlertTriangle className="text-amber-500" />
-            <p>Push notifications not supported on this browser.</p>
+        <div className="flex items-center text-sm text-muted-foreground gap-2">
+            <AlertTriangle className="text-amber-500 h-4 w-4" />
+            <p>Push not supported by browser.</p>
         </div>
       );
     }
     if (permissionStatus === 'denied') {
       return (
-        <div className="col-span-3 flex items-center text-sm text-destructive gap-2">
-             <BellOff />
-            <p>You have blocked notifications. Please enable them in your browser settings.</p>
+        <div className="flex items-center text-sm text-destructive gap-2">
+             <BellOff className="h-4 w-4" />
+            <p>Notifications blocked by browser.</p>
         </div>
       );
     }
     if (isSubscribed) {
       return (
-        <Button variant="outline" onClick={unsubscribeFromPush} className="col-span-3" disabled={isSubscribing}>
-          {isSubscribing ? <Loader2 className="animate-spin" /> : <BellOff className="mr-2 h-4 w-4" />}
-          Disable Push Notifications
+        <Button variant="outline" size="sm" onClick={unsubscribeFromPush} disabled={isSubscribing}>
+          {isSubscribing ? <Loader2 className="animate-spin h-4 w-4" /> : <BellOff className="mr-2 h-4 w-4" />}
+          Disable
         </Button>
       );
     }
     return (
-      <Button variant="default" onClick={subscribeToPush} className="col-span-3 bg-primary hover:bg-primary/90" disabled={isSubscribing}>
-        {isSubscribing ? <Loader2 className="animate-spin" /> : <Bell className="mr-2 h-4 w-4" />}
-        Enable Push Notifications
+      <Button variant="default" size="sm" onClick={subscribeToPush} className="bg-primary hover:bg-primary/90" disabled={isSubscribing}>
+        {isSubscribing ? <Loader2 className="animate-spin h-4 w-4" /> : <Bell className="mr-2 h-4 w-4" />}
+        Enable
       </Button>
     );
   }
@@ -251,60 +251,44 @@ export default function UserProfileModal({
             
             <Separator />
 
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right text-foreground">
-                Push Alerts
-              </Label>
-              {renderNotificationButton()}
+            <div className="space-y-4 rounded-lg border bg-card p-4 shadow-inner">
+              <div className="flex items-center justify-between">
+                <Label className="font-semibold text-foreground">
+                  Push Alerts
+                </Label>
+                {renderNotificationButton()}
+              </div>
+              {isSubscribed && (
+                isSettingsLoading ? (
+                  <div className="space-y-3 pt-2">
+                      <div className="flex justify-between items-center"><Skeleton className="h-4 w-24" /><Skeleton className="h-6 w-11" /></div>
+                      <div className="flex justify-between items-center"><Skeleton className="h-4 w-28" /><Skeleton className="h-6 w-11" /></div>
+                      <div className="flex justify-between items-center"><Skeleton className="h-4 w-32" /><Skeleton className="h-6 w-11" /></div>
+                  </div>
+                ) : localSettings && (
+                  <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="messages-notif" className="font-normal cursor-pointer text-muted-foreground">
+                            New Messages
+                        </Label>
+                        <Switch id="messages-notif" checked={localSettings.messages ?? true} onCheckedChange={(c) => handleSettingsChange('messages', c)} disabled={isSaving || isSubscribing} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="mood-notif" className="font-normal cursor-pointer text-muted-foreground">
+                            Mood Changes
+                        </Label>
+                        <Switch id="mood-notif" checked={localSettings.mood_updates ?? true} onCheckedChange={(c) => handleSettingsChange('mood_updates', c)} disabled={isSaving || isSubscribing} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="pings-notif" className="font-normal cursor-pointer text-muted-foreground">
+                            "Thinking of You" Pings
+                        </Label>
+                        <Switch id="pings-notif" checked={localSettings.thinking_of_you ?? true} onCheckedChange={(c) => handleSettingsChange('thinking_of_you', c)} disabled={isSaving || isSubscribing} />
+                      </div>
+                  </div>
+                )
+              )}
             </div>
-
-            {isSubscribed && (
-              isSettingsLoading ? (
-                 <div className="col-span-4 grid gap-4 rounded-lg border bg-card p-4 shadow-inner">
-                    <Skeleton className="h-5 w-3/4" />
-                    <div className="flex justify-between items-center"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-6 w-11" /></div>
-                    <div className="flex justify-between items-center"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-6 w-11" /></div>
-                    <div className="flex justify-between items-center"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-6 w-11" /></div>
-                 </div>
-              ) : localSettings && (
-                 <div className="col-span-4 grid gap-4 rounded-lg border bg-card p-4 shadow-inner">
-                    <p className="text-sm font-medium text-muted-foreground -mt-1 mb-1">Notify me about...</p>
-                    <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="messages-notif" className="font-normal cursor-pointer">
-                        New Messages
-                    </Label>
-                    <Switch
-                        id="messages-notif"
-                        checked={localSettings.messages ?? true}
-                        onCheckedChange={(checked) => handleSettingsChange('messages', checked)}
-                        disabled={isSaving || isSubscribing}
-                    />
-                    </div>
-                    <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="mood-notif" className="font-normal cursor-pointer">
-                        Mood Changes
-                    </Label>
-                    <Switch
-                        id="mood-notif"
-                        checked={localSettings.mood_updates ?? true}
-                        onCheckedChange={(checked) => handleSettingsChange('mood_updates', checked)}
-                        disabled={isSaving || isSubscribing}
-                    />
-                    </div>
-                    <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="pings-notif" className="font-normal cursor-pointer">
-                        "Thinking of You" Pings
-                    </Label>
-                    <Switch
-                        id="pings-notif"
-                        checked={localSettings.thinking_of_you ?? true}
-                        onCheckedChange={(checked) => handleSettingsChange('thinking_of_you', checked)}
-                        disabled={isSaving || isSubscribing}
-                    />
-                    </div>
-                </div>
-              )
-            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} className="hover:bg-muted active:bg-muted/80" disabled={isSaving}>

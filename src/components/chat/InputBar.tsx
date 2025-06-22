@@ -445,7 +445,7 @@ export default function InputBar({
           </div>
       )}
 
-      <form onSubmit={handleCompositeSend} className="flex items-start space-x-2">
+      <form onSubmit={handleCompositeSend} className="flex items-end space-x-2">
         <AttachmentPickerComponent open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
           <AttachmentPickerTrigger asChild>
             <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file" disabled={isSending || disabled}>

@@ -24,7 +24,7 @@ export default function MessageArea({ messages, currentUser, allUsers, onToggleR
 
   return (
     <ScrollArea className="flex-grow p-4 bg-transparent" viewportRef={viewportRef} ref={scrollAreaRef}>
-      <div className="space-y-4">
+      <div className="flex flex-col space-y-4">
         {messages.map((msg) => {
           const sender = findUser(msg.user_id);
           if (!sender) {

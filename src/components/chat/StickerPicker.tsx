@@ -257,6 +257,14 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
 
   const favoriteStickerIds = useMemo(() => new Set(favoriteStickers.map(s => s.id)), [favoriteStickers]);
 
+  const tabsForDisplay = useMemo(() => {
+    const staticTabs = ['recent', 'favorites'];
+    const dynamicTabs = packs.slice(0, 3).map(p => p.id);
+    const searchTab = searchQuery ? ['search'] : [];
+    return [...staticTabs, ...dynamicTabs, ...searchTab];
+  }, [packs, searchQuery]);
+
+
   return (
     <div className="w-full p-2 bg-card">
       <div className="relative mb-2">
@@ -270,15 +278,15 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
           />
       </div>
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className={cn("grid w-full grid-cols-4 sm:grid-cols-5")}>
-          <TabsTrigger value="recent" aria-label="Recent stickers"><Clock size={18} /></TabsTrigger>
-          <TabsTrigger value="favorites" aria-label="Favorite stickers"><Star size={18} /></TabsTrigger>
+        <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${tabsForDisplay.length}, minmax(0, 1fr))` }}>
+          <TabsTrigger value="recent" aria-label="Recent stickers" className="transition-all duration-200"><Clock size={18} /></TabsTrigger>
+          <TabsTrigger value="favorites" aria-label="Favorite stickers" className="transition-all duration-200"><Star size={18} /></TabsTrigger>
           {packs.slice(0, 3).map(pack => (
-            <TabsTrigger key={pack.id} value={pack.id} className="p-1" aria-label={`Sticker pack: ${pack.name}`}>
+            <TabsTrigger key={pack.id} value={pack.id} className="p-1 transition-all duration-200" aria-label={`Sticker pack: ${pack.name}`}>
                 <Image src={pack.thumbnail_url || ''} alt={pack.name} width={24} height={24} unoptimized />
             </TabsTrigger>
           ))}
-          {searchQuery && <TabsTrigger value="search" aria-label="Search results"><Search size={18}/></TabsTrigger>}
+          {searchQuery && <TabsTrigger value="search" aria-label="Search results" className="transition-all duration-200"><Search size={18}/></TabsTrigger>}
         </TabsList>
         
         <TabsContent value="recent">
