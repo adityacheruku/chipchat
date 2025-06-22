@@ -6,14 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
-import type { MessageClipType } from '@/types';
 import { PICKER_EMOJIS } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useLongPress } from '@/hooks/useLongPress';
 
 interface InputBarProps {
   onSendMessage: (text: string) => void;
@@ -52,6 +54,7 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
         variant="destructive"
         className="absolute top-0 right-0 h-5 w-5 rounded-full"
         onClick={onRemove}
+        aria-label={`Remove ${file.name} from attachments`}
       >
         <X className="h-3 w-3" />
         <span className="sr-only">Remove attachment</span>
@@ -72,8 +75,9 @@ export default function InputBar({
   disabled = false,
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
-  const [isToolsSheetOpen, setIsToolsSheetOpen] = useState(false);
-  const [isAttachmentSheetOpen, setIsAttachmentSheetOpen] = useState(false);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
+  const isMobile = useIsMobile();
   
   const [stagedAttachments, setStagedAttachments] = useState<File[]>([]);
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
@@ -151,7 +155,7 @@ export default function InputBar({
   const handleStickerSelect = (stickerId: string) => {
     if (disabled) return;
     onSendSticker(stickerId);
-    setIsToolsSheetOpen(false);
+    setIsToolsOpen(false);
   };
   
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
@@ -159,7 +163,7 @@ export default function InputBar({
     if (files) {
       setStagedAttachments(prev => [...prev, ...Array.from(files)]);
     }
-    setIsAttachmentSheetOpen(false);
+    setIsAttachmentOpen(false);
     if (event.target) event.target.value = ""; // Reset input
   };
   
@@ -181,7 +185,6 @@ export default function InputBar({
 
   const handleDragLeave = (e: React.DragEvent) => {
     handleDragEvents(e);
-    // Use relatedTarget to prevent flickering when moving over child elements
     const relatedTarget = e.relatedTarget as Node | null;
     if (!e.currentTarget.contains(relatedTarget)) {
       setIsDragging(false);
@@ -253,7 +256,7 @@ export default function InputBar({
         const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
         setStagedAttachments(prev => [...prev, audioFile]);
         cleanupRecording();
-        setIsAttachmentSheetOpen(false);
+        setIsAttachmentOpen(false);
       }
   };
 
@@ -293,40 +296,130 @@ export default function InputBar({
     return filtered;
   }, [emojiSearch]);
 
-  const renderRecordingUI = () => (
-    <div className="flex flex-col items-center justify-center p-4 h-full">
-      {recordingStatus === 'recording' ? (
-        <>
-          <div className="text-destructive text-2xl font-mono mb-4">{new Date(recordingSeconds * 1000).toISOString().substr(14, 5)}</div>
-          <div className="relative h-16 w-16">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-              <Mic className="relative h-16 w-16 text-destructive" />
-          </div>
-          <p className="text-muted-foreground mt-4">Recording...</p>
-          <Button variant="destructive" size="lg" className="mt-8 rounded-full" onClick={() => mediaRecorderRef.current?.stop()}>
-            <StopCircle /> Stop
-          </Button>
-        </>
-      ) : recordingStatus === 'recorded' && audioURL ? (
-        <>
-          <p className="text-muted-foreground mb-4">Voice message ready</p>
-          <audio src={audioURL} controls className="w-full" />
-          <div className="flex w-full justify-between mt-8">
-            <Button variant="ghost" onClick={cleanupRecording}><Trash2 className="mr-2"/> Discard</Button>
-            <Button onClick={handleStageVoiceMessage}><Send className="mr-2"/> Add to message</Button>
-          </div>
-        </>
-      ) : (
-        <>
-            <Mic className="h-16 w-16 text-muted-foreground mb-4"/>
-            <p className="text-muted-foreground mb-8 text-center">Press the button to start recording your voice note.</p>
-            <Button variant="default" size="lg" className="rounded-full bg-primary hover:bg-primary/90" onClick={handleStartRecording}>
-                Start Recording
+  const recordButtonLongPress = useLongPress(handleStartRecording, {
+    onFinish: () => { if(mediaRecorderRef.current) mediaRecorderRef.current.stop() },
+    threshold: 250
+  });
+
+  const AttachmentPicker = () => (
+    <Tabs defaultValue="media" className="w-full">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="media">Media & Files</TabsTrigger>
+        <TabsTrigger value="audio">Voice Note</TabsTrigger>
+      </TabsList>
+      <TabsContent value="media" className="p-4">
+        <div className="grid grid-cols-3 gap-4">
+            <Button variant="outline" size="lg" onClick={() => cameraInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
+                <Camera size={24} className="text-red-500"/>
+                <span className="text-sm font-normal">Camera</span>
             </Button>
-        </>
-      )}
-    </div>
+            <Button variant="outline" size="lg" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
+                <ImageIcon size={24} className="text-purple-500"/>
+                <span className="text-sm font-normal">Gallery</span>
+            </Button>
+            <Button variant="outline" size="lg" onClick={() => documentInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
+                <FileText size={24} className="text-blue-500"/>
+                <span className="text-sm font-normal">Document</span>
+            </Button>
+        </div>
+      </TabsContent>
+      <TabsContent value="audio" className="p-4 h-80 flex flex-col items-center justify-center">
+        {recordingStatus === 'recording' ? (
+          <>
+            <div className="text-destructive text-2xl font-mono mb-4">{new Date(recordingSeconds * 1000).toISOString().substr(14, 5)}</div>
+            <div className="relative h-16 w-16">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                <Mic className="relative h-16 w-16 text-destructive" />
+            </div>
+            <p className="text-muted-foreground mt-4">Recording...</p>
+            <Button variant="destructive" size="lg" className="mt-8 rounded-full" onClick={() => mediaRecorderRef.current?.stop()}>
+              <StopCircle /> Stop
+            </Button>
+          </>
+        ) : recordingStatus === 'recorded' && audioURL ? (
+          <>
+            <p className="text-muted-foreground mb-4">Voice message ready</p>
+            <audio src={audioURL} controls className="w-full" />
+            <div className="flex w-full justify-between mt-8">
+              <Button variant="ghost" onClick={cleanupRecording}><Trash2 className="mr-2"/> Discard</Button>
+              <Button onClick={handleStageVoiceMessage}><Send className="mr-2"/> Add to message</Button>
+            </div>
+          </>
+        ) : (
+          <>
+              <Mic className="h-16 w-16 text-muted-foreground mb-4"/>
+              <p className="text-muted-foreground mb-8 text-center">Press and hold to start recording your voice note.</p>
+              <Button variant="default" size="lg" className="rounded-full bg-primary hover:bg-primary/90" {...recordButtonLongPress}>
+                  Hold to Record
+              </Button>
+          </>
+        )}
+      </TabsContent>
+    </Tabs>
   );
+
+  const ToolsPicker = () => (
+    <Tabs defaultValue="emoji" className="w-full flex flex-col h-full">
+      <SheetHeader className="p-2 border-b">
+          <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="emoji"><Smile size={18}/></TabsTrigger>
+              <TabsTrigger value="sticker"><StickyNote size={18}/></TabsTrigger>
+              <TabsTrigger value="gif" disabled><Gift size={18}/></TabsTrigger>
+          </TabsList>
+      </SheetHeader>
+      <TabsContent value="emoji" className="flex-grow overflow-hidden mt-0">
+        <div className="p-2">
+            <Input
+                id="emoji-search"
+                placeholder="Search emojis..."
+                value={emojiSearch}
+                onChange={(e) => setEmojiSearch(e.target.value)}
+                className="w-full bg-muted border-none focus-visible:ring-ring"
+                aria-label="Search emojis"
+            />
+        </div>
+        {!emojiSearch && recentEmojis.length > 0 && (
+          <div className="px-2 pb-2 border-b">
+              <h3 className="text-xs font-semibold text-muted-foreground mb-1">Recent</h3>
+              <div className="flex gap-1">
+                  {recentEmojis.map(emoji => (
+                      <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)} aria-label={`Select emoji ${emoji}`}>{emoji}</Button>
+                  ))}
+              </div>
+          </div>
+        )}
+        <ScrollArea className="h-[calc(100%-110px)]">
+          <div className="p-2">
+              {Object.entries(filteredEmojis).map(([category, data]) => (
+                  <div key={category}>
+                      <h3 className="text-sm font-medium text-muted-foreground py-1">{category}</h3>
+                      <div className="grid grid-cols-8 gap-1">
+                          {data.emojis.map(emoji => (
+                              <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)} aria-label={`Select emoji ${emoji}`}>{emoji}</Button>
+                          ))}
+                      </div>
+                  </div>
+              ))}
+          </div>
+        </ScrollArea>
+      </TabsContent>
+      <TabsContent value="sticker" className="flex-grow overflow-hidden mt-0">
+          <StickerPicker onStickerSelect={handleStickerSelect} />
+      </TabsContent>
+      <TabsContent value="gif" className="flex-grow mt-0 flex items-center justify-center">
+          <p className="text-muted-foreground">GIFs are coming soon!</p>
+      </TabsContent>
+    </Tabs>
+  );
+
+  const AttachmentPickerComponent = isMobile ? Sheet : Popover;
+  const AttachmentPickerTrigger = isMobile ? SheetTrigger : PopoverTrigger;
+  const AttachmentPickerContent = isMobile ? SheetContent : PopoverContent;
+
+  const ToolsPickerComponent = isMobile ? Sheet : Popover;
+  const ToolsPickerTrigger = isMobile ? SheetTrigger : PopoverTrigger;
+  const ToolsPickerContent = isMobile ? SheetContent : PopoverContent;
+
 
   return (
     <div 
@@ -351,117 +444,45 @@ export default function InputBar({
           </div>
       )}
 
-      <form onSubmit={handleCompositeSend} className="flex items-center space-x-2">
-        <Sheet open={isAttachmentSheetOpen} onOpenChange={setIsAttachmentSheetOpen}>
-          <SheetTrigger asChild>
+      <form onSubmit={handleCompositeSend} className="flex items-start space-x-2">
+        <AttachmentPickerComponent open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
+          <AttachmentPickerTrigger asChild>
             <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file" disabled={isSending || disabled}>
               <Paperclip size={22} />
             </Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="p-0 border-t bg-card h-auto rounded-t-lg">
-              <Tabs defaultValue="media" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="media">Media & Files</TabsTrigger>
-                      <TabsTrigger value="audio">Voice Note</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="media" className="p-4">
-                      <div className="grid grid-cols-3 gap-4">
-                           <Button variant="outline" size="lg" onClick={() => cameraInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
-                                <Camera size={24} className="text-red-500"/>
-                                <span className="text-sm font-normal">Camera</span>
-                           </Button>
-                            <Button variant="outline" size="lg" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
-                                <ImageIcon size={24} className="text-purple-500"/>
-                                <span className="text-sm font-normal">Gallery</span>
-                           </Button>
-                           <Button variant="outline" size="lg" onClick={() => documentInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
-                                <FileText size={24} className="text-blue-500"/>
-                                <span className="text-sm font-normal">Document</span>
-                           </Button>
-                      </div>
-                  </TabsContent>
-                  <TabsContent value="audio" className="p-4 h-80">
-                      {renderRecordingUI()}
-                  </TabsContent>
-              </Tabs>
-          </SheetContent>
-        </Sheet>
+          </AttachmentPickerTrigger>
+          <AttachmentPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-auto rounded-t-lg" : "w-80 p-2")}>
+              <AttachmentPicker />
+          </AttachmentPickerContent>
+        </AttachmentPickerComponent>
         
-        <div className="flex-grow relative">
+        <div className="flex-grow relative flex items-end">
              <Textarea
                 ref={textareaRef}
                 placeholder="Type a message..."
                 value={messageText}
                 onChange={handleTypingChange}
                 onBlur={handleBlur}
-                className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[40px] max-h-[120px]"
+                className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[44px] max-h-[120px] pt-[11px]"
                 autoComplete="off"
                 disabled={isSending || disabled}
                 rows={1}
+                aria-label="Message input"
              />
-             <Sheet open={isToolsSheetOpen} onOpenChange={setIsToolsSheetOpen}>
-                <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-8 w-8 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}>
-                        <Smile size={20} />
+             <ToolsPickerComponent open={isToolsOpen} onOpenChange={setIsToolsOpen}>
+                <ToolsPickerTrigger asChild>
+                    <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}>
+                        <Smile size={22} />
                     </Button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col">
-                    <Tabs defaultValue="emoji" className="w-full flex flex-col h-full">
-                        <SheetHeader className="p-2 border-b">
-                            <TabsList className="grid w-full grid-cols-3">
-                                <TabsTrigger value="emoji"><Smile size={18}/></TabsTrigger>
-                                <TabsTrigger value="sticker"><StickyNote size={18}/></TabsTrigger>
-                                <TabsTrigger value="gif" disabled><Gift size={18}/></TabsTrigger>
-                            </TabsList>
-                        </SheetHeader>
-                        <TabsContent value="emoji" className="flex-grow overflow-hidden mt-0">
-                            <div className="p-2">
-                                <Input
-                                    id="emoji-search"
-                                    placeholder="Search emojis..."
-                                    value={emojiSearch}
-                                    onChange={(e) => setEmojiSearch(e.target.value)}
-                                    className="w-full bg-muted border-none focus-visible:ring-ring"
-                                />
-                            </div>
-                            {recentEmojis.length > 0 && !emojiSearch && (
-                                <div className="px-2 pb-2 border-b">
-                                    <h3 className="text-xs font-semibold text-muted-foreground mb-1">Recent</h3>
-                                    <div className="flex gap-1">
-                                        {recentEmojis.map(emoji => (
-                                            <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)}>{emoji}</Button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            <ScrollArea className="h-[calc(100%-110px)]">
-                                <div className="p-2">
-                                    {Object.entries(filteredEmojis).map(([category, data]) => (
-                                        <div key={category}>
-                                            <h3 className="text-sm font-medium text-muted-foreground py-1">{category}</h3>
-                                            <div className="grid grid-cols-8 gap-1">
-                                                {data.emojis.map(emoji => (
-                                                    <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)}>{emoji}</Button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </ScrollArea>
-                        </TabsContent>
-                        <TabsContent value="sticker" className="flex-grow overflow-hidden mt-0">
-                            <StickerPicker onStickerSelect={handleStickerSelect} />
-                        </TabsContent>
-                        <TabsContent value="gif" className="flex-grow mt-0 flex items-center justify-center">
-                            <p className="text-muted-foreground">GIFs are coming soon!</p>
-                        </TabsContent>
-                    </Tabs>
-                </SheetContent>
-            </Sheet>
+                </ToolsPickerTrigger>
+                <ToolsPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col" : "w-[400px] h-[500px] p-0 flex flex-col")}>
+                   <ToolsPicker />
+                </ToolsPickerContent>
+            </ToolsPickerComponent>
         </div>
         
-        <Button type="submit" size="icon" className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-full w-10 h-10 flex-shrink-0" disabled={!showSendButton || isSending || disabled} aria-label="Send message">
-          {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+        <Button type="submit" size="icon" className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-full w-11 h-11 flex-shrink-0" disabled={!showSendButton || isSending || disabled} aria-label="Send message">
+          {isSending ? <Loader2 size={22} className="animate-spin" /> : <Send size={22} />}
         </Button>
       </form>
       

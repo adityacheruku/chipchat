@@ -151,9 +151,10 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
                     variant="ghost"
                     size="icon"
                     onClick={handlePlayPause}
-                    className={cn("w-8 h-8 rounded-full flex-shrink-0", isCurrentUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-secondary-foreground/20')}
+                    aria-label={isPlaying ? "Pause audio message" : "Play audio message"}
+                    className={cn("w-11 h-11 rounded-full flex-shrink-0", isCurrentUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-secondary-foreground/20')}
                 >
-                    {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                    {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </Button>
                  {!hasBeenPlayed && (
                     <span className="absolute -top-1 -right-1 block h-3 w-3">
@@ -273,10 +274,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
         ) : null;
 
       case 'voice_message':
+        return message.clip_url ? <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic text-muted-foreground">Voice message not available</p>;
+
       case 'clip':
-        if (message.clip_url && message.clip_type === 'audio') {
-          return <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} />;
-        }
         if (message.clip_url && message.clip_type === 'video') {
           return (
             <div className="flex items-center gap-2">
@@ -362,13 +362,13 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           {message.status !== 'uploading' && message.status !== 'sending' && message.status !== 'failed' && (
             <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full text-muted-foreground hover:text-foreground">
+                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full text-muted-foreground hover:text-foreground">
                   <SmilePlus size={16} />
                   <span className="sr-only">Add reaction</span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent
-                  side="bottom"
+                  side="top"
                   align={isCurrentUser ? "end" : "start"}
                   className="flex gap-1 p-1 w-auto rounded-full bg-card shadow-lg border"
               >
@@ -379,6 +379,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                     size="icon"
                     className="p-1.5 h-8 w-8 text-xl rounded-full hover:bg-accent/20 active:scale-110 transition-transform"
                     onClick={() => handleReactionSelect(emoji)}
+                    aria-label={`React with ${emoji}`}
                   >
                     {emoji}
                   </Button>
@@ -390,7 +391,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                         <Button variant="ghost" size="icon" onClick={() => onRetrySend(message)} className="w-7 h-7 rounded-full text-destructive hover:bg-destructive/10">
+                         <Button variant="ghost" size="icon" onClick={() => onRetrySend(message)} className="w-8 h-8 rounded-full text-destructive hover:bg-destructive/10">
                             <RefreshCw size={14} />
                             <span className="sr-only">Retry sending</span>
                         </Button>

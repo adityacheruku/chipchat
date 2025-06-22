@@ -142,11 +142,11 @@ export default function ChatHeader({
                   href={`tel:${otherUser.phone.replace(/\s|-/g, "")}`}
                   className={cn(
                     buttonVariants({ variant: "ghost", size: "icon" }),
-                    "text-muted-foreground hover:text-green-600 hover:bg-green-600/10 active:bg-green-600/20 rounded-full w-9 h-9 sm:w-10 sm:h-10"
+                    "text-muted-foreground hover:text-green-600 hover:bg-green-600/10 active:bg-green-600/20 rounded-full w-11 h-11"
                   )}
                   aria-label={`Call ${otherUser.display_name}`}
                 >
-                  <Phone size={18} sm-size={20} />
+                  <Phone size={22} />
                 </a>
               </TooltipTrigger>
               <TooltipContent>
@@ -163,11 +163,11 @@ export default function ChatHeader({
                   variant="ghost"
                   size="icon"
                   onClick={() => onSendThinkingOfYou(otherUser!.id)} 
-                  className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 active:bg-red-500/20 rounded-full w-9 h-9 sm:w-10 sm:h-10"
+                  className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 active:bg-red-500/20 rounded-full w-11 h-11"
                   aria-label={`Send ${otherUser.display_name} a "Thinking of You"`}
                   disabled={!otherUser}
                 >
-                  <Heart size={18} sm-size={20} />
+                  <Heart size={22} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -183,10 +183,10 @@ export default function ChatHeader({
                       variant="ghost" 
                       size="icon" 
                       onClick={onProfileClick} 
-                      className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full w-9 h-9 sm:w-10 sm:h-10"
+                      className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full w-11 h-11"
                       aria-label="Open your profile and settings"
                     >
-                      <UserCircle2 size={18} sm-size={20} />
+                      <UserCircle2 size={22} />
                     </Button>
                 </TooltipTrigger>
                  <TooltipContent>
