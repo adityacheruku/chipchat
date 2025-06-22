@@ -46,8 +46,8 @@ export interface Message {
   document_name?: string | null;
   sticker_id?: string | null; // The ID of the sticker sent
   sticker_image_url?: string | null; // The actual image URL, joined from the backend
-  client_temp_id?: string | null; // Client-generated temporary ID
-  status?: MessageStatus | null; // Message status
+  client_temp_id: string; // Client-generated temporary ID - now mandatory
+  status: MessageStatus; // Message status - now mandatory
   // Voice message metadata
   duration_seconds?: number | null;
   file_size_bytes?: number | null;
@@ -103,7 +103,7 @@ export interface WebSocketMessagePayload {
 
 export interface NewMessageEventData {
   event_type: "new_message";
-  message: Message; // Should now include client_temp_id and status from server
+  message: Message;
   chat_id: string;
 }
 
@@ -142,11 +142,18 @@ export type UserProfileUpdateEventData = {
   mood?: Mood;
   display_name?: string;
   avatar_url?: string;
-  // Add other updatable fields if necessary
 };
 
 export interface HeartbeatClientEvent {
   event_type: "HEARTBEAT";
+}
+
+export interface MessageAckEventData {
+    event_type: "message_ack";
+    client_temp_id: string;
+    server_assigned_id: string; // The permanent UUID from the DB
+    status: MessageStatus;
+    timestamp: string; // ISO string of when server processed it
 }
 
 
@@ -157,9 +164,10 @@ export type WebSocketEventData =
   | TypingIndicatorEventData
   | ThinkingOfYouReceivedEventData
   | UserProfileUpdateEventData
+  | MessageAckEventData
   | { event_type: "error", detail: string }
   | { event_type: "authenticated" }
-  | HeartbeatClientEvent; // Client sends this, server acknowledges or just uses it for activity
+  | HeartbeatClientEvent;
 
 
 // For frontend form, matching backend UserCreate with phone

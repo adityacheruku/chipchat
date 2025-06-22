@@ -13,8 +13,8 @@ from app.config import settings
 from app.utils.email_utils import send_login_notification_email
 from app.utils.logging import logger
 from postgrest.exceptions import APIError
-from app.websocket.manager import manager # Import the WebSocket manager
-from app.notifications.service import notification_service # Import notification service
+from app.websocket import manager as ws_manager
+from app.notifications.service import notification_service
 
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -28,7 +28,7 @@ async def register(user_create: UserCreate):
         existing_user_response_obj = await db_manager.get_table("users").select("id").eq("phone", user_create.phone).maybe_single().execute()
         
         if existing_user_response_obj and hasattr(existing_user_response_obj, 'data') and existing_user_response_obj.data:
-            existing_user_data = existing_user_response_obj.data # This should be a dict if user found, or None
+            existing_user_data = existing_user_response_obj.data
             logger.info(f"User check: Found existing user data for phone {user_create.phone}.")
         else:
             logger.info(f"User check: No existing user found with phone {user_create.phone}. Proceeding with registration.")
@@ -41,7 +41,7 @@ async def register(user_create: UserCreate):
             detail="Database error while checking for existing user.",
         )
     
-    if existing_user_data: # If existing_user_data is a dict (user found)
+    if existing_user_data:
         logger.warning(f"Registration attempt for already registered phone: {user_create.phone}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -69,8 +69,6 @@ async def register(user_create: UserCreate):
 
     insert_response_obj = None
     try:
-        # Note: The trigger `handle_new_user_notifications` will automatically
-        # create a default entry in user_notification_settings table.
         insert_response_obj = await db_manager.admin_client.table("users").insert(new_user_data).execute()
     except APIError as e:
         logger.error(f"PostgREST APIError during user insert. Status: {getattr(e, 'code', 'N/A')}, Message: {getattr(e, 'message', 'N/A')}, Details: {getattr(e, 'details', 'N/A')}, Hint: {getattr(e, 'hint', 'N/A')}", exc_info=True)
@@ -143,7 +141,7 @@ async def login(
             exc_info=True
         )
         detail_msg = "Error communicating with the authentication service. Please try again later."
-        if hasattr(e, 'code') and e.code == 406: # type: ignore
+        if hasattr(e, 'code') and e.code == 406:
              logger.warning(f"Received 406 Not Acceptable from Supabase for user {form_data.username}. This may indicate RLS policy issues or other access restrictions.")
              detail_msg = "Login failed: Could not retrieve user details due to server configuration. Please contact support."
         
@@ -263,20 +261,17 @@ async def update_profile(
     refreshed_user_data = updated_user_response_obj.data[0]
     logger.info(f"User {current_user.id} profile updated successfully. New mood (if changed): {refreshed_user_data.get('mood')}")
     
-    if "mood" in update_data and "mood" in refreshed_user_data and refreshed_user_data['mood'] != current_user.mood :
-        from app.websocket.manager import manager as ws_manager 
-        logger.info(f"Mood changed for user {current_user.id} from {current_user.mood} to {refreshed_user_data['mood']}. Broadcasting update.")
-        await ws_manager.broadcast_user_update_for_profile_change(
-            user_id=current_user.id,
-            updated_data={"mood": refreshed_user_data['mood']},
-            db_manager_instance=db_manager
-        )
-        # Also send a push notification for mood change
+    # Broadcast profile update via Redis Pub/Sub
+    await ws_manager.broadcast_user_profile_update(
+        user_id=current_user.id,
+        updated_data={"mood": refreshed_user_data['mood']}
+    )
+    
+    if "mood" in update_data and refreshed_user_data.get('mood') != current_user.mood:
         await notification_service.send_mood_change_notification(
             user=current_user, 
             new_mood=refreshed_user_data['mood']
         )
-
 
     return UserPublic(
         id=refreshed_user_data["id"],
@@ -318,13 +313,10 @@ async def upload_avatar_route(
     
     refreshed_user_data = updated_user_response_obj.data[0]
     logger.info(f"User {current_user.id} avatar updated successfully in DB.")
-
-    from app.websocket.manager import manager as ws_manager 
-    logger.info(f"Broadcasting avatar update for user {current_user.id}")
-    await ws_manager.broadcast_user_update_for_profile_change(
+    
+    await ws_manager.broadcast_user_profile_update(
         user_id=current_user.id,
-        updated_data={"avatar_url": refreshed_user_data["avatar_url"]}, 
-        db_manager_instance=db_manager
+        updated_data={"avatar_url": refreshed_user_data["avatar_url"]}
     )
 
     return UserPublic(
@@ -352,19 +344,19 @@ async def http_ping_thinking_of_you(
 
     if recipient_user_id == current_user.id:
         logger.info(f"User {current_user.id} attempted to ping themselves via HTTP. Action not sent via WebSocket.")
-        return {"status": "Ping to self noted, not sent via WebSocket."}
+        return {"status": "Ping to self noted, not sent."}
 
     try:
-        # Send WebSocket event
-        await manager.send_personal_message_by_user_id(
-            {
+        # Broadcast via Redis Pub/Sub
+        await ws_manager.broadcast_to_users(
+            user_ids=[recipient_user_id],
+            payload={
                 "event_type": "thinking_of_you_received",
                 "sender_id": str(current_user.id),
                 "sender_name": current_user.display_name, 
-            },
-            recipient_user_id, 
+            }
         )
-        logger.info(f"'Thinking of You' WebSocket event dispatched from user {current_user.id} to {recipient_user_id} via HTTP route.")
+        logger.info(f"'Thinking of You' event published to Redis from user {current_user.id} to {recipient_user_id} via HTTP route.")
         
         # Send Push Notification
         await notification_service.send_thinking_of_you_notification(
@@ -376,4 +368,3 @@ async def http_ping_thinking_of_you(
     except Exception as e:
         logger.error(f"Failed to dispatch 'Thinking of You' events for recipient {recipient_user_id} from user {current_user.id} via HTTP: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send ping.")
-    

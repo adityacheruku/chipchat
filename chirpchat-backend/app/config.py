@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
     
+    # Redis for WebSocket scaling
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
@@ -40,6 +43,7 @@ class Settings(BaseSettings):
     # Environment
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
+    SERVER_INSTANCE_ID: str = "default-instance-01" # Should be unique per instance in production
     
     class Config:
         env_file = ".env"

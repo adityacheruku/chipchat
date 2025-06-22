@@ -19,9 +19,9 @@ from app.chat.schemas import (
 from app.auth.dependencies import get_current_active_user, get_current_user
 from app.auth.schemas import UserPublic
 from app.database import db_manager
-from app.websocket.manager import manager
+from app.websocket import manager as ws_manager
 from app.utils.logging import logger 
-from app.notifications.service import notification_service # Import notification service
+from app.notifications.service import notification_service
 import uuid 
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
@@ -50,8 +50,6 @@ async def get_chat_list_for_user(user_id: UUID) -> List[ChatResponse]:
         if not rpc_response or not rpc_response.data:
             return []
 
-        # The RPC is expected to return a JSON array of chat objects
-        # We need to parse this into our Pydantic models
         chat_responses = [ChatResponse.model_validate(chat_data) for chat_data in rpc_response.data]
         return chat_responses
 
@@ -67,12 +65,10 @@ async def create_chat(
     recipient_id = chat_create.recipient_id
     logger.info(f"User {current_user.id} attempting to create/get chat with recipient {recipient_id}")
     
-    # In a partnered system, the recipient should be the user's partner.
     if not current_user.partner_id or current_user.partner_id != recipient_id:
         logger.warning(f"Chat creation denied: User {current_user.id} tried to create chat with {recipient_id}, but their partner is {current_user.partner_id}.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only create a chat with your designated partner.")
 
-    # Use the new RPC function to find an existing chat
     try:
         find_chat_resp = await db_manager.admin_client.rpc(
             'find_existing_chat_with_participant_details',
@@ -85,7 +81,6 @@ async def create_chat(
 
     except Exception as e:
         logger.error(f"Error calling find_existing_chat RPC for users {current_user.id}, {recipient_id}: {e}", exc_info=True)
-        # Fallback to manual creation if RPC fails
         pass
 
     logger.info(f"No existing chat found. Creating new chat between {current_user.id} and {recipient_id}.")
@@ -152,7 +147,6 @@ async def get_messages(
         logger.warning(f"User {current_user.id} forbidden to access messages for chat {chat_id} - not a participant.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
     
-    # Use RPC to get messages with details
     try:
         rpc_params = {'p_chat_id': str(chat_id), 'p_limit': limit}
         if before_timestamp:
@@ -178,71 +172,53 @@ async def send_message_http(
     message_create: MessageCreate,
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Payload: text='{message_create.text[:20] if message_create.text else ''}...', image_url='{message_create.image_url}', sticker_id='{message_create.sticker_id}', client_temp_id='{message_create.client_temp_id}'")
+    logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Payload: text='{message_create.text[:20] if message_create.text else ''}...', client_temp_id='{message_create.client_temp_id}'")
     participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp_obj or not participant_check_resp_obj.data:
         logger.warning(f"User {current_user.id} forbidden to send message to chat {chat_id} - not a participant.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
 
+    # This is a fallback endpoint. The primary logic is in ws.py.
+    # We mainly need to save the message and broadcast it.
+    
+    processed = await ws_manager.is_message_processed(message_create.client_temp_id)
+    if processed:
+        logger.warning(f"HTTP: Duplicate message detected with client_temp_id: {message_create.client_temp_id}. Ignoring.")
+        # We can't easily ACK here, so we just drop it. The client's resend queue should handle this.
+        raise HTTPException(status_code=status.HTTP_200_OK, detail="Duplicate message, already processed.")
+
     message_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
     
-    message_data_to_insert = {
+    message_data_to_insert = message_create.model_dump()
+    message_data_to_insert.update({
         "id": str(message_id),
         "chat_id": str(chat_id),
         "user_id": str(current_user.id),
-        "text": message_create.text,
-        "sticker_id": str(message_create.sticker_id) if message_create.sticker_id else None,
-        "message_subtype": message_create.message_subtype.value if message_create.message_subtype else MessageSubtypeEnum.TEXT.value,
-        "clip_type": message_create.clip_type.value if message_create.clip_type else None,
-        "clip_placeholder_text": message_create.clip_placeholder_text,
-        "clip_url": message_create.clip_url,
-        "image_url": message_create.image_url,
-        "image_thumbnail_url": message_create.image_thumbnail_url,
-        "document_url": message_create.document_url,
-        "document_name": message_create.document_name,
-        "client_temp_id": message_create.client_temp_id, 
         "status": MessageStatusEnum.SENT_TO_SERVER.value, 
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "reactions": {},
-    }
+    })
     
-    if message_create.sticker_id:
-        message_data_to_insert['message_subtype'] = MessageSubtypeEnum.STICKER.value
-        message_data_to_insert['text'] = None # Sticker messages do not have text
-        # Track sticker usage
-        try:
-            await db_manager.admin_client.rpc('upsert_sticker_usage', {
-                'p_user_id': str(current_user.id),
-                'p_sticker_id': str(message_create.sticker_id)
-            }).execute()
-        except Exception as e:
-            logger.error(f"Failed to track sticker usage for user {current_user.id}: {e}", exc_info=True)
-
-
-    logger.debug(f"Message data to insert into DB: {message_data_to_insert}")
     insert_resp_obj = await db_manager.get_table("messages").insert(message_data_to_insert).execute()
     if not insert_resp_obj or not insert_resp_obj.data:
-        logger.error(f"Failed to insert message into DB for chat {chat_id}. Payload: {message_data_to_insert}")
+        logger.error(f"Failed to insert message into DB for chat {chat_id} via HTTP. Payload: {message_data_to_insert}")
         raise HTTPException(status_code=500, detail="Failed to send message")
         
-    new_message_db_id = insert_resp_obj.data[0]['id']
-    logger.info(f"Message {new_message_db_id} successfully saved to DB for chat {chat_id}.")
+    await ws_manager.mark_message_as_processed(message_create.client_temp_id)
 
-    await db_manager.get_table("chats").update({ 
-        "updated_at": now.isoformat(),
-    }).eq("id", str(chat_id)).execute()
-    logger.debug(f"Updated chat {chat_id} updated_at timestamp.")
+    new_message_db_id = insert_resp_obj.data[0]['id']
+    logger.info(f"Message {new_message_db_id} successfully saved to DB for chat {chat_id} via HTTP.")
+
+    await db_manager.get_table("chats").update({ "updated_at": now.isoformat() }).eq("id", str(chat_id)).execute()
 
     message_for_response = await get_message_with_details_from_db(new_message_db_id)
     if not message_for_response:
         raise HTTPException(status_code=500, detail="Could not retrieve message details after sending.")
     
-    # Broadcast via WebSocket
-    await manager.broadcast_chat_message(str(chat_id), message_for_response, db_manager)
+    await ws_manager.broadcast_chat_message(str(chat_id), message_for_response)
     
-    # Send Push Notification
     await notification_service.send_new_message_notification(
         sender=current_user,
         chat_id=chat_id,
@@ -300,7 +276,6 @@ async def react_to_message(
 
     logger.info(f"Reaction update successful for message {message_id}. Broadcasting.")
 
-    await manager.broadcast_reaction_update(chat_id_str, message_for_response, db_manager)
+    await ws_manager.broadcast_reaction_update(chat_id_str, message_for_response)
     
     return message_for_response
-

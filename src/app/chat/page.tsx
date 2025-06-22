@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageStatus } from '@/types';
+import { v4 as uuidv4 } from 'uuid';
+import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageStatus, MessageAckEventData } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -133,7 +134,7 @@ export default function ChatPage() {
 
         if (chatSession) {
             const messagesData = await api.getMessages(chatSession.id);
-            setMessages(messagesData.messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+            setMessages(messagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent_to_server' })).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
         } else {
             throw new Error("Failed to establish a chat session with your partner.");
         }
@@ -155,24 +156,29 @@ export default function ChatPage() {
     }
 }, [currentUser, router, setAvatarPreview, toast]);
 
+  const handleWSMessageAck = useCallback((ackData: MessageAckEventData) => {
+      setMessages(prevMessages => 
+          prevMessages.map(msg => 
+              msg.client_temp_id === ackData.client_temp_id
+              ? { ...msg, id: ackData.server_assigned_id, status: ackData.status }
+              : msg
+          )
+      );
+  }, []);
 
   const handleWSMessageReceived = useCallback((newMessageFromServer: MessageType) => {
-    setMessages(prevMessages => {
-      const optimisticMessageIndex = newMessageFromServer.client_temp_id 
-        ? prevMessages.findIndex(m => m.client_temp_id === newMessageFromServer.client_temp_id && m.status === "sending")
-        : -1;
-
-      let updatedMessages;
-      if (optimisticMessageIndex > -1) {
-        updatedMessages = [...prevMessages];
-        updatedMessages[optimisticMessageIndex] = newMessageFromServer; 
-      } else {
-        if (prevMessages.find(m => m.id === newMessageFromServer.id)) {
-            return prevMessages; 
+      setMessages(prevMessages => {
+        // Check if message with same client_temp_id or id already exists
+        if (prevMessages.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)) {
+            return prevMessages.map(m => 
+                (m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)
+                ? { ...newMessageFromServer, status: newMessageFromServer.status || 'sent_to_server' }
+                : m
+            ).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         }
-        updatedMessages = [...prevMessages, newMessageFromServer];
-      }
-      return updatedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        // If not, add the new message
+        return [...prevMessages, { ...newMessageFromServer, status: newMessageFromServer.status || 'sent_to_server' }]
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
 
     if (activeChat && newMessageFromServer.chat_id === activeChat.id) {
@@ -252,6 +258,7 @@ export default function ChatPage() {
     onTypingUpdate: handleWSTypingUpdate,
     onThinkingOfYouReceived: handleWSThinkingOfYou,
     onUserProfileUpdate: handleWSUserProfileUpdate,
+    onMessageAck: handleWSMessageAck,
     onOpen: () => addAppEvent('apiError', 'WebSocket connected', currentUser?.id, currentUser?.display_name),
     onClose: (event) => addAppEvent('apiError', `WebSocket disconnected: ${event.reason}`, currentUser?.id, currentUser?.display_name, {code: event.code}),
   });
@@ -260,21 +267,16 @@ export default function ChatPage() {
   handleSendThoughtRef.current = useCallback(async () => {
     if (!currentUser || !otherUser) return;
     try {
-      if (isWsConnected) {
-        sendWsMessage({
-            event_type: "ping_thinking_of_you",
-            recipient_user_id: otherUser.id,
-        });
-      } else {
-        // Fallback to HTTP if WebSocket is not connected
-        await api.sendThinkingOfYouPing(otherUser.id);
-      }
+      sendWsMessage({
+          event_type: "ping_thinking_of_you",
+          recipient_user_id: otherUser.id,
+      });
       initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
       addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Ping Failed', description: error.message });
     }
-  }, [currentUser, otherUser, isWsConnected, sendWsMessage, initiateThoughtNotification, addAppEvent, toast]);
+  }, [currentUser, otherUser, sendWsMessage, initiateThoughtNotification, addAppEvent, toast]);
 
 
  useEffect(() => {
@@ -292,7 +294,7 @@ export default function ChatPage() {
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [isAuthenticated, isAuthLoading, currentUser, router]);
 
- const handleSendMessage = async (text: string) => {
+ const handleSendMessage = (text: string) => {
     if (!currentUser || !activeChat) {
       toast({ variant: 'destructive', title: 'Cannot Send Message', description: 'Chat not initialized.' });
       return;
@@ -301,7 +303,7 @@ export default function ChatPage() {
 
     handleTyping(false);
 
-    const clientTempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const clientTempId = uuidv4();
     const optimisticMessage: MessageType = {
       id: clientTempId,
       user_id: currentUser.id,
@@ -311,78 +313,51 @@ export default function ChatPage() {
       updated_at: new Date().toISOString(),
       reactions: {},
       client_temp_id: clientTempId,
-      status: "sending" as MessageStatus,
+      status: "sending",
       message_subtype: "text",
     };
     setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
 
-    try {
-      if (isWsConnected) {
-        sendWsMessage({
-          event_type: "send_message",
-          chat_id: activeChat.id,
-          text,
-          client_temp_id: clientTempId,
-          message_subtype: "text",
-        });
-      } else {
-        const confirmedMessage = await api.sendMessageHttp(activeChat.id, {
-          text,
-          client_temp_id: clientTempId,
-          message_subtype: 'text',
-        });
-        handleWSMessageReceived(confirmedMessage);
-      }
+    sendWsMessage({
+        event_type: "send_message",
+        chat_id: activeChat.id,
+        text,
+        client_temp_id: clientTempId,
+        message_subtype: "text",
+    });
 
-      addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0, 30)}"`, currentUser.id, currentUser.display_name);
+    addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0, 30)}"`, currentUser.id, currentUser.display_name);
 
-      if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) {
-        lastMessageTextRef.current = text;
-        aiSuggestMood(text);
-      }
-      
-        // Progressive disclosure for notifications
-        if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
-            const hasSentFirstMessage = localStorage.getItem(FIRST_MESSAGE_SENT_KEY) === 'true';
-            if (!hasSentFirstMessage) {
-                localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true');
-                setTimeout(() => setShowNotificationPrompt(true), 2000); // Show prompt after a short delay
-            }
-        }
-
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Failed to Send', description: error.message });
-      setMessages(prev => prev.map(m => m.id === clientTempId ? { ...m, status: 'failed' } : m));
+    if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) {
+      lastMessageTextRef.current = text;
+      aiSuggestMood(text);
     }
+    
+    // Progressive disclosure for notifications
+    if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
+        const hasSentFirstMessage = localStorage.getItem(FIRST_MESSAGE_SENT_KEY) === 'true';
+        if (!hasSentFirstMessage) {
+            localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true');
+            setTimeout(() => setShowNotificationPrompt(true), 2000); // Show prompt after a short delay
+        }
+    }
+
   };
 
-  const handleSendSticker = async (stickerId: string) => {
+  const handleSendSticker = (stickerId: string) => {
     if (!currentUser || !activeChat) {
       toast({ variant: 'destructive', title: 'Cannot Send Sticker', description: 'Chat not initialized.' });
       return;
     }
-    const clientTempId = `temp_sticker_${Date.now()}`;
-    try {
-      if (isWsConnected) {
-        sendWsMessage({
-            event_type: "send_message",
-            chat_id: activeChat.id,
-            sticker_id: stickerId,
-            client_temp_id: clientTempId,
-            message_subtype: "sticker",
-        });
-      } else {
-        const confirmedMessage = await api.sendMessageHttp(activeChat.id, {
-            sticker_id: stickerId,
-            client_temp_id: clientTempId,
-            message_subtype: 'sticker'
-        });
-        handleWSMessageReceived(confirmedMessage);
-      }
-      addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
-    } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Failed to Send Sticker', description: error.message });
-    }
+    const clientTempId = uuidv4();
+    sendWsMessage({
+        event_type: "send_message",
+        chat_id: activeChat.id,
+        sticker_id: stickerId,
+        client_temp_id: clientTempId,
+        message_subtype: "sticker",
+    });
+    addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
   };
 
 
@@ -392,7 +367,7 @@ export default function ChatPage() {
       return;
     }
     toast({ title: "Uploading clip..."});
-    const clientTempId = `temp_clip_${Date.now()}`;
+    const clientTempId = uuidv4();
     try {
         const uploadResponse = await api.uploadMoodClip(file, clipType);
         const placeholderText = clipType === 'audio'
@@ -400,21 +375,15 @@ export default function ChatPage() {
             : `${currentUser.display_name} sent a video mood clip.`;
         
         const messagePayload = {
+            event_type: "send_message",
             chat_id: activeChat.id,
             clip_type: clipType,
             clip_url: uploadResponse.file_url,
             clip_placeholder_text: placeholderText,
             client_temp_id: clientTempId,
-            message_subtype: "clip" as MessageSubtype,
+            message_subtype: "clip" as const,
         };
-        
-        if (isWsConnected) {
-            sendWsMessage({ event_type: "send_message", ...messagePayload });
-        } else {
-            const confirmedMessage = await api.sendMessageHttp(activeChat.id, messagePayload);
-            handleWSMessageReceived(confirmedMessage);
-        }
-        
+        sendWsMessage(messagePayload);
         addAppEvent('moodClipSent', `${currentUser.display_name} sent a ${clipType} clip.`, currentUser.id, currentUser.display_name);
         toast({ title: "Mood Clip Sent!" });
     } catch (error: any) {
@@ -428,23 +397,19 @@ export default function ChatPage() {
         return;
     }
     toast({ title: "Uploading image..." });
-    const clientTempId = `temp_img_${Date.now()}`;
+    const clientTempId = uuidv4();
     try {
       const { image_url, image_thumbnail_url } = await api.uploadChatImage(file);
       const messagePayload = {
+        event_type: "send_message",
         chat_id: activeChat.id,
         image_url,
         image_thumbnail_url,
         client_temp_id: clientTempId,
-        message_subtype: "image" as MessageSubtype,
+        message_subtype: "image" as const,
       };
 
-      if (isWsConnected) {
-        sendWsMessage({ event_type: "send_message", ...messagePayload });
-      } else {
-        const confirmedMessage = await api.sendMessageHttp(activeChat.id, messagePayload);
-        handleWSMessageReceived(confirmedMessage);
-      }
+      sendWsMessage(messagePayload);
       addAppEvent('messageSent', `${currentUser.display_name} sent an image.`, currentUser.id, currentUser.display_name);
       toast({ title: "Image Sent!" });
     } catch (error: any) {
@@ -458,23 +423,18 @@ export default function ChatPage() {
         return;
     }
     toast({ title: "Uploading document..." });
-    const clientTempId = `temp_doc_${Date.now()}`;
+    const clientTempId = uuidv4();
     try {
       const uploadResponse = await api.uploadChatDocument(file);
       const messagePayload = {
+          event_type: "send_message",
           chat_id: activeChat.id,
           document_url: uploadResponse.file_url,
           document_name: uploadResponse.file_name,
           client_temp_id: clientTempId,
-          message_subtype: "document" as MessageSubtype,
+          message_subtype: "document" as const,
       };
-
-      if (isWsConnected) {
-         sendWsMessage({ event_type: "send_message", ...messagePayload });
-      } else {
-         const confirmedMessage = await api.sendMessageHttp(activeChat.id, messagePayload);
-         handleWSMessageReceived(confirmedMessage);
-      }
+      sendWsMessage(messagePayload);
       addAppEvent('messageSent', `${currentUser.display_name} sent a document: ${uploadResponse.file_name}.`, currentUser.id, currentUser.display_name);
       toast({ title: "Document Sent!" });
     } catch (error: any) {
@@ -488,13 +448,14 @@ export default function ChatPage() {
         return;
     }
     toast({ title: "Uploading voice message..." });
-    const clientTempId = `temp_audio_${Date.now()}`;
+    const clientTempId = uuidv4();
     try {
       const uploadResponse = await api.uploadVoiceMessage(file);
       const messagePayload = {
+          event_type: "send_message",
           chat_id: activeChat.id,
-          message_subtype: "voice_message" as MessageSubtype,
-          clip_type: 'audio' as MessageClipType,
+          message_subtype: "voice_message" as const,
+          clip_type: 'audio' as const,
           clip_url: uploadResponse.file_url,
           clip_placeholder_text: `${currentUser.display_name} sent a voice message.`,
           client_temp_id: clientTempId,
@@ -503,13 +464,7 @@ export default function ChatPage() {
           audio_format: uploadResponse.audio_format,
       };
       
-      if (isWsConnected) {
-        sendWsMessage({ event_type: "send_message", ...messagePayload });
-      } else {
-        const confirmedMessage = await api.sendMessageHttp(activeChat.id, messagePayload);
-        handleWSMessageReceived(confirmedMessage);
-      }
-      
+      sendWsMessage(messagePayload);
       addAppEvent('messageSent', `${currentUser.display_name} sent a voice message.`, currentUser.id, currentUser.display_name);
       toast({ title: "Voice Message Sent!" });
     } catch (error: any) {
@@ -517,7 +472,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleToggleReaction = useCallback(async (messageId: string, emoji: SupportedEmoji) => {
+  const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat) return;
     
     const RATE_LIMIT_MS = 500;
@@ -528,8 +483,6 @@ export default function ChatPage() {
       return; 
     }
     lastReactionToggleTimes.current[key] = now;
-
-    const originalReactions = messages.find(m => m.id === messageId)?.reactions || {};
 
     setMessages(prevMessages => 
       prevMessages.map(msg => {
@@ -553,32 +506,15 @@ export default function ChatPage() {
       })
     );
 
-    try {
-        if (isWsConnected) {
-            sendWsMessage({
-              event_type: "toggle_reaction",
-              message_id: messageId,
-              chat_id: activeChat.id,
-              emoji: emoji,
-            });
-        } else {
-            const updatedMessage = await api.toggleReactionHttp(messageId, emoji);
-            setMessages(prevMessages =>
-              prevMessages.map(msg =>
-                msg.id === updatedMessage.id ? updatedMessage : msg
-              )
-            );
-        }
-        addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
-    } catch(error: any) {
-        toast({ variant: 'destructive', title: 'Reaction Failed', description: error.message });
-        setMessages(prevMessages => 
-            prevMessages.map(msg => 
-                msg.id === messageId ? { ...msg, reactions: originalReactions } : msg
-            )
-        );
-    }
-  }, [currentUser, activeChat, isWsConnected, sendWsMessage, addAppEvent, toast, messages]);
+    sendWsMessage({
+        event_type: "toggle_reaction",
+        message_id: messageId,
+        chat_id: activeChat.id,
+        emoji: emoji,
+    });
+    
+    addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
+  }, [currentUser, activeChat, sendWsMessage, addAppEvent]);
 
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
     if (!currentUser) return;
@@ -640,7 +576,7 @@ export default function ChatPage() {
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const handleTyping = useCallback((isTyping: boolean) => {
-    if (!activeChat || !isWsConnected) return;
+    if (!activeChat) return;
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -659,7 +595,7 @@ export default function ChatPage() {
             });
         }, 3000);
     }
-  }, [activeChat, isWsConnected, sendWsMessage]);
+  }, [activeChat, sendWsMessage]);
 
   const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
     if (currentUser) {
@@ -735,14 +671,14 @@ export default function ChatPage() {
 
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
   const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {};
-  const isInputDisabled = !isBrowserOnline || !isWsConnected;
+  const isInputDisabled = !isBrowserOnline;
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
         {!isBrowserOnline && (
             <div className="fixed top-0 left-0 right-0 bg-destructive text-destructive-foreground p-2 text-center text-sm z-50 flex items-center justify-center">
                 <WifiOff size={16} className="mr-2" />
-                You are offline. Connecting...
+                You are offline. Features may be limited.
             </div>
         )}
         <div className={cn("flex flex-col items-center justify-center w-full h-full p-2 sm:p-4", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass, !isBrowserOnline ? 'pt-10' : '')}>
