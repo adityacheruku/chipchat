@@ -6,7 +6,7 @@ import { ALL_SUPPORTED_EMOJIS } from '@/types';
 import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2 } from 'lucide-react';
 import {
   Tooltip,
