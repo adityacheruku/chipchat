@@ -39,16 +39,13 @@ Instrumentator(
 
 
 # Define allowed origins for CORS.
+# The regex allows all Vercel preview deployments.
 origins = [
     "http://localhost:3000",
     "http://localhost:9002",
-    "https://ef9e-49-43-230-78.ngrok-free.app", # Updated ngrok link
-    "https://chipchat.vercel.app", # Allow any vercel subdomain
+    "https://a93b-49-43-230-78.ngrok-free.app", # Current ngrok for testing
+    "https://chipchat.vercel.app", # Production frontend
 ]
-
-allowed_origins = ["*"] if settings.DEBUG else origins
-if settings.DEBUG:
-    print("DEBUG mode is ON. Allowing all origins for CORS. THIS IS NOT SAFE FOR PRODUCTION.")
 
 @app.on_event("startup")
 async def startup_event():
@@ -59,7 +56,8 @@ async def startup_event():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=origins,
+    allow_origin_regex=r"https?:\/\/.*\.vercel\.app", # Allow *.vercel.app
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
