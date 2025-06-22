@@ -319,7 +319,6 @@ export default function ChatPage() {
         client_temp_id: clientTempId,
         message_subtype: subtype,
         file: file,
-        // Use a local URL for instant preview if it's an image/video
         image_url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
         clip_url: file.type.startsWith('video/') ? URL.createObjectURL(file) : undefined,
         document_name: file.name,
@@ -336,14 +335,25 @@ export default function ChatPage() {
           
           const uploadResult = await uploadFunction(file, onProgress);
 
-          const messagePayload: any = {
+          let messagePayload: any = {
               event_type: "send_message",
               chat_id: activeChat.id,
               client_temp_id: clientTempId,
               message_subtype: subtype,
-              ...uploadResult,
-              clip_url: uploadResult.file_url || uploadResult.image_url,
           };
+
+          if (subtype === 'image') {
+              messagePayload.image_url = uploadResult.image_url;
+              messagePayload.image_thumbnail_url = uploadResult.image_thumbnail_url;
+          } else if (subtype === 'document') {
+              messagePayload.document_url = uploadResult.file_url;
+              messagePayload.document_name = uploadResult.file_name;
+          } else if (subtype === 'voice_message') {
+              messagePayload.clip_url = uploadResult.file_url;
+              messagePayload.duration_seconds = uploadResult.duration_seconds;
+              messagePayload.file_size_bytes = uploadResult.file_size_bytes;
+              messagePayload.audio_format = uploadResult.audio_format;
+          }
           
           sendMessage(messagePayload);
           
@@ -532,3 +542,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
