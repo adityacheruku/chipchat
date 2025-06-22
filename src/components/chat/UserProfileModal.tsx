@@ -22,12 +22,13 @@ import { Loader2, Bell, BellOff, AlertTriangle } from 'lucide-react';
 import { Separator } from '../ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '../ui/skeleton';
+import { Progress } from '../ui/progress';
 
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: User | null;
-  onSave: (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone'>>, newAvatarFile?: File) => Promise<void>;
+  onSave: (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone'>>, newAvatarFile?: File, onProgress?: (progress: number) => void) => Promise<void>;
   avatarPreview: string | null;
   onAvatarFileChange: (event: ChangeEvent<HTMLInputElement>, currentAvatarUrl?: string | null) => void;
 }
@@ -45,6 +46,7 @@ export default function UserProfileModal({
   const [phone, setPhone] = useState(user?.phone || '');
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [avatarUploadProgress, setAvatarUploadProgress] = useState<number | null>(null);
   
   const {
     isSubscribed,
@@ -64,11 +66,12 @@ export default function UserProfileModal({
   const { toast } = useToast();
   
   useEffect(() => {
-    if (user) {
+    if (user && isOpen) {
       setDisplayName(user.display_name);
       setMood(user.mood);
       setPhone(user.phone || '');
       setSelectedAvatarFile(null);
+      setAvatarUploadProgress(null);
     }
   }, [user, isOpen]);
   
@@ -89,6 +92,7 @@ export default function UserProfileModal({
     const file = e.target.files?.[0];
     if (file) {
       setSelectedAvatarFile(file);
+      setAvatarUploadProgress(0); // Reset progress on new file selection
     }
   }
 
@@ -101,10 +105,12 @@ export default function UserProfileModal({
       if (user && mood !== user.mood) profileUpdates.mood = mood;
       if (user && phone !== (user.phone || '')) profileUpdates.phone = phone;
 
-      // Save user profile data and avatar
-      await onSave(profileUpdates, selectedAvatarFile || undefined);
+      const onProgress = (progress: number) => {
+        setAvatarUploadProgress(progress);
+      };
 
-      // Save notification settings if they have been loaded and changed
+      await onSave(profileUpdates, selectedAvatarFile || undefined, onProgress);
+
       if (notificationSettings && JSON.stringify(localSettings) !== JSON.stringify(notificationSettings)) {
           await updateNotificationSettings(localSettings);
       }
@@ -114,6 +120,7 @@ export default function UserProfileModal({
       console.error("Error saving profile from modal:", error.message);
     } finally {
       setIsSaving(false);
+      setAvatarUploadProgress(null);
     }
   };
 
@@ -216,6 +223,14 @@ export default function UserProfileModal({
                 disabled={isSaving}
               />
             </div>
+            {isSaving && avatarUploadProgress !== null && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                  <div className="col-start-2 col-span-3">
+                      <Progress value={avatarUploadProgress} className="w-full h-2" />
+                      <p className="text-xs text-muted-foreground mt-1 text-right">{avatarUploadProgress}%</p>
+                  </div>
+              </div>
+            )}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="moodModal" className="text-right text-foreground">
                 Mood

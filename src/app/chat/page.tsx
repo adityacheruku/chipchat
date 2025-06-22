@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageStatus, MessageAckEventData } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, MessageClipType, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -298,77 +298,72 @@ export default function ChatPage() {
     sendMessage({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker" });
     addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
   };
+  
+  const handleFileUpload = async (
+    file: File,
+    subtype: MessageType['message_subtype'],
+    uploadFunction: (file: File, onProgress: (progress: number) => void) => Promise<any>
+  ) => {
+      if (!currentUser || !activeChat) return;
 
-  const handleSendMoodClip = async (clipType: MessageClipType, file: File) => {
-    if (!currentUser || !activeChat) return;
-    toast({ title: "Uploading clip..."});
-    const clientTempId = uuidv4();
-    try {
-        const { file_url } = await api.uploadMoodClip(file, clipType);
-        sendMessage({
-            event_type: "send_message", chat_id: activeChat.id, clip_type, clip_url: file_url,
-            clip_placeholder_text: `${currentUser.display_name} sent a ${clipType} clip.`,
-            client_temp_id: clientTempId, message_subtype: "clip" as const,
-        });
-        addAppEvent('moodClipSent', `${currentUser.display_name} sent a ${clipType} clip.`, currentUser.id, currentUser.display_name);
-        toast({ title: "Mood Clip Sent!" });
-    } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Clip Upload Failed', description: error.message });
-    }
+      const clientTempId = uuidv4();
+      const optimisticMessage: Message = {
+        id: clientTempId,
+        user_id: currentUser.id,
+        chat_id: activeChat.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        status: 'uploading',
+        uploadProgress: 0,
+        client_temp_id: clientTempId,
+        message_subtype: subtype,
+        file: file,
+        // Use a local URL for instant preview if it's an image/video
+        image_url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+        clip_url: file.type.startsWith('video/') ? URL.createObjectURL(file) : undefined,
+        document_name: file.name,
+      };
+
+      setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+      
+      try {
+          const onProgress = (progress: number) => {
+              setMessages(prev => prev.map(msg => 
+                  msg.client_temp_id === clientTempId ? { ...msg, uploadProgress: progress } : msg
+              ));
+          };
+          
+          const uploadResult = await uploadFunction(file, onProgress);
+
+          const messagePayload: any = {
+              event_type: "send_message",
+              chat_id: activeChat.id,
+              client_temp_id: clientTempId,
+              message_subtype: subtype,
+              ...uploadResult,
+          };
+          
+          sendMessage(messagePayload);
+          
+          addAppEvent('messageSent', `${currentUser.display_name} sent a ${subtype}.`, currentUser.id, currentUser.display_name);
+
+          setMessages(prev => prev.map(msg => 
+              msg.client_temp_id === clientTempId ? { ...msg, status: 'sending', uploadProgress: 100 } : msg
+          ));
+
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
+          setMessages(prev => prev.map(msg => 
+              msg.client_temp_id === clientTempId ? { ...msg, status: 'failed' } : msg
+          ));
+      }
   };
 
-   const handleSendImage = async (file: File) => {
-    if (!currentUser || !activeChat) return;
-    toast({ title: "Uploading image..." });
-    const clientTempId = uuidv4();
-    try {
-      const { image_url, image_thumbnail_url } = await api.uploadChatImage(file);
-      sendMessage({
-        event_type: "send_message", chat_id: activeChat.id, image_url, image_thumbnail_url,
-        client_temp_id: clientTempId, message_subtype: "image" as const,
-      });
-      addAppEvent('messageSent', `${currentUser.display_name} sent an image.`, currentUser.id, currentUser.display_name);
-      toast({ title: "Image Sent!" });
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Image Upload Failed', description: error.message });
-    }
-  };
+  const handleSendImage = (file: File) => handleFileUpload(file, 'image', api.uploadChatImage);
+  const handleSendDocument = (file: File) => handleFileUpload(file, 'document', api.uploadChatDocument);
+  const handleSendVoiceMessage = (file: File) => handleFileUpload(file, 'voice_message', api.uploadVoiceMessage);
+  const handleSendMoodClip = (clipType: MessageClipType, file: File) => handleFileUpload(file, 'clip', (file, onProgress) => api.uploadMoodClip(file, clipType, onProgress));
 
-  const handleSendDocument = async (file: File) => {
-    if (!currentUser || !activeChat) return;
-    toast({ title: "Uploading document..." });
-    const clientTempId = uuidv4();
-    try {
-      const { file_url, file_name } = await api.uploadChatDocument(file);
-      sendMessage({
-          event_type: "send_message", chat_id: activeChat.id, document_url: file_url, document_name: file_name,
-          client_temp_id: clientTempId, message_subtype: "document" as const,
-      });
-      addAppEvent('messageSent', `${currentUser.display_name} sent a document: ${file_name}.`, currentUser.id, currentUser.display_name);
-      toast({ title: "Document Sent!" });
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Document Upload Failed', description: error.message });
-    }
-  };
-
-  const handleSendVoiceMessage = async (file: File) => {
-    if (!currentUser || !activeChat) return;
-    toast({ title: "Uploading voice message..." });
-    const clientTempId = uuidv4();
-    try {
-      const { file_url, duration_seconds, file_size_bytes, audio_format } = await api.uploadVoiceMessage(file);
-      sendMessage({
-          event_type: "send_message", chat_id: activeChat.id, message_subtype: "voice_message" as const,
-          clip_type: 'audio' as const, clip_url: file_url,
-          clip_placeholder_text: `${currentUser.display_name} sent a voice message.`,
-          client_temp_id: clientTempId, duration_seconds, file_size_bytes, audio_format,
-      });
-      addAppEvent('messageSent', `${currentUser.display_name} sent a voice message.`, currentUser.id, currentUser.display_name);
-      toast({ title: "Voice Message Sent!" });
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Voice Message Upload Failed', description: error.message });
-    }
-  };
 
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat) return;
@@ -399,12 +394,12 @@ export default function ChatPage() {
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
   }, [currentUser, activeChat, sendMessage, addAppEvent]);
 
-  const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
+  const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File, onProgress?: (progress: number) => void) => {
     if (!currentUser) return;
+    
     try {
-      if (newAvatarFile) {
-        toast({title: "Uploading avatar..."});
-        await api.uploadAvatar(newAvatarFile); 
+      if (newAvatarFile && onProgress) {
+        await api.uploadAvatar(newAvatarFile, onProgress);
       }
       if (Object.keys(updatedProfileData).length > 0) {
          await api.updateUserProfile(updatedProfileData);
@@ -415,6 +410,7 @@ export default function ChatPage() {
       setIsProfileModalOpen(false);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Profile Save Failed', description: error.message });
+      throw error; // re-throw to be caught in the modal
     }
   };
 

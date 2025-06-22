@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot, AlertCircle } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot, AlertCircle, RefreshCw } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -22,6 +22,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { useState, useEffect, useRef, memo } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import UploadProgressIndicator from './UploadProgressIndicator';
 
 interface MessageBubbleProps {
   message: Message;
@@ -224,17 +225,28 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 
   let formattedTime = "sending...";
   try {
-    if (message.created_at && message.status !== 'sending') {
+    if (message.created_at && message.status !== 'sending' && message.status !== 'uploading') {
         const timestampDate = parseISO(message.created_at);
         formattedTime = format(timestampDate, 'p');
-    } else if (message.status === 'sending') {
-        formattedTime = 'Sending...';
+    } else if (message.status === 'sending' || message.status === 'uploading') {
+        formattedTime = message.status === 'uploading' ? 'Uploading...' : 'Sending...';
     }
   } catch(e) {
     console.warn("Could not parse message timestamp:", message.created_at)
   }
 
   const renderMessageContent = () => {
+    if (message.status === 'uploading') {
+        return (
+            <UploadProgressIndicator
+                fileName={message.file?.name || 'Uploading file...'}
+                progress={message.uploadProgress || 0}
+                previewUrl={message.image_url || message.clip_url}
+                fileType={message.file?.type || ''}
+            />
+        );
+    }
+
     switch (message.message_subtype) {
       case 'sticker':
         return message.sticker_image_url ? (
@@ -305,6 +317,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
         return <p className="text-sm italic text-muted-foreground">Message content not available</p>;
     }
   };
+  
+  const isMediaMessage = message.status === 'uploading' || isStickerMessage;
+  const showRetry = message.status === 'failed';
 
   return (
     <div className={cn('flex flex-col group', alignmentClass)}>
@@ -325,38 +340,53 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           )}
           <div className={cn(
             'p-3 rounded-xl shadow min-w-[80px]',
-            isStickerMessage ? 'bg-transparent p-0 shadow-none' : cn(bubbleColorClass, bubbleBorderRadius)
+            isMediaMessage ? 'bg-transparent p-0 shadow-none' : cn(bubbleColorClass, bubbleBorderRadius)
             )}>
             {renderMessageContent()}
           </div>
         </div>
 
         <div className="self-center px-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full text-muted-foreground hover:text-foreground">
-                <SmilePlus size={16} />
-                <span className="sr-only">Add reaction</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-                side="bottom"
-                align={isCurrentUser ? "end" : "start"}
-                className="flex gap-1 p-1 w-auto rounded-full bg-card shadow-lg border"
-            >
-              {ALL_SUPPORTED_EMOJIS.map(emoji => (
-                <Button
-                  key={emoji}
-                  variant="ghost"
-                  size="icon"
-                  className="p-1.5 h-8 w-8 text-xl rounded-full hover:bg-accent/20 active:scale-110 transition-transform"
-                  onClick={() => handleReactionSelect(emoji)}
-                >
-                  {emoji}
+          {message.status !== 'uploading' && message.status !== 'sending' && (
+            <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full text-muted-foreground hover:text-foreground">
+                  <SmilePlus size={16} />
+                  <span className="sr-only">Add reaction</span>
                 </Button>
-              ))}
-            </PopoverContent>
-          </Popover>
+              </PopoverTrigger>
+              <PopoverContent
+                  side="bottom"
+                  align={isCurrentUser ? "end" : "start"}
+                  className="flex gap-1 p-1 w-auto rounded-full bg-card shadow-lg border"
+              >
+                {ALL_SUPPORTED_EMOJIS.map(emoji => (
+                  <Button
+                    key={emoji}
+                    variant="ghost"
+                    size="icon"
+                    className="p-1.5 h-8 w-8 text-xl rounded-full hover:bg-accent/20 active:scale-110 transition-transform"
+                    onClick={() => handleReactionSelect(emoji)}
+                  >
+                    {emoji}
+                  </Button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
+          {showRetry && (
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                         <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full text-destructive hover:bg-destructive/10">
+                            <RefreshCw size={14} />
+                            <span className="sr-only">Retry sending</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Click to retry sending</p></TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
       </div>
 
@@ -405,9 +435,10 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             <TooltipTrigger asChild>
                 <p className={cn('text-xs text-muted-foreground mt-0.5 cursor-default', isCurrentUser ? 'text-right' : 'text-left')}>
                 {formattedTime}
+                {message.status === 'failed' && <span className='text-destructive'> - Failed</span>}
                 </p>
             </TooltipTrigger>
-            {message.created_at && message.status !== 'sending' && (
+            {message.created_at && message.status !== 'sending' && message.status !== 'uploading' && (
                 <TooltipContent>
                     <p>{format(parseISO(message.created_at), 'PPpp')}</p>
                 </TooltipContent>

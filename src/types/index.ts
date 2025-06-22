@@ -24,7 +24,7 @@ export interface UserInToken extends User {}
 
 
 export type MessageClipType = 'audio' | 'video';
-export type MessageStatus = "sending" | "sent_to_server" | "delivered_to_recipient" | "read_by_recipient" | "failed";
+export type MessageStatus = "uploading" | "sending" | "sent_to_server" | "delivered_to_recipient" | "read_by_recipient" | "failed";
 export type MessageSubtype = 'text' | 'sticker' | 'clip' | 'image' | 'document' | 'voice_message' | 'emoji_only';
 
 
@@ -53,6 +53,10 @@ export interface Message {
   file_size_bytes?: number | null;
   audio_format?: string | null;
   transcription?: string | null;
+
+  // --- Client-side only properties for upload progress ---
+  uploadProgress?: number; // A number from 0 to 100
+  file?: File; // The file being uploaded
 }
 
 export interface ChatParticipant extends User {}
