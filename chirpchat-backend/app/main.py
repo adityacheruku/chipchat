@@ -25,35 +25,27 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS middleware for frontend integration
-# Ensure origins match your frontend development and deployed URLs
-base_origins = [
-    "http://localhost:3000", # Common CRA/Next.js dev port
-    "http://localhost:9002", # Your Next.js dev port from package.json
-    # Add your Vercel deployment preview and production URLs here eventually
-    # Example: "https://your-project-name.vercel.app",
-    # Example: "https://your-project-name-*.vercel.app"
+# Define allowed origins for CORS.
+# This list should include all domains your frontend will be hosted on.
+origins = [
+    "http://localhost:3000",      # Common React dev port
+    "http://localhost:9002",      # Your specified Next.js dev port
+    "https://ded3-49-43-230-78.ngrok-free.app", # Your provided ngrok URL
+    # TODO: Add your Vercel URLs when you deploy
+    # "https://your-app-name.vercel.app",
+    # "https://your-app-name-*.vercel.app", # For preview deployments
 ]
 
+# If in a debug/development environment, allow all origins for convenience.
+# In production (settings.DEBUG = False), this will restrict CORS to the list above.
+allowed_origins = ["*"] if settings.DEBUG else origins
 if settings.DEBUG:
-    # For local development with DEBUG=true, allow all origins for easier testing.
-    # WARNING: Do NOT use ["*"] in production.
-    effective_origins = ["*"]
     print("DEBUG mode is ON. Allowing all origins for CORS. THIS IS NOT SAFE FOR PRODUCTION.")
-else:
-    # For production, use a specific list. Add your deployed frontend URLs here.
-    # e.g., if your frontend is deployed to Vercel:
-    # production_origins = [
-    #     "https://your-app-name.vercel.app",
-    #     "https://your-custom-domain.com",
-    # ]
-    # effective_origins = base_origins + production_origins
-    effective_origins = base_origins # Default to base if no specific prod URLs yet
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=effective_origins,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"], # Allows all methods
     allow_headers=["*"], # Allows all headers

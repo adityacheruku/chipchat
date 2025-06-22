@@ -21,19 +21,19 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    url: "https://your-app-url.com", 
+    // url: "https://your-app-url.com", // TODO: Replace with your deployed frontend URL
     title: APP_NAME,
     description: APP_DESCRIPTION,
     siteName: APP_NAME,
     images: [{
-      url: "https://your-app-url.com/icons/icon-512.png", 
+      url: "/icons/icon-512.png", // Using a relative path for the icon
     }],
   },
   twitter: {
     card: "summary",
     title: APP_NAME,
     description: APP_DESCRIPTION,
-    images: ["https://your-app-url.com/icons/icon-512.png"], 
+    images: ["/icons/icon-512.png"], // Using a relative path for the icon
   },
 };
 

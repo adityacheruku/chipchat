@@ -16,7 +16,7 @@ import type {
 } from '@/types';
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://192.168.29.167:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://ded3-49-43-230-78.ngrok-free.app';
 
 let currentAuthToken: string | null = null;
 
