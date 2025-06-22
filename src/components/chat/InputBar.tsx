@@ -4,16 +4,13 @@
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIconLucide, Camera, FileText, MapPin, Trash2, StopCircle, StickyNote } from 'lucide-react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, Trash2, StopCircle, StickyNote } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
 import type { MessageClipType } from '@/types';
+import { PICKER_EMOJIS } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -45,6 +42,7 @@ export default function InputBar({
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
 
   // State for voice recording
@@ -62,7 +60,6 @@ export default function InputBar({
   const maxDurationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Refs for file inputs
-  const audioInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null); // For direct camera capture
@@ -93,6 +90,10 @@ export default function InputBar({
         onTyping(false);
     }
   };
+  
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageText(prev => prev + emoji);
+  };
 
   const handleStickerSelect = (stickerId: string) => {
     if (disabled) return;
@@ -100,7 +101,7 @@ export default function InputBar({
     setIsStickerPickerOpen(false);
   };
 
-  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, attachmentType: 'audio' | 'media' | 'document') => {
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, attachmentType: 'media' | 'document') => {
     if (disabled) {
       toast({variant: 'destructive', title: 'Cannot Send', description: 'Chat service is not connected.'});
       return;
@@ -111,16 +112,10 @@ export default function InputBar({
             if (file.type.startsWith('image/')) {
                 onSendImage(file);
             } else if (file.type.startsWith('video/')) {
-                onSendMoodClip('video', file);
+                onSendMoodClip('video', file); // Videos are sent as mood clips
             } else {
                  toast({variant: 'destructive', title: 'Invalid File', description: 'Please select an image or video file.'});
             }
-        } else if (attachmentType === 'audio') {
-             if (!file.type.startsWith('audio/')) {
-                toast({variant: 'destructive', title: 'Invalid File', description: 'Please select an audio file.'});
-                return;
-            }
-            onSendMoodClip(attachmentType, file);
         } else if (attachmentType === 'document') {
             onSendDocument(file);
         }
@@ -149,7 +144,17 @@ export default function InputBar({
 
   const handleStartRecording = async () => {
     if (recordingStatus !== 'idle') return;
+    if (disabled) {
+        toast({variant: 'destructive', title: 'Cannot Record', description: 'Chat service is not connected.'});
+        return;
+    }
+    // Device compatibility check
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        toast({ variant: 'destructive', title: 'Unsupported Device', description: 'Your browser does not support voice recording.' });
+        return;
+    }
 
+    setShowAttachmentOptions(false);
     setRecordingStatus('permission_requested');
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -220,22 +225,7 @@ export default function InputBar({
   };
 
   const handleButtonPress = () => {
-    if (disabled) {
-        toast({variant: 'destructive', title: 'Cannot Record', description: 'Chat service is not connected.'});
-        return;
-    }
     if (isSending || messageText.trim() !== '') return;
-    
-    // Device compatibility check
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-        toast({
-            variant: 'destructive',
-            title: 'Unsupported Device',
-            description: 'Your browser does not support voice recording.',
-        });
-        return;
-    }
-
     longPressTimerRef.current = setTimeout(() => {
         handleStartRecording();
     }, LONG_PRESS_DURATION);
@@ -324,7 +314,47 @@ export default function InputBar({
                 </Tooltip>
             </TooltipProvider>
 
-            <Popover open={isStickerPickerOpen} onOpenChange={setIsStickerPickerOpen}>
+            <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
+                  className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
+                  aria-label="Open emoji picker"
+                  disabled={isSending || disabled}
+                >
+                  <Smile size={22} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 border-none mb-2 bg-card" side="top" align="start">
+                <Tabs defaultValue="Smileys & People" className="w-[300px] p-2">
+                  <TabsList className="grid w-full grid-cols-4">
+                     {Object.keys(PICKER_EMOJIS).map(category => (
+                        <TabsTrigger key={category} value={category}>{PICKER_EMOJIS[category as keyof typeof PICKER_EMOJIS].icon}</TabsTrigger>
+                     ))}
+                  </TabsList>
+                  {Object.entries(PICKER_EMOJIS).map(([category, data]) => (
+                    <TabsContent key={category} value={category}>
+                        <div className="grid grid-cols-8 gap-1 h-48 overflow-y-auto mt-2">
+                            {data.emojis.map(emoji => (
+                                <Button
+                                key={emoji}
+                                variant="ghost"
+                                className="text-xl p-0 h-9 w-9 rounded-md"
+                                onClick={() => handleEmojiSelect(emoji)}
+                                >
+                                {emoji}
+                                </Button>
+                            ))}
+                        </div>
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </PopoverContent>
+            </Popover>
+
+             <Popover open={isStickerPickerOpen} onOpenChange={setIsStickerPickerOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
@@ -334,34 +364,13 @@ export default function InputBar({
                   aria-label="Open sticker picker"
                   disabled={isSending || disabled}
                 >
-                  <Smile size={22} />
+                  <StickyNote size={22} />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 border-none mb-2" side="top" align="start">
                 <StickerPicker onStickerSelect={handleStickerSelect} />
               </PopoverContent>
             </Popover>
-
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
-                    aria-label="Use camera"
-                    disabled={isSending || disabled}
-                  >
-                    <Camera size={22} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Use camera</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
 
             <Input
                 type="text"
@@ -391,8 +400,7 @@ export default function InputBar({
         {/* Hidden file inputs */}
         <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
         <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
-        <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileSelect(e, 'audio')} />
-        <input type="file" ref={documentInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileSelect(e, 'document')} />
+        <input type="file" ref={documentInputRef} accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={(e) => handleFileSelect(e, 'document')} />
 
         {showAttachmentOptions && !disabled && (
              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2 border-t mt-2">
@@ -402,26 +410,19 @@ export default function InputBar({
                 </Button>
 
                 <Button variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
-                    <ImageIconLucide size={24} className="mb-1 text-purple-500"/>
-                        <span className="text-xs font-normal text-muted-foreground">Photo/Video</span>
+                    <ImageIcon size={24} className="mb-1 text-purple-500"/>
+                    <span className="text-xs font-normal text-muted-foreground">Gallery</span>
                 </Button>
 
-                <Button variant="outline" size="sm" onClick={() => audioInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
+                <Button variant="outline" size="sm" onClick={() => cameraInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
+                    <Camera size={24} className="mb-1 text-green-500"/>
+                    <span className="text-xs font-normal text-muted-foreground">Camera</span>
+                </Button>
+
+                <Button variant="outline" size="sm" onClick={handleStartRecording} className="flex flex-col h-auto py-3 items-center justify-center">
                     <Mic size={24} className="mb-1 text-red-500"/>
-                    <span className="text-xs font-normal text-muted-foreground">Audio</span>
+                    <span className="text-xs font-normal text-muted-foreground">Voice Note</span>
                 </Button>
-
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" className="flex flex-col h-auto py-3 items-center justify-center" disabled>
-                                <MapPin size={24} className="mb-1 text-green-500"/>
-                                 <span className="text-xs font-normal text-muted-foreground">Location</span>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Coming Soon!</p></TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
             </div>
         )}
     </div>
