@@ -30,7 +30,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",      # Common React dev port
     "http://localhost:9002",      # Your specified Next.js dev port
-    "https://ded3-49-43-230-78.ngrok-free.app", # Your provided ngrok URL
+    "https://a93b-49-43-230-78.ngrok-free.app", # Your provided ngrok URL
     # Add your Vercel URLs when you deploy
     "https://your-app-name.vercel.app", # Replace 'your-app-name'
     "https://your-app-name-*.vercel.app", # For preview deployments

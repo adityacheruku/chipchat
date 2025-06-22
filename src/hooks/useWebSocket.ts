@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { WebSocketEventData, Message, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, User, Mood, HeartbeatClientEvent, UserProfileUpdateEventData } from '@/types';
 import { useToast } from './use-toast';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://ded3-49-43-230-78.ngrok-free.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://a93b-49-43-230-78.ngrok-free.app';
 const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 
 const INITIAL_RECONNECT_INTERVAL = 1000;
