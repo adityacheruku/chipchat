@@ -2,21 +2,19 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { WebSocketEventData, Message, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, HeartbeatClientEvent, UserProfileUpdateEventData, ALL_EVENT_TYPES } from '@/types';
+import type { WebSocketEventData, Message, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, HeartbeatClientEvent, UserProfileUpdateEventData, ALL_EVENT_TYPES, EventPayload } from '@/types';
 import { useToast } from './use-toast';
 import { api } from '@/services/api';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://ded3-49-43-230-78.ngrok-free.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://a93b-49-43-230-78.ngrok-free.app';
 const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 const EVENTS_BASE_URL = API_BASE_URL;
 
-const INITIAL_RECONNECT_INTERVAL = 1000;
-const MAX_RECONNECT_INTERVAL = 30000;
-const MAX_RECONNECT_ATTEMPTS = 5;
 const HEARTBEAT_INTERVAL = 30000;
 const SERVER_ACTIVITY_TIMEOUT = 45000;
+const LAST_SEQUENCE_KEY = 'chirpChat_lastSequence';
 
-export type RealtimeProtocol = 'connecting' | 'websocket' | 'sse' | 'disconnected' | 'fallback';
+export type RealtimeProtocol = 'connecting' | 'websocket' | 'sse' | 'disconnected' | 'fallback' | 'syncing';
 
 interface UseRealtimeOptions {
   token: string | null;
@@ -41,10 +39,23 @@ export function useRealtime({
   const [isBrowserOnline, setIsBrowserOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const { toast } = useToast();
   
-  const reconnectAttemptsRef = useRef(0);
   const cleanupRef = useRef<() => void>(() => {});
+  const lastSequenceRef = useRef<number>(0);
+  const isSyncingRef = useRef<boolean>(false);
 
-  const handleEvent = useCallback((data: WebSocketEventData) => {
+  useEffect(() => {
+    const storedSeq = typeof window !== 'undefined' ? localStorage.getItem(LAST_SEQUENCE_KEY) : null;
+    lastSequenceRef.current = storedSeq ? parseInt(storedSeq, 10) : 0;
+  }, []);
+
+  const handleEvent = useCallback((data: EventPayload) => {
+    if (data.sequence && data.sequence > lastSequenceRef.current) {
+        lastSequenceRef.current = data.sequence;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(LAST_SEQUENCE_KEY, String(data.sequence));
+        }
+    }
+    
     switch (data.event_type) {
       case 'new_message': onMessageReceived((data as NewMessageEventData).message); break;
       case 'message_reaction_update': onReactionUpdate(data as MessageReactionUpdateEventData); break;
@@ -60,6 +71,26 @@ export function useRealtime({
     }
   }, [onMessageReceived, onReactionUpdate, onPresenceUpdate, onTypingUpdate, onThinkingOfYouReceived, onUserProfileUpdate, onMessageAck, toast]);
 
+  const handleSync = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+    setProtocol('syncing');
+    try {
+        const missedEvents = await api.syncEvents(lastSequenceRef.current);
+        if (missedEvents && missedEvents.length > 0) {
+            console.log(`Sync: processing ${missedEvents.length} missed events.`);
+            missedEvents.forEach(event => handleEvent(event));
+        }
+    } catch (error) {
+        console.error("Failed to sync events:", error);
+        toast({variant: 'destructive', title: 'Sync Failed', description: 'Could not retrieve missed messages.'});
+    } finally {
+        isSyncingRef.current = false;
+        // The protocol will be set to 'websocket' or 'sse' by the connect function after sync.
+    }
+  }, [handleEvent, toast]);
+
+
   const connect = useCallback(() => {
     if (!token || !isBrowserOnline) {
       setProtocol('disconnected');
@@ -68,7 +99,6 @@ export function useRealtime({
 
     cleanupRef.current();
     setProtocol('connecting');
-    reconnectAttemptsRef.current = 0;
 
     let heartbeatInterval: NodeJS.Timeout;
     let activityTimeout: NodeJS.Timeout;
@@ -80,23 +110,19 @@ export function useRealtime({
         wsRef.current?.close(1006, 'Server activity timeout');
       }, SERVER_ACTIVITY_TIMEOUT);
     };
-
-    const startSSEFallback = () => {
+    
+    const startSSEFallback = async () => {
         if (!token) return;
         console.log("WebSocket failed. Falling back to SSE.");
-        setProtocol('fallback');
         wsRef.current = null;
+        await handleSync();
 
+        setProtocol('sse');
         const sseUrl = `${EVENTS_BASE_URL}/events/subscribe?token=${encodeURIComponent(token)}`;
         const eventSource = new EventSource(sseUrl, { withCredentials: false });
         sseRef.current = eventSource;
 
-        eventSource.onopen = () => {
-            console.log("SSE connection established.");
-            setProtocol('sse');
-            reconnectAttemptsRef.current = 0;
-        };
-
+        eventSource.onopen = () => console.log("SSE connection established.");
         eventSource.onerror = (err) => {
             console.error("SSE connection error:", err);
             eventSource.close();
@@ -106,18 +132,18 @@ export function useRealtime({
         
         const sseMessageHandler = (event: MessageEvent) => {
             try {
-                const data = JSON.parse(event.data) as WebSocketEventData;
+                const data = JSON.parse(event.data) as EventPayload;
                 handleEvent(data);
             } catch (e) {
                 console.error("Failed to parse SSE event data:", e);
             }
         };
         
-        ALL_EVENT_TYPES.forEach(type => eventSource.addEventListener(type, sseMessageHandler));
+        Object.values(ALL_EVENT_TYPES).forEach(type => eventSource.addEventListener(type, sseMessageHandler));
 
         cleanupRef.current = () => {
             console.log("Cleaning up SSE connection.");
-            ALL_EVENT_TYPES.forEach(type => eventSource.removeEventListener(type, sseMessageHandler));
+            Object.values(ALL_EVENT_TYPES).forEach(type => eventSource.removeEventListener(type, sseMessageHandler));
             eventSource.close();
             sseRef.current = null;
         };
@@ -127,10 +153,10 @@ export function useRealtime({
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
     
-    socket.onopen = () => {
-      console.log('WebSocket connected.');
+    socket.onopen = async () => {
+      console.log('WebSocket connected. Starting sync...');
+      await handleSync();
       setProtocol('websocket');
-      reconnectAttemptsRef.current = 0;
       resetActivityTimeout();
       if (pendingMessages.size > 0) {
         console.log(`WebSocket: Resending ${pendingMessages.size} pending messages.`);
@@ -146,7 +172,7 @@ export function useRealtime({
     socket.onmessage = (event) => {
         resetActivityTimeout();
         try {
-            const data = JSON.parse(event.data as string) as WebSocketEventData;
+            const data = JSON.parse(event.data as string) as EventPayload;
             handleEvent(data);
         } catch (error) {
             console.error('Failed to parse WebSocket message:', error);
@@ -159,17 +185,13 @@ export function useRealtime({
         clearTimeout(activityTimeout);
         wsRef.current = null;
         
-        if (event.code === 1008) {
+        if (event.code === 1008) { // Policy Violation
             setProtocol('disconnected');
             toast({ variant: 'destructive', title: 'Authentication Failed', description: 'Please re-login.' });
             return;
         }
-
-        if (protocol === 'connecting' || !event.wasClean) {
-            startSSEFallback();
-        } else {
-            setProtocol('disconnected');
-        }
+        
+        startSSEFallback();
     };
 
     cleanupRef.current = () => {
@@ -181,7 +203,7 @@ export function useRealtime({
         }
         wsRef.current = null;
     };
-  }, [token, isBrowserOnline, handleEvent, toast, protocol]);
+  }, [token, isBrowserOnline, handleEvent, handleSync, toast]);
 
   const sendMessage = useCallback((payload: Record<string, any>) => {
     if (payload.event_type === 'send_message' && payload.client_temp_id) {
@@ -191,7 +213,6 @@ export function useRealtime({
     if (protocol === 'websocket' && wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(payload));
     } else if (protocol === 'sse' && payload.event_type !== 'start_typing' && payload.event_type !== 'stop_typing') {
-      // Send via HTTP for SSE, but ignore transient events like typing
       if (payload.event_type === 'send_message') {
           const { chat_id, ...messageData } = payload;
           api.sendMessageHttp(chat_id, messageData).catch(err => {
@@ -203,7 +224,6 @@ export function useRealtime({
       }
     } else if (protocol !== 'websocket' && protocol !== 'sse') {
         toast({ variant: 'destructive', title: 'Not Connected', description: 'Cannot send message. Please check your connection.' });
-        // Message remains in pending queue
     }
   }, [protocol, toast]);
 

@@ -1,3 +1,4 @@
+
 import type {
   AuthResponse,
   User,
@@ -12,10 +13,11 @@ import type {
   PushSubscriptionJSON,
   NotificationSettings,
   PartnerRequest,
+  EventPayload,
 } from '@/types';
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://ef9e-49-43-230-78.ngrok-free.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://a93b-49-43-230-78.ngrok-free.app';
 
 let currentAuthToken: string | null = null;
 
@@ -27,11 +29,10 @@ function getAuthToken(): string | null {
   return null;
 }
 
-// Helper function to generate standard API headers
 function getApiHeaders(options: { contentType?: string | null, includeAuth?: boolean } = {}): HeadersInit {
   const { contentType = 'application/json', includeAuth = true } = options;
   const headers: HeadersInit = {
-    'ngrok-skip-browser-warning': 'true', // Bypasses ngrok's browser warning page
+    'ngrok-skip-browser-warning': 'true',
   };
 
   if (includeAuth) {
@@ -355,5 +356,13 @@ export const api = {
           body: JSON.stringify(settings),
       });
       return handleResponse<NotificationSettings>(response);
+  },
+
+  // EVENT SYNC
+  syncEvents: async (since: number): Promise<EventPayload[]> => {
+    const response = await fetch(`${API_BASE_URL}/events/sync?since=${since}`, {
+      headers: getApiHeaders(),
+    });
+    return handleResponse<EventPayload[]>(response);
   },
 };

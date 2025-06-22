@@ -261,3 +261,4 @@ async def handle_ping(data: Dict[str, Any], current_user: UserPublic):
         sender=current_user,
         recipient_id=recipient_user_id
     )
+

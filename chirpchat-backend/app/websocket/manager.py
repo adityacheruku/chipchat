@@ -12,21 +12,20 @@ from app.redis_client import get_redis_client, get_pubsub_client
 from app.chat.schemas import MessageStatusEnum
 
 # --- Redis Key Schemas ---
-# Hash: user_connections | field: user_id | value: server_instance_id
 USER_CONNECTIONS_KEY = "user_connections"
-# Channel for broadcasting messages across instances
 BROADCAST_CHANNEL = "chirpchat:broadcast"
-# Key for deduplicating messages, with a TTL. e.g., processed_messages:<client_temp_id>
 PROCESSED_MESSAGES_PREFIX = "processed_messages:"
-# TTL for processed message IDs to prevent Redis from filling up
+EVENT_SEQUENCE_KEY = "global_event_sequence"
+EVENT_LOG_KEY = "event_log"
+
+# --- TTLs and Constants ---
 PROCESSED_MESSAGE_TTL_SECONDS = 300 # 5 minutes
+EVENT_LOG_TTL_SECONDS = 60 * 60 * 24 # Keep events for 24 hours
+TRIM_EVENT_LOG_AFTER_N_EVENTS = 5000 # Trim log to keep it from growing indefinitely
 
 # --- Local Connection Storage ---
-# This server instance's unique ID
 SERVER_ID = settings.SERVER_INSTANCE_ID
-# Dictionary mapping user_id to their WebSocket object for users connected to THIS instance
 active_local_connections: Dict[UUID, WebSocket] = {}
-# Throttled last seen updates for users on this instance
 user_last_activity_update_db: Dict[UUID, Any] = {}
 THROTTLE_LAST_SEEN_UPDATE_SECONDS = 120 # 2 minutes
 
@@ -36,21 +35,19 @@ async def connect(websocket: WebSocket, user_id: UUID):
     redis = await get_redis_client()
     active_local_connections[user_id] = websocket
     
-    # Register this user's connection to this server instance in Redis
     await redis.hset(USER_CONNECTIONS_KEY, str(user_id), SERVER_ID)
     
-    # Update presence and broadcast
-    now_utc = await db_manager.get_table("users").update({
+    await db_manager.get_table("users").update({
         "is_online": True, 
         "last_seen": "now()"
     }).eq("id", str(user_id)).execute()
     
-    user_mood = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
+    user_mood_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
     
     await broadcast_presence_update(
         user_id,
         is_online=True,
-        mood=user_mood.data.get('mood', 'Neutral') if user_mood.data else 'Neutral'
+        mood=user_mood_resp.data.get('mood', 'Neutral') if user_mood_resp.data else 'Neutral'
     )
     logger.info(f"User {user_id} connected to instance {SERVER_ID}. Total local connections: {len(active_local_connections)}")
 
@@ -66,12 +63,12 @@ async def disconnect(user_id: UUID):
         "last_seen": "now()"
     }).eq("id", str(user_id)).execute()
     
-    user_mood = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
+    user_mood_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
 
     await broadcast_presence_update(
         user_id,
         is_online=False,
-        mood=user_mood.data.get('mood', 'Neutral') if user_mood.data else 'Neutral'
+        mood=user_mood_resp.data.get('mood', 'Neutral') if user_mood_resp.data else 'Neutral'
     )
     logger.info(f"User {user_id} disconnected from instance {SERVER_ID}.")
 
@@ -103,11 +100,31 @@ async def send_ack(websocket: WebSocket, client_temp_id: str, server_id: Optiona
 # --- Broadcast Logic using Redis Pub/Sub ---
 async def broadcast_to_users(user_ids: List[UUID], payload: Dict[str, Any]):
     redis = await get_redis_client()
+    
+    # 1. Get new sequence number
+    sequence_num = await redis.incr(EVENT_SEQUENCE_KEY)
+    
+    # 2. Add sequence to payload
+    payload_with_seq = {**payload, "sequence": sequence_num}
+    
+    # 3. Create the object to be stored and published
     message_to_publish = {
         "target_user_ids": [str(uid) for uid in user_ids],
-        "payload": payload
+        "payload": payload_with_seq
     }
-    await redis.publish(BROADCAST_CHANNEL, json.dumps(message_to_publish))
+    message_json = json.dumps(message_to_publish)
+
+    # 4. Cache the event in a sorted set and trim the log
+    async with redis.pipeline(transaction=True) as pipe:
+        pipe.zadd(EVENT_LOG_KEY, {message_json: sequence_num})
+        pipe.zremrangebyscore(EVENT_LOG_KEY, "-inf", f"({sequence_num - TRIM_EVENT_LOG_AFTER_N_EVENTS}")
+        await pipe.execute()
+    
+    await redis.expire(EVENT_LOG_KEY, EVENT_LOG_TTL_SECONDS)
+
+    # 5. Publish to Pub/Sub
+    await redis.publish(BROADCAST_CHANNEL, message_json)
+    logger.debug(f"Broadcasted event with sequence {sequence_num} to users: {user_ids}")
 
 async def _get_chat_participants(chat_id: str) -> List[UUID]:
     try:
@@ -189,8 +206,8 @@ async def listen_for_broadcasts():
     logger.info(f"Instance {SERVER_ID} subscribed to Redis channel '{BROADCAST_CHANNEL}'.")
     while True:
         try:
-            message = await pubsub.get_message(timeout=None)
-            if message:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=None)
+            if message and message["type"] == "message":
                 message_data = json.loads(message["data"])
                 target_user_ids = [UUID(uid) for uid in message_data["target_user_ids"]]
                 payload = message_data["payload"]
@@ -207,7 +224,6 @@ async def listen_for_broadcasts():
                     await asyncio.gather(*tasks)
         except Exception as e:
             logger.error(f"Error in Redis Pub/Sub listener on instance {SERVER_ID}: {e}", exc_info=True)
-            # Short sleep to prevent rapid-fire errors on persistent connection issue
             await asyncio.sleep(1)
 
 

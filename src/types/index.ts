@@ -94,6 +94,21 @@ export interface VoiceMessageUploadResponse {
     audio_format: string | null;
 }
 
+export type EventPayload = {
+    sequence?: number; // Now includes the event sequence number
+} & (
+  | NewMessageEventData
+  | MessageReactionUpdateEventData
+  | UserPresenceUpdateEventData
+  | TypingIndicatorEventData
+  | ThinkingOfYouReceivedEventData
+  | UserProfileUpdateEventData
+  | MessageAckEventData
+  | { event_type: "error", detail: string }
+  | { event_type: "authenticated" }
+  | { event_type: "sse_connected", data: string }
+  | { event_type: "ping", data: string }
+);
 
 // WebSocket and SSE message types
 export interface NewMessageEventData {
@@ -150,19 +165,7 @@ export interface MessageAckEventData {
     timestamp: string;
 }
 
-export type WebSocketEventData =
-  | NewMessageEventData
-  | MessageReactionUpdateEventData
-  | UserPresenceUpdateEventData
-  | TypingIndicatorEventData
-  | ThinkingOfYouReceivedEventData
-  | UserProfileUpdateEventData
-  | MessageAckEventData
-  | { event_type: "error", detail: string }
-  | { event_type: "authenticated" }
-  | { event_type: "sse_connected", data: string }
-  | { event_type: "ping", data: string }
-  | HeartbeatClientEvent;
+export type WebSocketEventData = EventPayload;
 
 // Constant to help SSE client subscribe to all relevant events
 export const ALL_EVENT_TYPES = [
