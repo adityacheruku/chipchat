@@ -1,74 +1,71 @@
--- This script seeds the database with initial sticker packs and stickers.
--- It's designed to be idempotent - it will not create duplicate data if run multiple times.
+-- =================================================================
+-- CHIRPCHAT STICKER & EMOJI SEEDING SCRIPT
+-- =================================================================
+-- To use this script:
+-- 1. Fill in your own data in the "INSERT YOUR DATA" sections below.
+-- 2. Go to your Supabase project dashboard.
+-- 3. In the left sidebar, click on the "SQL Editor" icon.
+-- 4. Click "+ New query".
+-- 5. Paste the entire content of this file into the editor.
+-- 6. Click the "RUN" button.
+-- =================================================================
 
--- Pack UUIDs (replace with your own if needed, but keep consistent)
--- Emotion Pack: a1b2c3d4-0001-4001-8001-000000000001
--- Relationship Pack: a1b2c3d4-0002-4002-8002-000000000002
--- Daily Life Pack: a1b2c3d4-0003-4003-8003-000000000003
--- Animal Pack: a1b2c3d4-0004-4004-8004-000000000004
--- Reaction Pack: a1b2c3d4-0005-4005-8005-000000000005
+-- Step 1: Clear all existing sticker and emoji data for a fresh start.
+-- This ensures no old data conflicts with your new data.
+TRUNCATE TABLE user_favorite_stickers RESTART IDENTITY;
+TRUNCATE TABLE user_sticker_usage RESTART IDENTITY;
+TRUNCATE TABLE stickers RESTART IDENTITY CASCADE;
+TRUNCATE TABLE sticker_packs RESTART IDENTITY CASCADE;
 
-DO $$
-DECLARE
-    emotion_pack_id UUID := 'a1b2c3d4-0001-4001-8001-000000000001';
-    relationship_pack_id UUID := 'a1b2c3d4-0002-4002-8002-000000000002';
-    daily_life_pack_id UUID := 'a1b2c3d4-0003-4003-8003-000000000003';
-    animal_pack_id UUID := 'a1b2c3d4-0004-4004-8004-000000000004';
-    reaction_pack_id UUID := 'a1b2c3d4-0005-4005-8005-000000000005';
-BEGIN
+RAISE NOTICE 'All existing sticker data has been cleared.';
 
--- Insert Sticker Packs
-INSERT INTO sticker_packs (id, name, description, thumbnail_url) VALUES
-(emotion_pack_id, 'Emotions', 'Express how you feel.', 'https://placehold.co/64x64/F9F5A2/333?text=😊'),
-(relationship_pack_id, 'Couples', 'For you and your special someone.', 'https://placehold.co/64x64/FFB6C1/333?text=❤️'),
-(daily_life_pack_id, 'Daily Life', 'Stickers for everyday moments.', 'https://placehold.co/64x64/A2C4F9/333?text=☀️'),
-(animal_pack_id, 'Cute Animals', 'Furry friends to share.', 'https://placehold.co/64x64/BCA2F9/333?text=🐶'),
-(reaction_pack_id, 'Reactions', 'Quick responses for any message.', 'https://placehold.co/64x64/A2F9D5/333?text=👍')
-ON CONFLICT (id) DO NOTHING;
+-- =================================================================
+-- INSERT YOUR DATA BELOW
+-- =================================================================
 
--- Delete existing stickers for these packs to ensure a clean slate on re-run
-DELETE FROM stickers WHERE pack_id IN (emotion_pack_id, relationship_pack_id, daily_life_pack_id, animal_pack_id, reaction_pack_id);
+-- Step 2: Define your Sticker Packs.
+-- Replace the example values with your own pack details.
+-- You can add multiple packs by adding more lines inside the VALUES clause.
+-- Example: VALUES (uuid_generate_v4(), 'My First Pack', ...), (uuid_generate_v4(), 'My Second Pack', ...);
+INSERT INTO "sticker_packs" (id, name, description, thumbnail_url, is_premium, is_active) VALUES
+(
+  'f47ac10b-58cc-4372-a567-0e02b2c3d479', -- You can generate a UUID or use a memorable one.
+  'Greetings', -- The name of your sticker pack.
+  'A collection of friendly greetings.', -- A short description.
+  'https://res.cloudinary.com/your-cloud/image/upload/v1/your-pack-thumbnail.png', -- URL to a thumbnail image for the pack.
+  false, -- `false` for free, `true` for premium.
+  true -- `true` to make it visible in the app.
+);
 
--- Insert Stickers for Emotion Pack
-INSERT INTO stickers (pack_id, name, image_url, tags) VALUES
-(emotion_pack_id, 'Happy', 'https://placehold.co/128x128/FFF5BB/333?text=😄', ARRAY['happy', 'joy', 'smile']),
-(emotion_pack_id, 'Sad', 'https://placehold.co/128x128/C7DFFF/333?text=😢', ARRAY['sad', 'cry', 'upset']),
-(emotion_pack_id, 'Love', 'https://placehold.co/128x128/FFD1D1/333?text=😍', ARRAY['love', 'heart', 'adore']),
-(emotion_pack_id, 'Angry', 'https://placehold.co/128x128/FFC8C8/333?text=😠', ARRAY['angry', 'mad', 'furious']),
-(emotion_pack_id, 'Surprised', 'https://placehold.co/128x128/C4F5C4/333?text=😮', ARRAY['surprised', 'shocked', 'wow']),
-(emotion_pack_id, 'Confused', 'https://placehold.co/128x128/E0E0E0/333?text=🤔', ARRAY['confused', 'thinking', 'hmm']);
+-- You can add more packs like this:
+-- INSERT INTO "sticker_packs" (id, name, description, thumbnail_url, is_premium, is_active) VALUES
+-- ('another-uuid-here', 'Another Pack', 'Description here', 'https://example.com/thumb2.png', false, true);
 
--- Insert Stickers for Relationship Pack
-INSERT INTO stickers (pack_id, name, image_url, tags) VALUES
-(relationship_pack_id, 'Holding Hands', 'https://placehold.co/128x128/FFB6C1/333?text=🤝', ARRAY['couple', 'love', 'together']),
-(relationship_pack_id, 'Kiss', 'https://placehold.co/128x128/FFB6C1/333?text=😘', ARRAY['kiss', 'love', 'romance']),
-(relationship_pack_id, 'Thinking of You', 'https://placehold.co/128x128/FFB6C1/333?text=💭❤️', ARRAY['thinking', 'love', 'miss you']),
-(relationship_pack_id, 'Movie Night', 'https://placehold.co/128x128/D8BFD8/333?text=🍿', ARRAY['date', 'movie', 'chill']),
-(relationship_pack_id, 'I Love You', 'https://placehold.co/128x128/FF69B4/333?text=ILY', ARRAY['i love you', 'confession']),
-(relationship_pack_id, 'Sorry', 'https://placehold.co/128x128/ADD8E6/333?text=Sorry', ARRAY['apology', 'forgive me']);
 
--- Insert Stickers for Daily Life Pack
-INSERT INTO stickers (pack_id, name, image_url, tags) VALUES
-(daily_life_pack_id, 'Good Morning', 'https://placehold.co/128x128/FFFACD/333?text=☀️', ARRAY['good morning', 'gm', 'sunrise']),
-(daily_life_pack_id, 'Good Night', 'https://placehold.co/128x128/483D8B/eee?text=🌙', ARRAY['good night', 'gn', 'sleep']),
-(daily_life_pack_id, 'Working', 'https://placehold.co/128x128/B0C4DE/333?text=💻', ARRAY['work', 'busy', 'typing']),
-(daily_life_pack_id, 'Eating', 'https://placehold.co/128x128/98FB98/333?text=🍕', ARRAY['food', 'lunch', 'dinner']),
-(daily_life_pack_id, 'On my way', 'https://placehold.co/128x128/F0E68C/333?text=🚗', ARRAY['omw', 'driving', 'travel']);
+-- Step 3: Define the Stickers for each pack.
+-- Make sure the `pack_id` matches the `id` of the pack you created above.
+-- Add all your stickers for a pack inside the VALUES clause.
+INSERT INTO "stickers" (id, pack_id, name, image_url, tags, order_index) VALUES
+(
+  'ed1b1a7d-2b49-411a-8a48-128a156f0f5b', -- A unique UUID for this sticker.
+  'f47ac10b-58cc-4372-a567-0e02b2c3d479', -- The `id` of the pack this sticker belongs to (e.g., 'Greetings').
+  'Hello', -- A name for the sticker, used for searching.
+  'https://res.cloudinary.com/your-cloud/image/upload/v1/hello-sticker.png', -- The public URL to the sticker image.
+  '{"hello", "greeting", "hi"}', -- A list of search tags in PostgreSQL array format.
+  1 -- The display order within the pack (1, 2, 3, ...).
+),
+(
+  'a2c4e6f8-3b57-422b-9b59-139b267g1g6c',
+  'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+  'Goodbye',
+  'https://res.cloudinary.com/your-cloud/image/upload/v1/goodbye-sticker.png',
+  '{"bye", "see ya", "later"}',
+  2
+);
 
--- Insert Stickers for Animal Pack
-INSERT INTO stickers (pack_id, name, image_url, tags) VALUES
-(animal_pack_id, 'Happy Dog', 'https://placehold.co/128x128/DEB887/333?text=🐶', ARRAY['dog', 'happy', 'cute']),
-(animal_pack_id, 'Grumpy Cat', 'https://placehold.co/128x128/D3D3D3/333?text=😼', ARRAY['cat', 'grumpy', 'annoyed']),
-(animal_pack_id, 'Sleepy Panda', 'https://placehold.co/128x128/F5F5F5/333?text=🐼', ARRAY['panda', 'sleepy', 'tired']),
-(animal_pack_id, 'Playful Otter', 'https://placehold.co/128x128/CD853F/333?text=🦦', ARRAY['otter', 'playful', 'cute']),
-(animal_pack_id, 'Blushing Bunny', 'https://placehold.co/128x128/FFF0F5/333?text=🐰', ARRAY['bunny', 'shy', 'blush']);
+-- To add stickers for another pack, create a new INSERT statement:
+-- INSERT INTO "stickers" (id, pack_id, name, image_url, tags, order_index) VALUES
+-- ('sticker-uuid-3', 'another-uuid-here', 'Awesome', 'https://example.com/sticker3.png', '{"awesome", "cool"}', 1);
 
--- Insert Stickers for Reaction Pack
-INSERT INTO stickers (pack_id, name, image_url, tags) VALUES
-(reaction_pack_id, 'Thumbs Up', 'https://placehold.co/128x128/90EE90/333?text=👍', ARRAY['ok', 'sounds good', 'agree']),
-(reaction_pack_id, 'Clapping', 'https://placehold.co/128x128/FFFFE0/333?text=👏', ARRAY['congrats', 'well done', 'bravo']),
-(reaction_pack_id, 'Heart Eyes', 'https://placehold.co/128x128/FFC0CB/333?text=😍', ARRAY['love it', 'amazing', 'wow']),
-(reaction_pack_id, 'Facepalm', 'https://placehold.co/128x128/DCDCDC/333?text=🤦', ARRAY['facepalm', 'oh no', 'smh']),
-(reaction_pack_id, 'Celebrate', 'https://placehold.co/128x128/FFD700/333?text=🎉', ARRAY['celebrate', 'party', 'hooray']);
 
-END $$;
+RAISE NOTICE 'Your custom sticker data has been successfully inserted.';

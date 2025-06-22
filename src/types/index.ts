@@ -3,8 +3,19 @@
 export type Mood = string;
 export const ALL_MOODS: Mood[] = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"];
 
-export type SupportedEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '🙏' | '🔥' | '🎉' | '🤔' | '💯';
-export const ALL_SUPPORTED_EMOJIS: SupportedEmoji[] = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '🤔', '💯'];
+// =================================================================
+// CUSTOMIZE YOUR EMOJIS HERE (FRONTEND)
+// =================================================================
+// This list controls which emojis appear in the reaction pop-up in the chat UI.
+// Add or remove emojis as single-character strings.
+// Example: export const ALL_SUPPORTED_EMOJIS: SupportedEmoji[] = ['😊', '🎉', '👍', '❤️'];
+//
+export type SupportedEmoji = string; // Using string to allow any emoji
+export const ALL_SUPPORTED_EMOJIS: SupportedEmoji[] = [
+  // Add your custom emojis here. For example:
+  // '👍', '❤️', '😂', '😮', '😢', '🙏'
+];
+
 
 // User types aligned with backend schemas
 export interface User {

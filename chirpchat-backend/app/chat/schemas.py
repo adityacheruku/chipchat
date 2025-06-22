@@ -17,7 +17,17 @@ class MessageSubtypeEnum(str, enum.Enum):
     VOICE_MESSAGE = "voice_message"
     EMOJI_ONLY = "emoji_only"
 
-SUPPORTED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '🤔', '💯'] 
+# =================================================================
+# CUSTOMIZE YOUR EMOJIS HERE (BACKEND)
+# =================================================================
+# This list validates incoming reaction emojis on the server.
+# It should match the list in `src/types/index.ts` on the frontend.
+# Example: SUPPORTED_EMOJIS = ['😊', '🎉', '👍', '❤️']
+#
+SUPPORTED_EMOJIS = [
+    # Add your custom emojis here. For example:
+    # '👍', '❤️', '😂', '😮', '😢', '🙏'
+]
 SupportedEmoji = str # Use Pydantic enum or validator for stricter check
 
 class MessageStatusEnum(str, enum.Enum):
