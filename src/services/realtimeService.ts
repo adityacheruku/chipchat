@@ -211,15 +211,19 @@ class RealtimeService {
 
     this.sse.onerror = (err) => {
       console.error("SSE connection error:", err);
-      this.sse?.close();
-      this.sse = null;
-      this.scheduleReconnect();
+      // Don't fall back here if the error is due to auth failure,
+      // as the 'auth_error' event will handle it.
+      if (this.protocol !== 'disconnected') {
+        this.sse?.close();
+        this.sse = null;
+        this.scheduleReconnect();
+      }
     };
     
-    this.sse.addEventListener("auth_error", () => {
-        console.error("SSE Authentication failed.");
+    this.sse.addEventListener("auth_error", (event: MessageEvent) => {
+        console.error("SSE Authentication failed via event.");
         this.emit('auth-error');
-        this.disconnect();
+        this.disconnect(); // This will close the SSE connection and reset state
     });
 
     this.sse.addEventListener("sse_connected", (event: MessageEvent) => {

@@ -13,11 +13,20 @@ from app.utils.logging import logger
 
 router = APIRouter(prefix="/events", tags=["Server-Sent Events"])
 
-async def sse_event_generator(request: Request, current_user: UserPublic):
+async def sse_event_generator(request: Request, token: Optional[str]):
     """
-    Yields server-sent events for a user by listening to the shared Redis broadcast channel.
-    This provides a fallback for real-time communication when WebSockets are not available.
+    Yields server-sent events for a user. It authenticates the user first and
+    sends an error event if authentication fails, before closing the connection.
     """
+    # First, authenticate the user from the token.
+    current_user = await try_get_user_from_token(token)
+    if not current_user:
+        logger.warning("SSE: Authentication failed for provided token.")
+        # If auth fails, send a specific event and then close the connection.
+        yield ServerSentEvent(event="auth_error", data=json.dumps({"detail": "Authentication failed"}))
+        return # Stop the generator, which closes the SSE connection.
+
+    # If auth succeeds, proceed with the normal event loop.
     redis = None
     pubsub = None
     user_id_str = str(current_user.id)
@@ -55,7 +64,6 @@ async def sse_event_generator(request: Request, current_user: UserPublic):
                 logger.error(f"Error in SSE generator loop for user {user_id_str}: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
-
     except asyncio.CancelledError:
         logger.info(f"SSE generator for user {user_id_str} was cancelled.")
     finally:
@@ -68,17 +76,10 @@ async def sse_event_generator(request: Request, current_user: UserPublic):
 async def subscribe_to_events(request: Request, token: Optional[str] = Query(None)):
     """
     Subscribes a client to real-time events using Server-Sent Events (SSE).
+    The generator now handles authentication internally to ensure the correct
+    MIME type is always returned.
     """
-    current_user = await try_get_user_from_token(token)
-    if not current_user:
-        # If auth fails, return an error response that the client can handle,
-        # instead of letting FastAPI generate an HTML error page.
-        return Response(
-            content=json.dumps({"detail": "Authentication failed"}),
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            media_type="application/json"
-        )
-    return EventSourceResponse(sse_event_generator(request, current_user))
+    return EventSourceResponse(sse_event_generator(request, token))
 
 @router.get("/sync", response_model=List[Dict[str, Any]])
 async def sync_events(
