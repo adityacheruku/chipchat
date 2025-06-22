@@ -22,12 +22,13 @@ interface InputBarProps {
   onSendSticker: (stickerUrl: string) => void;
   onSendMoodClip: (clipType: MessageClipType, file: File) => void;
   onSendVoiceMessage: (file: File) => void;
-  onSendImage?: (file: File) => void;
+  onSendImage: (file: File) => void;
   onSendDocument: (file: File) => void;
   isSending?: boolean;
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
-  placeholder?: string;
+  messageText: string;
+  onTextChange: (text: string) => void;
 }
 
 const LONG_PRESS_DURATION = 300; // milliseconds
@@ -43,9 +44,9 @@ export default function InputBar({
   isSending = false,
   onTyping,
   disabled = false,
-  placeholder = "Type a message...",
+  messageText,
+  onTextChange,
 }: InputBarProps) {
-  const [messageText, setMessageText] = useState('');
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
 
@@ -66,7 +67,6 @@ export default function InputBar({
   // Refs for file inputs
   const audioInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
@@ -75,13 +75,11 @@ export default function InputBar({
     e.preventDefault();
     if (messageText.trim() && !isSending && !disabled) {
       onSendMessage(messageText.trim());
-      setMessageText('');
-      onTyping(false);
     }
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMessageText(e.target.value);
+    onTextChange(e.target.value);
     if (disabled) return;
     if (e.target.value.trim() !== '') {
       onTyping(true);
@@ -97,9 +95,9 @@ export default function InputBar({
     }
   };
 
-  const handleStickerSelect = (stickerUrl: string) => {
+  const handleStickerSelect = (stickerId: string) => {
     if (disabled) return;
-    onStickerSelect(stickerUrl);
+    onSendSticker(stickerId);
     setIsStickerPickerOpen(false);
   };
 
@@ -107,7 +105,7 @@ export default function InputBar({
     if (disabled) return;
     const file = event.target.files?.[0];
     if (file) {
-        if (attachmentType === 'media' && onSendImage) {
+        if (attachmentType === 'media') {
             if (file.type.startsWith('image/')) {
                 onSendImage(file);
             } else if (file.type.startsWith('video/')) {
@@ -340,7 +338,7 @@ export default function InputBar({
 
             <Input
                 type="text"
-                placeholder={placeholder}
+                placeholder="Enter text..."
                 value={messageText}
                 onChange={handleTextChange}
                 onBlur={handleBlur}
@@ -348,30 +346,11 @@ export default function InputBar({
                 autoComplete="off"
                 disabled={isSending || disabled}
             />
-            <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            type="button"
-                            className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
-                            aria-label="Use camera"
-                            disabled={isSending || disabled || !onSendImage}
-                            onClick={() => cameraInputRef.current?.click()}
-                        >
-                            <Camera size={22} />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>Use Camera</p></TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
             <Button
-                type="button"
+                type="submit"
                 size="icon"
                 className="bg-accent hover:bg-accent/90 active:bg-accent/80 text-accent-foreground rounded-full focus-visible:ring-ring w-10 h-10 flex-shrink-0"
-                disabled={isSending || disabled}
-                onClick={messageText.trim() ? () => handleFormSubmit(new Event('submit', {cancelable: true}) as unknown as FormEvent<HTMLFormElement>) : undefined}
+                disabled={isSending || disabled || (messageText.trim() === '' && recordingStatus !== 'idle')}
                 onMouseDown={handleButtonPress}
                 onMouseUp={handleButtonRelease}
                 onTouchStart={handleButtonPress}
@@ -382,7 +361,6 @@ export default function InputBar({
                 {isSending ? <Loader2 size={20} className="animate-spin" /> : sendButtonIcon}
             </Button>
         </form>
-        <input type="file" ref={cameraInputRef} accept="image/*" capture className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
         <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
         <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileSelect(e, 'audio')} />
         <input type="file" ref={documentInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileSelect(e, 'document')} />
@@ -394,12 +372,10 @@ export default function InputBar({
                     <span className="text-xs font-normal text-muted-foreground">Document</span>
                 </Button>
 
-                {onSendImage && (
-                     <Button variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
-                        <ImageIconLucide size={24} className="mb-1 text-purple-500"/>
-                         <span className="text-xs font-normal text-muted-foreground">Photo/Video</span>
-                    </Button>
-                )}
+                <Button variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
+                    <ImageIconLucide size={24} className="mb-1 text-purple-500"/>
+                        <span className="text-xs font-normal text-muted-foreground">Photo/Video</span>
+                </Button>
 
                 <Button variant="outline" size="sm" onClick={() => audioInputRef.current?.click()} className="flex flex-col h-auto py-3 items-center justify-center">
                     <Mic size={24} className="mb-1 text-red-500"/>

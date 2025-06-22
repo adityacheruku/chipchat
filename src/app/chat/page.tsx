@@ -44,6 +44,7 @@ export default function ChatPage() {
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
   const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
   const [chatSetupErrorMessage, setChatSetupErrorMessage] = useState<string | null>(null);
+  const [messageText, setMessageText] = useState(''); // State for InputBar text
 
   const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
   const [fullScreenUserData, setFullScreenUserData] = useState<User | null>(null);
@@ -292,15 +293,19 @@ export default function ChatPage() {
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [isAuthenticated, isAuthLoading, currentUser, router]);
 
-  const handleSendMessage = (text: string) => {
-    if (!currentUser || !activeChat || !isWsConnected) {
-        toast({ variant: 'destructive', title: 'Cannot Send Message', description: 'You are not connected to the chat service.' });
-        return;
+ const handleSendMessage = async (text: string) => {
+    if (!currentUser || !activeChat) {
+      toast({ variant: 'destructive', title: 'Cannot Send Message', description: 'Chat not initialized.' });
+      return;
     }
+    if (!text.trim()) return;
+
+    setMessageText('');
+    handleTyping(false);
 
     const clientTempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const optimisticMessage: MessageType = {
-      id: clientTempId, 
+      id: clientTempId,
       user_id: currentUser.id,
       chat_id: activeChat.id,
       text,
@@ -311,58 +316,82 @@ export default function ChatPage() {
       status: "sending" as MessageStatus,
       message_subtype: "text",
     };
-    setMessages(prev => [...prev, optimisticMessage].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+    setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
 
+    try {
+      if (isWsConnected) {
+        sendWsMessage({
+          event_type: "send_message",
+          chat_id: activeChat.id,
+          text,
+          client_temp_id: clientTempId,
+          message_subtype: "text",
+        });
+      } else {
+        const confirmedMessage = await api.sendMessageHttp(activeChat.id, {
+          text,
+          client_temp_id: clientTempId,
+          message_subtype: 'text',
+        });
+        handleWSMessageReceived(confirmedMessage);
+      }
 
-    sendWsMessage({
-      event_type: "send_message",
-      chat_id: activeChat.id,
-      text,
-      client_temp_id: clientTempId,
-      message_subtype: "text",
-    });
-    addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0,30)}"`, currentUser.id, currentUser.display_name);
+      addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0, 30)}"`, currentUser.id, currentUser.display_name);
 
-    if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) {
-      lastMessageTextRef.current = text;
-      aiSuggestMood(text);
-    }
-
-    // Progressive disclosure for notifications
-    if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
-        const hasSentFirstMessage = localStorage.getItem(FIRST_MESSAGE_SENT_KEY) === 'true';
-        if (!hasSentFirstMessage) {
-            localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true');
-            setTimeout(() => setShowNotificationPrompt(true), 2000); // Show prompt after a short delay
+      if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) {
+        lastMessageTextRef.current = text;
+        aiSuggestMood(text);
+      }
+      
+        // Progressive disclosure for notifications
+        if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
+            const hasSentFirstMessage = localStorage.getItem(FIRST_MESSAGE_SENT_KEY) === 'true';
+            if (!hasSentFirstMessage) {
+                localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true');
+                setTimeout(() => setShowNotificationPrompt(true), 2000); // Show prompt after a short delay
+            }
         }
+
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Failed to Send', description: error.message });
+      setMessages(prev => prev.map(m => m.id === clientTempId ? { ...m, status: 'failed' } : m));
     }
   };
 
-  const handleSendSticker = (stickerId: string) => {
-    if (!currentUser || !activeChat || !isWsConnected) {
-        toast({ variant: 'destructive', title: 'Cannot Send Sticker', description: 'You are not connected to the chat service.' });
-        return;
+  const handleSendSticker = async (stickerId: string) => {
+    if (!currentUser || !activeChat) {
+      toast({ variant: 'destructive', title: 'Cannot Send Sticker', description: 'Chat not initialized.' });
+      return;
     }
-
     const clientTempId = `temp_sticker_${Date.now()}`;
-    // No optimistic update for stickers, as we need the sticker_image_url from the backend.
-    // The message will appear once the WebSocket roundtrip is complete.
-    
-    sendWsMessage({
-        event_type: "send_message",
-        chat_id: activeChat.id,
-        sticker_id: stickerId,
-        client_temp_id: clientTempId,
-        message_subtype: "sticker",
-    });
-    addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
+    try {
+      if (isWsConnected) {
+        sendWsMessage({
+            event_type: "send_message",
+            chat_id: activeChat.id,
+            sticker_id: stickerId,
+            client_temp_id: clientTempId,
+            message_subtype: "sticker",
+        });
+      } else {
+        const confirmedMessage = await api.sendMessageHttp(activeChat.id, {
+            sticker_id: stickerId,
+            client_temp_id: clientTempId,
+            message_subtype: 'sticker'
+        });
+        handleWSMessageReceived(confirmedMessage);
+      }
+      addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: 'Failed to Send Sticker', description: error.message });
+    }
   };
 
 
   const handleSendMoodClip = async (clipType: MessageClipType, file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) {
-        toast({ variant: 'destructive', title: 'Cannot Send Clip', description: 'You are not connected to the chat service.' });
-        return;
+    if (!currentUser || !activeChat) {
+      toast({ variant: 'destructive', title: 'Cannot Send Clip', description: 'Chat not initialized.' });
+      return;
     }
     toast({ title: "Uploading clip..."});
     const clientTempId = `temp_clip_${Date.now()}`;
@@ -371,15 +400,23 @@ export default function ChatPage() {
         const placeholderText = clipType === 'audio'
             ? `${currentUser.display_name} sent an audio mood clip.`
             : `${currentUser.display_name} sent a video mood clip.`;
-        sendWsMessage({
-            event_type: "send_message",
+        
+        const messagePayload = {
             chat_id: activeChat.id,
             clip_type: clipType,
             clip_url: uploadResponse.file_url,
             clip_placeholder_text: placeholderText,
             client_temp_id: clientTempId,
-            message_subtype: "clip",
-        });
+            message_subtype: "clip" as MessageSubtype,
+        };
+        
+        if (isWsConnected) {
+            sendWsMessage({ event_type: "send_message", ...messagePayload });
+        } else {
+            const confirmedMessage = await api.sendMessageHttp(activeChat.id, messagePayload);
+            handleWSMessageReceived(confirmedMessage);
+        }
+        
         addAppEvent('moodClipSent', `${currentUser.display_name} sent a ${clipType} clip.`, currentUser.id, currentUser.display_name);
         toast({ title: "Mood Clip Sent!" });
     } catch (error: any) {
@@ -388,22 +425,28 @@ export default function ChatPage() {
   };
 
    const handleSendImage = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) {
-        toast({ variant: 'destructive', title: 'Cannot Send Image', description: 'You are not connected to the chat service.' });
+    if (!currentUser || !activeChat) {
+        toast({ variant: 'destructive', title: 'Cannot Send Image', description: 'Chat not initialized.' });
         return;
     }
     toast({ title: "Uploading image..." });
     const clientTempId = `temp_img_${Date.now()}`;
     try {
       const { image_url, image_thumbnail_url } = await api.uploadChatImage(file);
-      sendWsMessage({
-        event_type: "send_message",
+      const messagePayload = {
         chat_id: activeChat.id,
         image_url,
         image_thumbnail_url,
         client_temp_id: clientTempId,
-        message_subtype: "image",
-      });
+        message_subtype: "image" as MessageSubtype,
+      };
+
+      if (isWsConnected) {
+        sendWsMessage({ event_type: "send_message", ...messagePayload });
+      } else {
+        const confirmedMessage = await api.sendMessageHttp(activeChat.id, messagePayload);
+        handleWSMessageReceived(confirmedMessage);
+      }
       addAppEvent('messageSent', `${currentUser.display_name} sent an image.`, currentUser.id, currentUser.display_name);
       toast({ title: "Image Sent!" });
     } catch (error: any) {
@@ -412,22 +455,28 @@ export default function ChatPage() {
   };
 
   const handleSendDocument = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) {
-        toast({ variant: 'destructive', title: 'Cannot Send Document', description: 'You are not connected to the chat service.' });
+    if (!currentUser || !activeChat) {
+        toast({ variant: 'destructive', title: 'Cannot Send Document', description: 'Chat not initialized.' });
         return;
     }
     toast({ title: "Uploading document..." });
     const clientTempId = `temp_doc_${Date.now()}`;
     try {
       const uploadResponse = await api.uploadChatDocument(file);
-      sendWsMessage({
-        event_type: "send_message",
-        chat_id: activeChat.id,
-        document_url: uploadResponse.file_url,
-        document_name: uploadResponse.file_name,
-        client_temp_id: clientTempId,
-        message_subtype: "document",
-      });
+      const messagePayload = {
+          chat_id: activeChat.id,
+          document_url: uploadResponse.file_url,
+          document_name: uploadResponse.file_name,
+          client_temp_id: clientTempId,
+          message_subtype: "document" as MessageSubtype,
+      };
+
+      if (isWsConnected) {
+         sendWsMessage({ event_type: "send_message", ...messagePayload });
+      } else {
+         const confirmedMessage = await api.sendMessageHttp(activeChat.id, messagePayload);
+         handleWSMessageReceived(confirmedMessage);
+      }
       addAppEvent('messageSent', `${currentUser.display_name} sent a document: ${uploadResponse.file_name}.`, currentUser.id, currentUser.display_name);
       toast({ title: "Document Sent!" });
     } catch (error: any) {
@@ -436,30 +485,32 @@ export default function ChatPage() {
   };
 
   const handleSendVoiceMessage = async (file: File) => {
-    if (!currentUser || !activeChat || !isWsConnected) {
-        toast({ variant: 'destructive', title: 'Cannot Send Voice Message', description: 'You are not connected to the chat service.' });
+    if (!currentUser || !activeChat) {
+        toast({ variant: 'destructive', title: 'Cannot Send Voice Message', description: 'Chat not initialized.' });
         return;
     }
     toast({ title: "Uploading voice message..." });
     const clientTempId = `temp_audio_${Date.now()}`;
     try {
       const uploadResponse = await api.uploadVoiceMessage(file);
-      const placeholderText = `${currentUser.display_name} sent a voice message.`;
-      
-      const payload: Record<string, any> = {
-          event_type: "send_message",
+      const messagePayload = {
           chat_id: activeChat.id,
-          message_subtype: "voice_message",
-          clip_type: 'audio',
+          message_subtype: "voice_message" as MessageSubtype,
+          clip_type: 'audio' as MessageClipType,
           clip_url: uploadResponse.file_url,
-          clip_placeholder_text: placeholderText,
+          clip_placeholder_text: `${currentUser.display_name} sent a voice message.`,
           client_temp_id: clientTempId,
           duration_seconds: uploadResponse.duration_seconds,
           file_size_bytes: uploadResponse.file_size_bytes,
           audio_format: uploadResponse.audio_format,
       };
       
-      sendWsMessage(payload);
+      if (isWsConnected) {
+        sendWsMessage({ event_type: "send_message", ...messagePayload });
+      } else {
+        const confirmedMessage = await api.sendMessageHttp(activeChat.id, messagePayload);
+        handleWSMessageReceived(confirmedMessage);
+      }
       
       addAppEvent('messageSent', `${currentUser.display_name} sent a voice message.`, currentUser.id, currentUser.display_name);
       toast({ title: "Voice Message Sent!" });
@@ -468,11 +519,8 @@ export default function ChatPage() {
     }
   };
 
-  const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
-    if (!currentUser || !activeChat || !isWsConnected) {
-        toast({ variant: 'destructive', title: 'Cannot React', description: 'Not connected to chat service.' });
-        return;
-    }
+  const handleToggleReaction = useCallback(async (messageId: string, emoji: SupportedEmoji) => {
+    if (!currentUser || !activeChat) return;
     
     const RATE_LIMIT_MS = 500;
     const key = `${messageId}_${emoji}`;
@@ -482,6 +530,8 @@ export default function ChatPage() {
       return; 
     }
     lastReactionToggleTimes.current[key] = now;
+
+    const originalReactions = messages.find(m => m.id === messageId)?.reactions || {};
 
     setMessages(prevMessages => 
       prevMessages.map(msg => {
@@ -505,15 +555,32 @@ export default function ChatPage() {
       })
     );
 
-    sendWsMessage({
-      event_type: "toggle_reaction",
-      message_id: messageId,
-      chat_id: activeChat.id,
-      emoji: emoji,
-    });
-
-    addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
-  }, [currentUser, activeChat, isWsConnected, sendWsMessage, addAppEvent, toast]);
+    try {
+        if (isWsConnected) {
+            sendWsMessage({
+              event_type: "toggle_reaction",
+              message_id: messageId,
+              chat_id: activeChat.id,
+              emoji: emoji,
+            });
+        } else {
+            const updatedMessage = await api.toggleReactionHttp(messageId, emoji);
+            setMessages(prevMessages =>
+              prevMessages.map(msg =>
+                msg.id === updatedMessage.id ? updatedMessage : msg
+              )
+            );
+        }
+        addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
+    } catch(error: any) {
+        toast({ variant: 'destructive', title: 'Reaction Failed', description: error.message });
+        setMessages(prevMessages => 
+            prevMessages.map(msg => 
+                msg.id === messageId ? { ...msg, reactions: originalReactions } : msg
+            )
+        );
+    }
+  }, [currentUser, activeChat, isWsConnected, sendWsMessage, addAppEvent, toast, messages]);
 
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File) => {
     if (!currentUser) return;
@@ -720,8 +787,9 @@ export default function ChatPage() {
                 onSendDocument={handleSendDocument}
                 isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
-                disabled={false}
-                placeholder="Enter text..."
+                disabled={!otherUser || !activeChat}
+                messageText={messageText}
+                onTextChange={setMessageText}
               />
             </div>
           </ErrorBoundary>

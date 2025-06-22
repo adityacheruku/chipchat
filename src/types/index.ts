@@ -109,8 +109,8 @@ export interface NewMessageEventData {
 
 export interface MessageReactionUpdateEventData {
   event_type: "message_reaction_update";
-  message_id: string; // Changed from messageId
-  chat_id: string;    // Changed from chatId
+  message_id: string;
+  chat_id: string;
   reactions: Partial<Record<SupportedEmoji, string[]>>;
 }
 
