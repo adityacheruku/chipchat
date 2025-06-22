@@ -27,8 +27,6 @@ interface InputBarProps {
   isSending?: boolean;
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
-  messageText: string;
-  onTextChange: (text: string) => void;
 }
 
 const LONG_PRESS_DURATION = 300; // milliseconds
@@ -44,9 +42,8 @@ export default function InputBar({
   isSending = false,
   onTyping,
   disabled = false,
-  messageText,
-  onTextChange,
 }: InputBarProps) {
+  const [messageText, setMessageText] = useState('');
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
 
@@ -68,6 +65,7 @@ export default function InputBar({
   const audioInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null); // For direct camera capture
 
   const { toast } = useToast();
 
@@ -75,11 +73,12 @@ export default function InputBar({
     e.preventDefault();
     if (messageText.trim() && !isSending && !disabled) {
       onSendMessage(messageText.trim());
+      setMessageText('');
     }
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onTextChange(e.target.value);
+    setMessageText(e.target.value);
     if (disabled) return;
     if (e.target.value.trim() !== '') {
       onTyping(true);
@@ -102,7 +101,10 @@ export default function InputBar({
   };
 
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>, attachmentType: 'audio' | 'media' | 'document') => {
-    if (disabled) return;
+    if (disabled) {
+      toast({variant: 'destructive', title: 'Cannot Send', description: 'Chat service is not connected.'});
+      return;
+    }
     const file = event.target.files?.[0];
     if (file) {
         if (attachmentType === 'media') {
@@ -218,7 +220,11 @@ export default function InputBar({
   };
 
   const handleButtonPress = () => {
-    if (disabled || isSending || messageText.trim() !== '') return;
+    if (disabled) {
+        toast({variant: 'destructive', title: 'Cannot Record', description: 'Chat service is not connected.'});
+        return;
+    }
+    if (isSending || messageText.trim() !== '') return;
     
     // Device compatibility check
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -336,6 +342,27 @@ export default function InputBar({
               </PopoverContent>
             </Popover>
 
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="text-muted-foreground hover:text-accent hover:bg-accent/10 active:bg-accent/20 rounded-full focus-visible:ring-ring"
+                    aria-label="Use camera"
+                    disabled={isSending || disabled}
+                  >
+                    <Camera size={22} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Use camera</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             <Input
                 type="text"
                 placeholder="Enter text..."
@@ -347,10 +374,10 @@ export default function InputBar({
                 disabled={isSending || disabled}
             />
             <Button
-                type="submit"
+                type={messageText.trim() ? "submit" : "button"}
                 size="icon"
                 className="bg-accent hover:bg-accent/90 active:bg-accent/80 text-accent-foreground rounded-full focus-visible:ring-ring w-10 h-10 flex-shrink-0"
-                disabled={isSending || disabled || (messageText.trim() === '' && recordingStatus !== 'idle')}
+                disabled={isSending || disabled}
                 onMouseDown={handleButtonPress}
                 onMouseUp={handleButtonRelease}
                 onTouchStart={handleButtonPress}
@@ -361,6 +388,8 @@ export default function InputBar({
                 {isSending ? <Loader2 size={20} className="animate-spin" /> : sendButtonIcon}
             </Button>
         </form>
+        {/* Hidden file inputs */}
+        <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
         <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileSelect(e, 'media')} />
         <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileSelect(e, 'audio')} />
         <input type="file" ref={documentInputRef} accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={(e) => handleFileSelect(e, 'document')} />

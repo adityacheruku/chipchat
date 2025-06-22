@@ -44,7 +44,6 @@ export default function ChatPage() {
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
   const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
   const [chatSetupErrorMessage, setChatSetupErrorMessage] = useState<string | null>(null);
-  const [messageText, setMessageText] = useState(''); // State for InputBar text
 
   const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
   const [fullScreenUserData, setFullScreenUserData] = useState<User | null>(null);
@@ -300,7 +299,6 @@ export default function ChatPage() {
     }
     if (!text.trim()) return;
 
-    setMessageText('');
     handleTyping(false);
 
     const clientTempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -737,6 +735,7 @@ export default function ChatPage() {
 
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
   const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {};
+  const isInputDisabled = !isBrowserOnline || !isWsConnected;
 
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-screen p-0 sm:p-0 transition-colors duration-500 relative", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
@@ -787,9 +786,7 @@ export default function ChatPage() {
                 onSendDocument={handleSendDocument}
                 isSending={isLoadingAISuggestion}
                 onTyping={handleTyping}
-                disabled={!otherUser || !activeChat}
-                messageText={messageText}
-                onTextChange={setMessageText}
+                disabled={isInputDisabled}
               />
             </div>
           </ErrorBoundary>
