@@ -13,6 +13,7 @@ import { api } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
+import { useLongPress } from '@/hooks/useLongPress';
 
 interface StickerPickerProps {
     onStickerSelect: (stickerId: string) => void;
@@ -55,45 +56,68 @@ const StickerGrid = ({
         <ScrollArea className="h-64">
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 p-2">
                 {stickerList.map(sticker => (
-                    <div key={sticker.id} className="relative group/sticker">
-                        <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        onClick={() => onSelect(sticker)}
-                                        className="p-1 w-full h-full flex items-center justify-center rounded-md hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    >
-                                        <Image
-                                            src={sticker.image_url}
-                                            alt={sticker.name || 'Chat sticker'}
-                                            width={64}
-                                            height={64}
-                                            className="aspect-square object-contain"
-                                            unoptimized
-                                        />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{sticker.name || "Sticker"}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <button
-                            onClick={() => onToggleFavorite(sticker.id)}
-                            className={cn(
-                                "absolute top-0 right-0 p-0.5 rounded-full bg-card/70 text-muted-foreground opacity-0 group-hover/sticker:opacity-100 hover:text-yellow-500 focus:opacity-100 transition-opacity",
-                                favoriteStickerIds.has(sticker.id) && "opacity-100 text-yellow-400"
-                            )}
-                            aria-label={favoriteStickerIds.has(sticker.id) ? "Remove from favorites" : "Add to favorites"}
-                        >
-                            <Star size={16} className={cn(favoriteStickerIds.has(sticker.id) && "fill-current")} />
-                        </button>
-                    </div>
+                    <StickerItem
+                        key={sticker.id}
+                        sticker={sticker}
+                        onSelect={onSelect}
+                        onToggleFavorite={onToggleFavorite}
+                        isFavorite={favoriteStickerIds.has(sticker.id)}
+                    />
                 ))}
             </div>
         </ScrollArea>
     );
 };
+
+const StickerItem = ({ sticker, onSelect, onToggleFavorite, isFavorite }: { sticker: Sticker; onSelect: (sticker: Sticker) => void; onToggleFavorite: (stickerId: string) => void; isFavorite: boolean; }) => {
+    
+    const longPressEvents = useLongPress(() => {
+        onToggleFavorite(sticker.id);
+    }, {
+        threshold: 500, // 500ms for long press
+        onStart: () => document.getElementById(`sticker-${sticker.id}`)?.classList.add('scale-90'),
+        onFinish: () => document.getElementById(`sticker-${sticker.id}`)?.classList.remove('scale-90'),
+        onCancel: () => document.getElementById(`sticker-${sticker.id}`)?.classList.remove('scale-90'),
+    });
+
+    return (
+         <div 
+            id={`sticker-${sticker.id}`}
+            key={sticker.id} 
+            className="relative group/sticker transition-transform duration-150"
+            {...longPressEvents}
+        >
+            <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            onClick={() => onSelect(sticker)}
+                            className="p-1 w-full h-full flex items-center justify-center rounded-md hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            <Image
+                                src={sticker.image_url}
+                                alt={sticker.name || 'Chat sticker'}
+                                width={64}
+                                height={64}
+                                className="aspect-square object-contain"
+                                unoptimized
+                            />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{sticker.name || "Sticker"} (long-press to favorite)</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+            {isFavorite && (
+                 <div className="absolute top-1 right-1 p-0.5 rounded-full bg-card/70 text-yellow-400 pointer-events-none">
+                     <Star size={12} className="fill-current" />
+                 </div>
+            )}
+        </div>
+    );
+};
+
 
 export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
   const [packs, setPacks] = useState<StickerPack[]>([]);
@@ -234,7 +258,7 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
   const favoriteStickerIds = useMemo(() => new Set(favoriteStickers.map(s => s.id)), [favoriteStickers]);
 
   return (
-    <div className="w-[90vw] max-w-[340px] p-2 bg-card">
+    <div className="w-full p-2 bg-card">
       <div className="relative mb-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input

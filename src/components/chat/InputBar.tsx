@@ -78,6 +78,8 @@ export default function InputBar({
   const [stagedAttachments, setStagedAttachments] = useState<File[]>([]);
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
   const [emojiSearch, setEmojiSearch] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+
 
   // Voice recording state
   type RecordingStatus = 'idle' | 'recording' | 'recorded' | 'sending';
@@ -164,6 +166,38 @@ export default function InputBar({
   const handleRemoveAttachment = (index: number) => {
     setStagedAttachments(prev => prev.filter((_, i) => i !== index));
   };
+  
+  const handleDragEvents = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    handleDragEvents(e);
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    handleDragEvents(e);
+    // Use relatedTarget to prevent flickering when moving over child elements
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      setIsDragging(false);
+    }
+  };
+  
+  const handleDrop = (e: React.DragEvent) => {
+    handleDragEvents(e);
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      setStagedAttachments(prev => [...prev, ...files]);
+      e.dataTransfer.clearData();
+    }
+  };
+
 
   // --- Voice Recording Logic ---
   const cleanupRecording = useCallback(() => {
@@ -188,6 +222,7 @@ export default function InputBar({
     }
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (navigator.vibrate) navigator.vibrate(50);
         mediaRecorderRef.current = new MediaRecorder(stream);
         audioChunksRef.current = [];
         mediaRecorderRef.current.ondataavailable = (event) => audioChunksRef.current.push(event.data);
@@ -198,6 +233,7 @@ export default function InputBar({
             setRecordingStatus('recorded');
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
             stream.getTracks().forEach(track => track.stop());
+            if (navigator.vibrate) navigator.vibrate(50);
         };
         mediaRecorderRef.current.start();
         setRecordingStatus('recording');
@@ -293,7 +329,16 @@ export default function InputBar({
   );
 
   return (
-    <div className="p-3 border-t border-border bg-card rounded-b-lg">
+    <div 
+        className={cn(
+            "p-3 border-t border-border bg-card rounded-b-lg transition-colors duration-300",
+            isDragging && "bg-primary/20 border-primary"
+        )}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragEvents}
+        onDrop={handleDrop}
+    >
       {stagedAttachments.length > 0 && (
           <div className="mb-2 p-2 border rounded-lg bg-muted/50">
               <ScrollArea className="h-24 whitespace-nowrap">
