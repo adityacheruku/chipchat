@@ -230,7 +230,6 @@ export default function ChatPage() {
   }, [otherUser, toast]); 
 
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
-    token,
     onMessageReceived: handleWSMessageReceived,
     onReactionUpdate: handleWSReactionUpdate,
     onPresenceUpdate: handleWSPresenceUpdate,
@@ -497,8 +496,8 @@ export default function ChatPage() {
     if (protocol === 'sse') {
       return <div className="fixed top-0 left-0 right-0 bg-amber-500 text-black p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Wifi size={16} />Connected via fallback. Some features may be slower.</div>;
     }
-    if (protocol === 'connecting') {
-      return <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" />Connecting...</div>;
+    if (protocol === 'connecting' || protocol === 'syncing') {
+      return <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" />{protocol === 'syncing' ? 'Syncing...' : 'Connecting...'}</div>;
     }
     return null;
   };

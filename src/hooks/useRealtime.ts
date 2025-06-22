@@ -1,23 +1,13 @@
 
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import type { WebSocketEventData, Message, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, HeartbeatClientEvent, UserProfileUpdateEventData, ALL_EVENT_TYPES, EventPayload } from '@/types';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from './use-toast';
-import { api } from '@/services/api';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://a93b-49-43-230-78.ngrok-free.app';
-const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
-const EVENTS_BASE_URL = API_BASE_URL;
-
-const HEARTBEAT_INTERVAL = 30000;
-const SERVER_ACTIVITY_TIMEOUT = 45000;
-const LAST_SEQUENCE_KEY = 'chirpChat_lastSequence';
-
-export type RealtimeProtocol = 'connecting' | 'websocket' | 'sse' | 'disconnected' | 'fallback' | 'syncing';
+import { realtimeService, type RealtimeProtocol } from '@/services/realtimeService';
+import type { Message, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, EventPayload } from '@/types';
 
 interface UseRealtimeOptions {
-  token: string | null;
   onMessageReceived: (message: Message) => void;
   onReactionUpdate: (data: MessageReactionUpdateEventData) => void;
   onPresenceUpdate: (data: UserPresenceUpdateEventData) => void;
@@ -27,225 +17,54 @@ interface UseRealtimeOptions {
   onMessageAck: (data: MessageAckEventData) => void;
 }
 
-const pendingMessages = new Map<string, Record<string, any>>();
-
 export function useRealtime({
-  token,
-  onMessageReceived, onReactionUpdate, onPresenceUpdate, onTypingUpdate, onThinkingOfYouReceived, onUserProfileUpdate, onMessageAck,
+  onMessageReceived, onReactionUpdate, onPresenceUpdate, onTypingUpdate, onThinkingOfYouReceived, onUserProfileUpdate, onMessageAck
 }: UseRealtimeOptions) {
-  const wsRef = useRef<WebSocket | null>(null);
-  const sseRef = useRef<EventSource | null>(null);
-  const [protocol, setProtocol] = useState<RealtimeProtocol>('disconnected');
-  const [isBrowserOnline, setIsBrowserOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const { token, logout } = useAuth();
   const { toast } = useToast();
-  
-  const cleanupRef = useRef<() => void>(() => {});
-  const lastSequenceRef = useRef<number>(0);
-  const isSyncingRef = useRef<boolean>(false);
+  const [protocol, setProtocol] = useState<RealtimeProtocol>(realtimeService.getProtocol());
 
   useEffect(() => {
-    const storedSeq = typeof window !== 'undefined' ? localStorage.getItem(LAST_SEQUENCE_KEY) : null;
-    lastSequenceRef.current = storedSeq ? parseInt(storedSeq, 10) : 0;
-  }, []);
-
-  const handleEvent = useCallback((data: EventPayload) => {
-    if (data.sequence && data.sequence > lastSequenceRef.current) {
-        lastSequenceRef.current = data.sequence;
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LAST_SEQUENCE_KEY, String(data.sequence));
+    const handleEvent = (eventType: string, data: any) => {
+      if (eventType === 'protocol-change') {
+        setProtocol(data);
+      } else if (eventType === 'auth-error') {
+        toast({ variant: 'destructive', title: 'Authentication Failed', description: 'Please re-login.' });
+        logout();
+      } else if (eventType === 'error') {
+        toast({ variant: 'destructive', title: data.title, description: data.description });
+      } else if (eventType === 'event') {
+        const payload = data as EventPayload;
+        switch (payload.event_type) {
+          case 'new_message': onMessageReceived((payload as NewMessageEventData).message); break;
+          case 'message_reaction_update': onReactionUpdate(payload as MessageReactionUpdateEventData); break;
+          case 'user_presence_update': onPresenceUpdate(payload as UserPresenceUpdateEventData); break;
+          case 'typing_indicator': onTypingUpdate(payload as TypingIndicatorEventData); break;
+          case 'thinking_of_you_received': onThinkingOfYouReceived(payload as ThinkingOfYouReceivedEventData); break;
+          case 'user_profile_update': onUserProfileUpdate(payload as UserProfileUpdateEventData); break;
+          case 'message_ack': onMessageAck(payload as MessageAckEventData); break;
+          case 'error': toast({ variant: 'destructive', title: 'Server Error', description: payload.detail }); break;
         }
-    }
-    
-    switch (data.event_type) {
-      case 'new_message': onMessageReceived((data as NewMessageEventData).message); break;
-      case 'message_reaction_update': onReactionUpdate(data as MessageReactionUpdateEventData); break;
-      case 'user_presence_update': onPresenceUpdate(data as UserPresenceUpdateEventData); break;
-      case 'typing_indicator': onTypingUpdate(data as TypingIndicatorEventData); break;
-      case 'thinking_of_you_received': onThinkingOfYouReceived(data as ThinkingOfYouReceivedEventData); break;
-      case 'user_profile_update': onUserProfileUpdate(data as UserProfileUpdateEventData); break;
-      case 'message_ack': 
-        onMessageAck(data as MessageAckEventData);
-        pendingMessages.delete(data.client_temp_id);
-        break;
-      case 'error': toast({ variant: 'destructive', title: 'Server Error', description: data.detail }); break;
-    }
-  }, [onMessageReceived, onReactionUpdate, onPresenceUpdate, onTypingUpdate, onThinkingOfYouReceived, onUserProfileUpdate, onMessageAck, toast]);
-
-  const handleSync = useCallback(async () => {
-    if (isSyncingRef.current) return;
-    isSyncingRef.current = true;
-    setProtocol('syncing');
-    try {
-        const missedEvents = await api.syncEvents(lastSequenceRef.current);
-        if (missedEvents && missedEvents.length > 0) {
-            console.log(`Sync: processing ${missedEvents.length} missed events.`);
-            missedEvents.forEach(event => handleEvent(event));
-        }
-    } catch (error) {
-        console.error("Failed to sync events:", error);
-        toast({variant: 'destructive', title: 'Sync Failed', description: 'Could not retrieve missed messages.'});
-    } finally {
-        isSyncingRef.current = false;
-        // The protocol will be set to 'websocket' or 'sse' by the connect function after sync.
-    }
-  }, [handleEvent, toast]);
-
-
-  const connect = useCallback(() => {
-    if (!token || !isBrowserOnline) {
-      setProtocol('disconnected');
-      return;
-    }
-
-    cleanupRef.current();
-    setProtocol('connecting');
-
-    let heartbeatInterval: NodeJS.Timeout;
-    let activityTimeout: NodeJS.Timeout;
-
-    const resetActivityTimeout = () => {
-      clearTimeout(activityTimeout);
-      activityTimeout = setTimeout(() => {
-        console.warn('Realtime: Server activity timeout. Closing connection.');
-        wsRef.current?.close(1006, 'Server activity timeout');
-      }, SERVER_ACTIVITY_TIMEOUT);
-    };
-    
-    const startSSEFallback = async () => {
-        if (!token) return;
-        console.log("WebSocket failed. Falling back to SSE.");
-        wsRef.current = null;
-        await handleSync();
-
-        setProtocol('sse');
-        const sseUrl = `${EVENTS_BASE_URL}/events/subscribe?token=${encodeURIComponent(token)}`;
-        const eventSource = new EventSource(sseUrl, { withCredentials: false });
-        sseRef.current = eventSource;
-
-        eventSource.onopen = () => console.log("SSE connection established.");
-        eventSource.onerror = (err) => {
-            console.error("SSE connection error:", err);
-            eventSource.close();
-            sseRef.current = null;
-            setProtocol('disconnected');
-        };
-        
-        const sseMessageHandler = (event: MessageEvent) => {
-            try {
-                const data = JSON.parse(event.data) as EventPayload;
-                handleEvent(data);
-            } catch (e) {
-                console.error("Failed to parse SSE event data:", e);
-            }
-        };
-        
-        Object.values(ALL_EVENT_TYPES).forEach(type => eventSource.addEventListener(type, sseMessageHandler));
-
-        cleanupRef.current = () => {
-            console.log("Cleaning up SSE connection.");
-            Object.values(ALL_EVENT_TYPES).forEach(type => eventSource.removeEventListener(type, sseMessageHandler));
-            eventSource.close();
-            sseRef.current = null;
-        };
-    };
-    
-    const wsUrl = `${WS_BASE_URL}/ws/connect?token=${encodeURIComponent(token)}`;
-    const socket = new WebSocket(wsUrl);
-    wsRef.current = socket;
-    
-    socket.onopen = async () => {
-      console.log('WebSocket connected. Starting sync...');
-      await handleSync();
-      setProtocol('websocket');
-      resetActivityTimeout();
-      if (pendingMessages.size > 0) {
-        console.log(`WebSocket: Resending ${pendingMessages.size} pending messages.`);
-        pendingMessages.forEach(payload => socket.send(JSON.stringify(payload)));
       }
-      heartbeatInterval = setInterval(() => {
-        if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ event_type: "HEARTBEAT" } as HeartbeatClientEvent));
-        }
-      }, HEARTBEAT_INTERVAL);
     };
-
-    socket.onmessage = (event) => {
-        resetActivityTimeout();
-        try {
-            const data = JSON.parse(event.data as string) as EventPayload;
-            handleEvent(data);
-        } catch (error) {
-            console.error('Failed to parse WebSocket message:', error);
-        }
-    };
-
-    socket.onclose = (event) => {
-        console.warn(`WebSocket disconnected. Code: ${event.code}, Clean: ${event.wasClean}`);
-        clearInterval(heartbeatInterval);
-        clearTimeout(activityTimeout);
-        wsRef.current = null;
-        
-        if (event.code === 1008) { // Policy Violation
-            setProtocol('disconnected');
-            toast({ variant: 'destructive', title: 'Authentication Failed', description: 'Please re-login.' });
-            return;
-        }
-        
-        startSSEFallback();
-    };
-
-    cleanupRef.current = () => {
-        console.log("Cleaning up WebSocket connection.");
-        clearInterval(heartbeatInterval);
-        clearTimeout(activityTimeout);
-        if(socket && socket.readyState !== WebSocket.CLOSED) {
-           socket.close(1000, 'Client initiated cleanup');
-        }
-        wsRef.current = null;
-    };
-  }, [token, isBrowserOnline, handleEvent, handleSync, toast]);
-
-  const sendMessage = useCallback((payload: Record<string, any>) => {
-    if (payload.event_type === 'send_message' && payload.client_temp_id) {
-        pendingMessages.set(payload.client_temp_id, payload);
-    }
     
-    if (protocol === 'websocket' && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(payload));
-    } else if (protocol === 'sse' && payload.event_type !== 'start_typing' && payload.event_type !== 'stop_typing') {
-      if (payload.event_type === 'send_message') {
-          const { chat_id, ...messageData } = payload;
-          api.sendMessageHttp(chat_id, messageData).catch(err => {
-              toast({ variant: 'destructive', title: 'Send Failed (HTTP)', description: err.message });
-              pendingMessages.delete(payload.client_temp_id);
-          });
-      } else {
-           console.warn(`Cannot send event type "${payload.event_type}" over SSE/HTTP channel.`);
-      }
-    } else if (protocol !== 'websocket' && protocol !== 'sse') {
-        toast({ variant: 'destructive', title: 'Not Connected', description: 'Cannot send message. Please check your connection.' });
+    realtimeService.subscribe(handleEvent);
+
+    if (token) {
+      realtimeService.connect(token);
+    } else {
+      realtimeService.disconnect();
     }
-  }, [protocol, toast]);
-
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsBrowserOnline(true);
-      if (!wsRef.current && !sseRef.current) connect();
-    };
-    const handleOffline = () => setIsBrowserOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    if (token) connect();
     
     return () => {
-      cleanupRef.current();
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      realtimeService.unsubscribe(handleEvent);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, logout, toast, onMessageReceived, onReactionUpdate, onPresenceUpdate, onTypingUpdate, onThinkingOfYouReceived, onUserProfileUpdate, onMessageAck]);
 
-  return { protocol, sendMessage, isBrowserOnline };
+
+  return { 
+    protocol, 
+    sendMessage: realtimeService.sendMessage, 
+    isBrowserOnline: typeof navigator !== 'undefined' ? navigator.onLine : true
+  };
 }
