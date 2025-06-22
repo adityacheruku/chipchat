@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, useMemo, useCallback } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift } from 'lucide-react';
