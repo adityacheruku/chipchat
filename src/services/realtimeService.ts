@@ -4,7 +4,7 @@
 import type { Message, WebSocketEventData, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, HeartbeatClientEvent, EventPayload } from '@/types';
 import { api } from './api';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://a93b-49-43-230-78.ngrok-free.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://ef9e-49-43-230-78.ngrok-free.app';
 const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 const EVENTS_BASE_URL = API_BASE_URL;
 

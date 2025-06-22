@@ -44,7 +44,7 @@ Instrumentator(
 origins = [
     "http://localhost:3000",
     "http://localhost:9002",
-    "https://ded3-49-43-230-78.ngrok-free.app", # Updated ngrok link
+    "https://ef9e-49-43-230-78.ngrok-free.app", # Updated ngrok link
     "https://*.vercel.app", # Allow any vercel subdomain
 ]
 
