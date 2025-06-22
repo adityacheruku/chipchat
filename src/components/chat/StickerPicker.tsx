@@ -151,7 +151,7 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
   const fetchFavorites = useCallback(async () => {
     setStickersStatus(prev => ({...prev, favorites: 'loading'}));
     try {
-        const response = await api.toggleFavoriteSticker('00000000-0000-0000-0000-000000000001'); // Dummy ID to fetch list
+        const response = await api.getFavoriteStickers();
         setFavoriteStickers(response.stickers);
         setStickersStatus(prev => ({...prev, favorites: 'success'}));
     } catch (e) {

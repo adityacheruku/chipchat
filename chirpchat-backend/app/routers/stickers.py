@@ -115,6 +115,36 @@ async def get_recent_stickers(
         logger.error(f"Error fetching recent stickers for user {user_id_str}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An error occurred while retrieving recent stickers.")
 
+@router.get("/favorites", response_model=StickerListResponse)
+async def get_favorite_stickers(
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    """Retrieve user's favorite stickers."""
+    user_id_str = str(current_user.id)
+    logger.info(f"User {user_id_str} requesting favorite stickers.")
+    
+    try:
+        favs_resp = await db_manager.get_table("user_favorite_stickers").select("sticker_id").eq("user_id", user_id_str).order("favorited_at", desc=True).execute()
+        
+        if not favs_resp or not favs_resp.data:
+            return StickerListResponse(stickers=[])
+            
+        favorite_sticker_ids = [str(row['sticker_id']) for row in favs_resp.data]
+        
+        stickers_resp = await db_manager.get_table("stickers").select("*").in_("id", favorite_sticker_ids).execute()
+        
+        if not stickers_resp or not stickers_resp.data:
+            return StickerListResponse(stickers=[])
+
+        sticker_map = {str(sticker['id']): sticker for sticker in stickers_resp.data}
+        ordered_stickers = [sticker_map[sticker_id] for sticker_id in favorite_sticker_ids if sticker_id in sticker_map]
+
+        return StickerListResponse(stickers=ordered_stickers)
+    except Exception as e:
+        logger.error(f"Error fetching favorite stickers for user {user_id_str}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while retrieving favorite stickers.")
+
+
 @router.post("/favorites/toggle", response_model=StickerListResponse)
 async def toggle_favorite_sticker(
     favorite_toggle: StickerFavoriteToggle,
@@ -138,23 +168,8 @@ async def toggle_favorite_sticker(
             }).execute()
             logger.info(f"User {user_id_str} added sticker {sticker_id_str} to favorites.")
             
-        # Return the user's full list of favorite stickers
-        all_favs_resp = await db_manager.get_table("user_favorite_stickers").select("sticker_id").eq("user_id", user_id_str).order("favorited_at", desc=True).execute()
-        
-        if not all_favs_resp or not all_favs_resp.data:
-            return StickerListResponse(stickers=[])
-            
-        favorite_sticker_ids = [str(row['sticker_id']) for row in all_favs_resp.data]
-        
-        if not favorite_sticker_ids:
-            return StickerListResponse(stickers=[])
-
-        stickers_resp = await db_manager.get_table("stickers").select("*").in_("id", favorite_sticker_ids).execute()
-        
-        sticker_map = {str(sticker['id']): sticker for sticker in stickers_resp.data}
-        ordered_stickers = [sticker_map[sticker_id] for sticker_id in favorite_sticker_ids if sticker_id in sticker_map]
-
-        return StickerListResponse(stickers=ordered_stickers)
+        # Instead of duplicating code, just call the get_favorite_stickers function
+        return await get_favorite_stickers(current_user)
 
     except Exception as e:
         logger.error(f"Error toggling favorite sticker for user {user_id_str}: {e}", exc_info=True)

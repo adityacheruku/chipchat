@@ -57,7 +57,7 @@ class RealtimeService {
     this.setProtocol('disconnected');
   }
 
-  public sendMessage(payload: Record<string, any>) {
+  public sendMessage = (payload: Record<string, any>) => {
     if (payload.event_type === 'send_message' && payload.client_temp_id) {
         pendingMessages.set(payload.client_temp_id, payload);
     }

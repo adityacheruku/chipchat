@@ -329,6 +329,13 @@ export const api = {
     return handleResponse<StickerListResponse>(response);
   },
 
+  getFavoriteStickers: async (): Promise<StickerListResponse> => {
+    const response = await fetch(`${API_BASE_URL}/stickers/favorites`, {
+      headers: getApiHeaders(),
+    });
+    return handleResponse<StickerListResponse>(response);
+  },
+
   toggleFavoriteSticker: async (stickerId: string): Promise<StickerListResponse> => {
     const response = await fetch(`${API_BASE_URL}/stickers/favorites/toggle`, {
       method: 'POST',
