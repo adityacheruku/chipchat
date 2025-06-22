@@ -23,7 +23,6 @@ class UserInDB(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
-        orm_mode = True # To allow Pydantic to work with ORM-like objects (even though we use dicts from Supabase)
         from_attributes = True # Supabase returns dicts, this helps if we ever map them directly
 
 # Helper functions directly related to this conceptual model representation

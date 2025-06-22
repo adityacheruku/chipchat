@@ -34,8 +34,6 @@ app = FastAPI(
 # Instrument the app with Prometheus metrics.
 # This exposes a /metrics endpoint.
 Instrumentator(
-    should_instrument_requests=True,
-    should_instrument_responses=True,
     excluded_handlers=["/metrics", "/health"],
 ).instrument(app).expose(app)
 
