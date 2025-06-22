@@ -130,7 +130,7 @@ export default function ChatPage() {
 
         if (chatSession) {
             const messagesData = await api.getMessages(chatSession.id);
-            setMessages(messagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent_to_server' })).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+            setMessages(messagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' })).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
         } else {
             throw new Error("Failed to establish a chat session with your partner.");
         }
@@ -167,11 +167,11 @@ export default function ChatPage() {
         if (prevMessages.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)) {
             return prevMessages.map(m => 
                 (m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)
-                ? { ...newMessageFromServer, status: newMessageFromServer.status || 'sent_to_server' }
+                ? { ...newMessageFromServer, status: newMessageFromServer.status || 'sent' }
                 : m
             ).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         }
-        return [...prevMessages, { ...newMessageFromServer, status: newMessageFromServer.status || 'sent_to_server' }]
+        return [...prevMessages, { ...newMessageFromServer, status: newMessageFromServer.status || 'sent' }]
             .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
 
@@ -307,7 +307,7 @@ export default function ChatPage() {
       if (!currentUser || !activeChat) return;
 
       const clientTempId = uuidv4();
-      const optimisticMessage: Message = {
+      const optimisticMessage: MessageType = {
         id: clientTempId,
         user_id: currentUser.id,
         chat_id: activeChat.id,
@@ -341,6 +341,7 @@ export default function ChatPage() {
               client_temp_id: clientTempId,
               message_subtype: subtype,
               ...uploadResult,
+              clip_url: uploadResult.file_url || uploadResult.image_url,
           };
           
           sendMessage(messagePayload);

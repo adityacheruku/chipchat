@@ -1,3 +1,4 @@
+
 from typing import List, Optional, Dict
 from uuid import UUID
 from pydantic import BaseModel, Field
@@ -31,11 +32,11 @@ SUPPORTED_EMOJIS = [
 SupportedEmoji = str # Use Pydantic enum or validator for stricter check
 
 class MessageStatusEnum(str, enum.Enum):
-    SENDING = "sending" # Client-side status before server confirmation
-    SENT_TO_SERVER = "sent_to_server" # Server has persisted it
-    DELIVERED_TO_RECIPIENT = "delivered_to_recipient" # Future: Confirmed delivery to recipient's device
-    READ_BY_RECIPIENT = "read_by_recipient" # Future: Confirmed read by recipient
-    FAILED = "failed" # If sending failed
+    SENDING = "sending"
+    SENT = "sent" # Renamed from sent_to_server
+    DELIVERED = "delivered" # Renamed from delivered_to_recipient
+    READ = "read" # Renamed from read_by_recipient
+    FAILED = "failed"
 
 class MessageBase(BaseModel):
     text: Optional[str] = None
@@ -73,7 +74,7 @@ class MessageInDB(MessageBase):
     created_at: datetime
     updated_at: datetime
     reactions: Optional[Dict[SupportedEmoji, List[UUID]]] = Field(default_factory=dict)
-    status: Optional[MessageStatusEnum] = MessageStatusEnum.SENT_TO_SERVER # Default status when fetched/created by server
+    status: Optional[MessageStatusEnum] = MessageStatusEnum.SENT # Default status when fetched/created by server
     client_temp_id: Optional[str] = None # Store the client's temporary ID
 
     # To show stickers in chat list, we need to join and get the URL

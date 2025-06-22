@@ -170,7 +170,7 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
         "document_url": message_create.document_url,
         "document_name": message_create.document_name,
         "client_temp_id": client_temp_id, 
-        "status": MessageStatusEnum.SENT_TO_SERVER.value, 
+        "status": MessageStatusEnum.SENT.value, 
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "reactions": {},
@@ -261,5 +261,3 @@ async def handle_ping(data: Dict[str, Any], current_user: UserPublic):
         sender=current_user,
         recipient_id=recipient_user_id
     )
-
-

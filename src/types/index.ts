@@ -12,8 +12,8 @@ export const ALL_MOODS: Mood[] = ["Happy", "Sad", "Neutral", "Excited", "Thought
 //
 export type SupportedEmoji = string; // Using string to allow any emoji
 export const ALL_SUPPORTED_EMOJIS: SupportedEmoji[] = [
-  // Add your custom emojis here. For example:
-  // '👍', '❤️', '😂', '😮', '😢', '🙏'
+    // Add your custom emojis here. For example:
+    // '👍', '❤️', '😂', '😮', '😢', '🙏'
 ];
 
 
@@ -35,7 +35,7 @@ export interface UserInToken extends User {}
 
 
 export type MessageClipType = 'audio' | 'video';
-export type MessageStatus = "uploading" | "sending" | "sent_to_server" | "delivered_to_recipient" | "read_by_recipient" | "failed";
+export type MessageStatus = "uploading" | "sending" | "sent" | "delivered" | "read" | "failed";
 export type MessageSubtype = 'text' | 'sticker' | 'clip' | 'image' | 'document' | 'voice_message' | 'emoji_only';
 
 
