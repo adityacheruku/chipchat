@@ -146,6 +146,9 @@ async def toggle_favorite_sticker(
             
         favorite_sticker_ids = [str(row['sticker_id']) for row in all_favs_resp.data]
         
+        if not favorite_sticker_ids:
+            return StickerListResponse(stickers=[])
+
         stickers_resp = await db_manager.get_table("stickers").select("*").in_("id", favorite_sticker_ids).execute()
         
         sticker_map = {str(sticker['id']): sticker for sticker in stickers_resp.data}

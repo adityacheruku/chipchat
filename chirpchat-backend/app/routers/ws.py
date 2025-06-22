@@ -12,6 +12,7 @@ from app.chat.schemas import MessageCreate, MessageInDB, ReactionToggle, Support
 from app.database import db_manager
 from app.utils.logging import logger
 from app.notifications.service import notification_service # Import notification service
+from app.chat.routes import get_message_with_details_from_db # Import the helper function
 
 from app.config import settings
 from jose import jwt, JWTError, ExpiredSignatureError, JWTClaimsError
@@ -244,16 +245,13 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
 
                     await db_manager.get_table("chats").update({"updated_at": msg_now.isoformat()}).eq("id", str(chat_id)).execute()
                     
-                    # Fetch message with sticker_image_url for broadcast
-                    new_msg_id = insert_result_obj.data[0]['id']
-                    final_msg_resp = await db_manager.admin_client.rpc('get_message_with_details', {'p_message_id': new_msg_id}).maybe_single().execute()
-                    
-                    if not final_msg_resp or not final_msg_resp.data:
+                    new_msg_id = UUID(insert_result_obj.data[0]['id'])
+                    message_out = await get_message_with_details_from_db(new_msg_id)
+
+                    if not message_out:
                         logger.error(f"Could not retrieve message details for broadcast after insert. Message ID: {new_msg_id}")
-                        # Fallback to sending without sticker url
-                        message_out = MessageInDB(**insert_result_obj.data[0])
-                    else:
-                        message_out = MessageInDB(**final_msg_resp.data)
+                        await websocket.send_json({"event_type": "error", "detail": "Failed to retrieve message after sending."})
+                        continue
 
                     await manager.broadcast_chat_message(str(chat_id), message_out, db_manager)
                     
