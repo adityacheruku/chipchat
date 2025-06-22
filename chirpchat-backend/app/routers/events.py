@@ -1,11 +1,11 @@
 
 import asyncio
 import json
-from fastapi import APIRouter, Request, Query, status
+from fastapi import APIRouter, Request, Query, status, Depends, Response
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 from typing import List, Dict, Any, Optional
 
-from app.auth.dependencies import try_get_user_from_token
+from app.auth.dependencies import try_get_user_from_token, get_current_user
 from app.auth.schemas import UserPublic
 from app.redis_client import get_redis_client, redis_manager
 from app.websocket.manager import BROADCAST_CHANNEL, EVENT_LOG_KEY
