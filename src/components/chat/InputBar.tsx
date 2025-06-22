@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
 import type { MessageClipType } from '@/types';
@@ -370,7 +371,13 @@ export default function InputBar({
                         </SheetHeader>
                         <TabsContent value="emoji" className="flex-grow overflow-hidden mt-0">
                             <div className="p-2">
-                                <Input placeholder="Search emojis..." value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} className="w-full bg-muted border-none focus-visible:ring-ring" />
+                                <Input
+                                    id="emoji-search"
+                                    placeholder="Search emojis..."
+                                    value={emojiSearch}
+                                    onChange={(e) => setEmojiSearch(e.target.value)}
+                                    className="w-full bg-muted border-none focus-visible:ring-ring"
+                                />
                             </div>
                             {recentEmojis.length > 0 && !emojiSearch && (
                                 <div className="px-2 pb-2 border-b">
