@@ -12,7 +12,7 @@ export interface User {
   display_name: string;
   avatar_url: string | null;
   mood: Mood;
-  phone: string; 
+  phone?: string | null; 
   email?: string | null; 
   is_online?: boolean;
   last_seen?: string | null; // ISO Date string

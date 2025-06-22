@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot, AlertCircle, RefreshCw } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot, AlertTriangle, RefreshCw } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -32,6 +32,7 @@ interface MessageBubbleProps {
   onToggleReaction: (messageId: string, emoji: SupportedEmoji) => void;
   onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
   allUsers: Record<string, User>;
+  onRetrySend?: (message: Message) => void;
 }
 
 function formatDuration(seconds: number | null | undefined): string {
@@ -130,7 +131,7 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
     if (hasError) {
         return (
             <div className={cn("flex items-center gap-2 text-destructive", isCurrentUser ? "text-red-300" : "text-red-500")}>
-                <AlertCircle size={18} />
+                <AlertTriangle size={18} />
                 <span className="text-sm">Audio failed to load</span>
             </div>
         );
@@ -173,7 +174,7 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
 AudioPlayer.displayName = "AudioPlayer";
 
 
-function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers }: MessageBubbleProps) {
+function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, allUsers, onRetrySend }: MessageBubbleProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   const prevReactionsRef = useRef<Message['reactions']>();
@@ -187,7 +188,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       const prevCount = prevReactionsRef.current?.[emoji]?.length || 0;
       const currentCount = message.reactions?.[emoji]?.length || 0;
 
-      if (currentCount !== prevCount) {
+      if (currentCount > prevCount) {
         newAnimations[emoji] = true;
         hasChanges = true;
       }
@@ -228,8 +229,10 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     if (message.created_at && message.status !== 'sending' && message.status !== 'uploading') {
         const timestampDate = parseISO(message.created_at);
         formattedTime = format(timestampDate, 'p');
-    } else if (message.status === 'sending' || message.status === 'uploading') {
-        formattedTime = message.status === 'uploading' ? 'Uploading...' : 'Sending...';
+    } else if (message.status === 'uploading') {
+        formattedTime = 'Uploading...';
+    } else if (message.status === 'sending') {
+        formattedTime = 'Sending...';
     }
   } catch(e) {
     console.warn("Could not parse message timestamp:", message.created_at)
@@ -319,7 +322,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   };
   
   const isMediaMessage = message.status === 'uploading' || isStickerMessage;
-  const showRetry = message.status === 'failed';
+  const showRetry = message.status === 'failed' && onRetrySend;
 
   return (
     <div className={cn('flex flex-col group', alignmentClass)}>
@@ -347,7 +350,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
         </div>
 
         <div className="self-center px-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {message.status !== 'uploading' && message.status !== 'sending' && (
+          {message.status !== 'uploading' && message.status !== 'sending' && message.status !== 'failed' && (
             <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full text-muted-foreground hover:text-foreground">
@@ -378,7 +381,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                         <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full text-destructive hover:bg-destructive/10">
+                         <Button variant="ghost" size="icon" onClick={() => onRetrySend(message)} className="w-7 h-7 rounded-full text-destructive hover:bg-destructive/10">
                             <RefreshCw size={14} />
                             <span className="sr-only">Retry sending</span>
                         </Button>
