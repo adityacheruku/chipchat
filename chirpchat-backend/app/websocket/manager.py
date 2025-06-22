@@ -92,7 +92,7 @@ async def send_ack(websocket: WebSocket, client_temp_id: str, server_id: Optiona
         "event_type": "message_ack",
         "client_temp_id": client_temp_id,
         "server_assigned_id": server_id or client_temp_id,
-        "status": MessageStatusEnum.SENT_TO_SERVER.value,
+        "status": MessageStatusEnum.SENT.value,
         "timestamp": "now()",
     }
     await send_personal_message(websocket, ack_payload)

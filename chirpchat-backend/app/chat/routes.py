@@ -195,7 +195,7 @@ async def send_message_http(
         "id": str(message_id),
         "chat_id": str(chat_id),
         "user_id": str(current_user.id),
-        "status": MessageStatusEnum.SENT_TO_SERVER.value, 
+        "status": MessageStatusEnum.SENT.value, 
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "reactions": {},
