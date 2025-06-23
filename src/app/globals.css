@@ -12,30 +12,30 @@ body {
     --background: 240 20% 98%; /* Very light grey, off-white */
     --foreground: 210 15% 25%; /* Dark grayish blue for text */
 
-    --card: 240 15% 95%; /* For input bar background, profile modal, etc. */
+    --card: 0 0% 100%; /* Pure white for cards */
     --card-foreground: 210 15% 25%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 210 15% 25%;
 
-    --primary: 260 70% 90%; /* Light Lilac for sent messages, suggestion chips */
-    --primary-foreground: 260 40% 30%; /* Dark purple text for on primary elements */
+    --primary: 260 85% 70%; /* A more vibrant, welcoming lilac */
+    --primary-foreground: 0 0% 100%; /* White text for great contrast on primary */
 
     --secondary: 240 10% 92%; /* Slightly darker light grey for received messages */
     --secondary-foreground: 210 15% 25%; 
 
-    --muted: 207 33% 85%; /* Muted gray */
+    --muted: 220 15% 90%; /* Muted gray with a hint of blue */
     --muted-foreground: 210 15% 45%; /* Lighter text for muted contexts */
 
-    --accent: 260 40% 50%; /* Medium Dark Purple for send button, active elements */
+    --accent: 260 85% 60%; /* A slightly darker purple for hover/active states */
     --accent-foreground: 0 0% 100%; /* White text/icons on accent elements */
 
     --destructive: 0 72% 51%; /* Standard red */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 10% 88%; /* Border color */
-    --input: 240 10% 85%; /* Input border color */
-    --ring: 260 50% 60%; /* Ring color, derived from new accent */
+    --border: 220 15% 88%; /* Border color with a hint of blue */
+    --input: 220 15% 93%; /* Input background color */
+    --ring: 260 70% 65%; /* Ring color, derived from new primary/accent */
     
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -43,16 +43,6 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-
-    /* Sidebar variables - can be kept or simplified if sidebar is not used */
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
@@ -65,7 +55,7 @@ body {
     --popover: 210 15% 20%;
     --popover-foreground: 207 33% 90%;
 
-    --primary: 260 50% 65%; /* Dark mode Light Lilac */
+    --primary: 260 70% 65%; /* Dark mode Light Lilac */
     --primary-foreground: 0 0% 100%; 
 
     --secondary: 210 15% 25%;
@@ -74,30 +64,21 @@ body {
     --muted: 210 15% 30%;
     --muted-foreground: 207 33% 70%;
 
-    --accent: 260 50% 70%; /* Dark mode Medium Dark Purple (lighter for contrast) */
+    --accent: 260 70% 70%; /* Dark mode Medium Dark Purple (lighter for contrast) */
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
 
     --border: 210 15% 35%;
-    --input: 210 15% 40%;
-    --ring: 260 50% 70%;
+    --input: 210 15% 25%;
+    --ring: 260 70% 70%;
     
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -144,4 +125,3 @@ body {
     @apply bg-background; /* Default background for message area */
   }
 }
-

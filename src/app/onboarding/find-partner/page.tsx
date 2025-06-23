@@ -209,10 +209,10 @@ export default function FindPartnerPage() {
                          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2"><UserPlus className="text-accent"/>Find a Partner</h3>
                          <div className="relative">
                             <Input
-                                placeholder="🔍 Search name or number"
+                                placeholder="🔍 Search by name"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-8"
+                                className="pl-8 bg-input"
                             />
                          </div>
                         {filteredSuggestions.length > 0 ? (
@@ -263,7 +263,7 @@ export default function FindPartnerPage() {
                                 ))}
                             </ul>
                         ) : (
-                            <p className="text-center text-muted-foreground text-sm p-4 bg-muted rounded-md">No available users found matching your search. Try inviting someone!</p>
+                            <p className="text-center text-muted-foreground text-sm p-4 bg-muted/50 rounded-md">No available users found matching your search. Try inviting someone!</p>
                         )}
                     </div>
                 </CardContent>
