@@ -34,6 +34,11 @@ async def get_message_with_details_from_db(message_id: UUID) -> Optional[Message
         ).maybe_single().execute()
         
         if rpc_response and rpc_response.data:
+            # WORKAROUND: Explicitly cast the 'status' field to a string
+            # to resolve the varchar(10) vs text type mismatch from the RPC.
+            if 'status' in rpc_response.data and rpc_response.data['status'] is not None:
+                rpc_response.data['status'] = str(rpc_response.data['status'])
+            
             return MessageInDB(**rpc_response.data)
         return None
     except Exception as e:
@@ -50,7 +55,16 @@ async def get_chat_list_for_user(user_id: UUID) -> List[ChatResponse]:
         if not rpc_response or not rpc_response.data:
             return []
 
-        chat_responses = [ChatResponse.model_validate(chat_data) for chat_data in rpc_response.data]
+        # Process data before validation to handle potential type mismatches
+        processed_data = []
+        for chat_data in rpc_response.data:
+            # WORKAROUND: Explicitly cast the 'status' field of the last_message
+            # to a string to resolve the varchar vs text type mismatch from the RPC.
+            if 'last_message' in chat_data and chat_data['last_message'] and 'status' in chat_data['last_message'] and chat_data['last_message']['status'] is not None:
+                chat_data['last_message']['status'] = str(chat_data['last_message']['status'])
+            processed_data.append(chat_data)
+
+        chat_responses = [ChatResponse.model_validate(chat_data) for chat_data in processed_data]
         return chat_responses
 
     except Exception as e:
@@ -169,6 +183,11 @@ async def get_messages(
         for m in messages_data_list:
             if m.get("status") in status_map:
                 m["status"] = status_map[m["status"]]
+            
+            # WORKAROUND: Add explicit cast for status field to prevent RPC type mismatch
+            if 'status' in m and m.get('status') is not None:
+                m['status'] = str(m['status'])
+
             cleaned_messages_data.append(m)
 
         messages_domain_list = [MessageInDB(**m) for m in cleaned_messages_data]
