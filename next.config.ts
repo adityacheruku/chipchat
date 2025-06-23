@@ -14,28 +14,16 @@ const withPWA = withPWAImport({
 
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Required for static export to work with Capacitor
+  output: 'export',
+  images: {
+    unoptimized: true,
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
   eslint: {
     ignoreDuringBuilds: true,
-  },
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
-      },
-      { // Adding Cloudinary for user avatars and other media
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
-        port: '',
-        pathname: `/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/**`,
-      }
-    ],
   },
 };
 
