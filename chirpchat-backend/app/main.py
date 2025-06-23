@@ -43,9 +43,10 @@ Instrumentator(
 origins = [
     "http://localhost:3000",
     "http://localhost:9002",
+    "http://192.168.29.167:9002",
     "capacitor://localhost",   # iOS Capacitor
     "http://localhost",        # Android Capacitor
-    "https://ef9e-49-43-230-78.ngrok-free.app", # Current ngrok for testing
+    "https://d87c-49-43-230-78.ngrok-free.app", # Current ngrok for testing
     "https://chipchat.vercel.app", # Production frontend
 ]
 
