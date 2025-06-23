@@ -3,13 +3,13 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { ToastAction } from "@/components/ui/toast"; // Corrected import path
-import { suggestMood, type SuggestMoodOutput } from '@/ai/flows/suggestMoodFlow';
+import { ToastAction } from "@/components/ui/toast";
+import type { SuggestMoodOutput } from '@/ai/flows/suggestMoodFlow';
 import type { Mood } from '@/types';
 import { ALL_MOODS } from '@/types';
 import {
   AlertDialog,
-  AlertDialogAction as AlertDialogConfirmAction, // Renamed to avoid conflict if ToastAction was also AlertDialogAction
+  AlertDialogAction as AlertDialogConfirmAction,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -76,7 +76,26 @@ export function useMoodSuggestion({ currentUserMood, onMoodChange, currentMessag
     let newMood: Mood | undefined = undefined;
 
     try {
-      result = await suggestMood({ messageText, currentMood: currentUserMood });
+      const response = await fetch('/api/genkit/flow/suggestMoodFlow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messageText, currentMood: currentUserMood }),
+      });
+
+      if (!response.ok) {
+        let errorBody = 'AI suggestion API call failed';
+        try {
+            errorBody = await response.text();
+        } catch (e) {
+            // ignore
+        }
+        throw new Error(errorBody);
+      }
+      
+      result = await response.json();
+
       fullAIRasoning = result.reasoning || null;
       toastReasoningSnippet = fullAIRasoning ? (fullAIRasoning.length > 60 ? fullAIRasoning.substring(0, 60) + "..." : fullAIRasoning) : null;
       newMood = result.suggestedMood as Mood | undefined;

@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { suggestMood, type SuggestMoodInput, type SuggestMoodOutput } from '@/ai/flows/suggestMoodFlow';
 import type { Mood } from '@/types';
 import { ALL_MOODS } from '@/types';
-import { Button } from '@/components/ui/button'; // Keep for "Show Details" button if styled as such
+import { Button } from '@/components/ui/button'; 
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,7 +70,14 @@ export function useMoodSuggestion({ currentUserMood, onMoodChange, currentMessag
     currentMessageTextRef.current = messageText;
 
     try {
-      const result: SuggestMoodOutput = await suggestMood({ messageText, currentMood: currentUserMood });
+      const response = await fetch('/api/genkit/flow/suggestMoodFlow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageText, currentMood: currentUserMood }),
+      });
+      if (!response.ok) throw new Error('AI suggestion API call failed');
+      const result: SuggestMoodOutput = await response.json();
+
       const fullAIRasoning = result.reasoning || null;
       const toastReasoningSnippet = fullAIRasoning ? (fullAIRasoning.length > 60 ? fullAIRasoning.substring(0, 60) + "..." : fullAIRasoning) : null;
 
