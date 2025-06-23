@@ -1,3 +1,2 @@
-
-// Flows will be imported for their side effects in this file.
-import './flows/suggestMoodFlow';
+// This file's contents have been cleared because the associated API route
+// was disabled for compatibility with static site generation (`output: 'export'`).

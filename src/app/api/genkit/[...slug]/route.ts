@@ -1,6 +1,3 @@
-
-import { genkitNextHandler } from '@genkit-ai/next';
-import '@/ai/dev'; // Import flows to ensure they are registered
-
-export const GET = genkitNextHandler;
-export const POST = genkitNextHandler;
+// This API route has been disabled because it requires a Node.js server
+// and is not compatible with the `output: 'export'` configuration in next.config.ts.
+// For static site generation, all server-side logic must be handled by a separate backend.

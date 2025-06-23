@@ -63,99 +63,12 @@ export function useMoodSuggestion({ currentUserMood, onMoodChange, currentMessag
   }, [toast]);
 
   const triggerSuggestion = useCallback(async (messageText: string) => {
-    if (dontSuggestAgain) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    currentMessageTextRef.current = messageText;
-    let result: SuggestMoodOutput | null = null;
-    let fullAIRasoning: string | null = null;
-    let toastReasoningSnippet: string | null = null;
-    let newMood: Mood | undefined = undefined;
-
-    try {
-      const response = await fetch('/api/genkit/flow/suggestMoodFlow', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ messageText, currentMood: currentUserMood }),
-      });
-
-      if (!response.ok) {
-        let errorBody = 'AI suggestion API call failed';
-        try {
-            errorBody = await response.text();
-        } catch (e) {
-            // ignore
-        }
-        throw new Error(errorBody);
-      }
-      
-      result = await response.json();
-
-      fullAIRasoning = result.reasoning || null;
-      toastReasoningSnippet = fullAIRasoning ? (fullAIRasoning.length > 60 ? fullAIRasoning.substring(0, 60) + "..." : fullAIRasoning) : null;
-      newMood = result.suggestedMood as Mood | undefined;
-
-      if (newMood && newMood !== currentUserMood && ALL_MOODS.includes(newMood)) {
-        const currentNewMood = newMood; 
-
-        const primaryToastAction = (
-          <ToastAction
-            onClick={() => {
-              onMoodChange(currentNewMood);
-              toast({ title: "Mood Updated!", description: `Your mood is now ${currentNewMood}.`, duration: 3000 });
-            }}
-          >
-            Set to {currentNewMood}
-          </ToastAction>
-        );
-        
-        toast({
-          title: "Mood Suggestion",
-          description: (
-            <MoodSuggestionToast
-              newMood={currentNewMood}
-              toastReasoningSnippet={toastReasoningSnippet}
-              fullReasoning={fullAIRasoning}
-              checkboxId={dontSuggestCheckboxId}
-              isDontSuggestAgainChecked={dontSuggestAgain}
-              onCheckboxChange={handleSetDontSuggestAgain}
-              onShowDetailsClick={() => {
-                setReasoningText(fullAIRasoning || "No detailed reasoning provided.");
-                setShowReasoningDialog(true);
-              }}
-            />
-          ),
-          duration: 15000,
-          action: primaryToastAction,
-        });
-
-      } else if (result?.reasoning && !result?.suggestedMood) {
-        // console.log("AI Reasoning (no suggestion):", result.reasoning);
-      }
-    } catch (error) {
-      console.error("Error suggesting mood:", error);
-      const retryAction = (
-        <ToastAction
-            onClick={() => triggerSuggestion(currentMessageTextRef.current)}
-        >
-            Retry
-        </ToastAction>
-      );
-      toast({
-        variant: "destructive",
-        title: "Mood AI Error",
-        description: "Could not analyze message sentiment.",
-        action: retryAction,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentUserMood, onMoodChange, toast, dontSuggestAgain, currentMessageTextRef, dontSuggestCheckboxId, handleSetDontSuggestAgain, setIsLoading, setReasoningText, setShowReasoningDialog]);
+    // This feature is disabled for static export builds as it requires a server.
+    // To re-enable, you would need to remove `output: 'export'` from next.config.js
+    // and deploy the Next.js app with a Node.js server.
+    setIsLoading(false);
+    return;
+  }, []);
 
   const debouncedSuggestMood = useCallback((messageText: string) => {
     if (debounceTimeoutRef.current) {
