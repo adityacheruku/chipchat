@@ -1,0 +1,6 @@
+{
+  "appId": "com.chirpchat.app",
+  "appName": "ChirpChat",
+  "webDir": "out",
+  "bundledWebRuntime": false
+}
