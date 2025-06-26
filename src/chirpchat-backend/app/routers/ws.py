@@ -65,7 +65,10 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     await handle_typing_indicator(data, current_user)
                 elif event_type == "ping_thinking_of_you":
                     await handle_ping(data, current_user)
+                elif event_type == "change_chat_mode":
+                    await handle_change_chat_mode(data, current_user)
                 elif event_type == "HEARTBEAT":
+                    await ws_manager.send_personal_message(websocket, {"event_type": "heartbeat_ack"})
                     pass # Activity already updated
                 else:
                     logger.warning(f"WS user {user_id}: Unknown event_type: {event_type}")
@@ -157,7 +160,7 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
         "document_name": message_create.document_name,
         "client_temp_id": client_temp_id, 
         "status": MessageStatusEnum.SENT.value, 
-        "mode": message_create.mode.value if message_create.mode else MessageModeEnum.NORMAL.value,
+        "mode": message_create.mode.value, # Save the mode to DB
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "reactions": {},
@@ -167,14 +170,14 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
         "transcription": message_create.transcription,
     }
 
-    insert_result_obj = await db_manager.get_table("messages").insert(message_data_to_insert).execute()
+    insert_result_obj = db_manager.get_table("messages").insert(message_data_to_insert).execute()
     if not insert_result_obj.data:
         raise Exception("Failed to save message to DB")
         
     await ws_manager.mark_message_as_processed(client_temp_id)
     await ws_manager.send_ack(websocket, client_temp_id, str(message_db_id))
 
-    await db_manager.get_table("chats").update({"updated_at": now.isoformat()}).eq("id", str(chat_id)).execute()
+    db_manager.get_table("chats").update({"updated_at": now.isoformat()}).eq("id", str(chat_id)).execute()
     
     message_out = await get_message_with_details_from_db(message_db_id)
     if not message_out:
@@ -200,7 +203,7 @@ async def handle_toggle_reaction(data: Dict[str, Any], websocket: WebSocket, cur
     if not await ws_manager.is_user_in_chat(user_id, chat_id):
         raise ValueError("User not in chat")
 
-    msg_resp_obj = await db_manager.get_table("messages").select("reactions, chat_id, mode").eq("id", str(message_id)).maybe_single().execute()
+    msg_resp_obj = db_manager.get_table("messages").select("reactions, chat_id, mode").eq("id", str(message_id)).maybe_single().execute()
     if not msg_resp_obj.data or str(msg_resp_obj.data["chat_id"]) != str(chat_id):
         raise ValueError("Message not found or not in specified chat")
         
@@ -219,7 +222,7 @@ async def handle_toggle_reaction(data: Dict[str, Any], websocket: WebSocket, cur
     else:
         reactions[emoji].append(user_id_str)
     
-    update_result = await db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
+    update_result = db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
     if not update_result.data:
         raise Exception("Failed to update reaction")
     
@@ -236,7 +239,7 @@ async def handle_ping(data: Dict[str, Any], current_user: UserPublic):
     recipient_user_id = UUID(data["recipient_user_id"])
     
     # Verify recipient exists
-    recipient_check = await db_manager.get_table("users").select("id").eq("id", str(recipient_user_id)).maybe_single().execute()
+    recipient_check = db_manager.get_table("users").select("id").eq("id", str(recipient_user_id)).maybe_single().execute()
     if not recipient_check.data:
         raise ValueError("Recipient user not found")
 
@@ -253,3 +256,17 @@ async def handle_ping(data: Dict[str, Any], current_user: UserPublic):
         sender=current_user,
         recipient_id=recipient_user_id
     )
+
+async def handle_change_chat_mode(data: Dict[str, Any], current_user: UserPublic):
+    chat_id = UUID(data["chat_id"])
+    mode = data["mode"]
+    
+    # Validate mode
+    if mode not in [m.value for m in MessageModeEnum]:
+        raise ValueError(f"Invalid chat mode: {mode}")
+
+    if not await ws_manager.is_user_in_chat(current_user.id, chat_id):
+        raise ValueError("User not in chat")
+    
+    await ws_manager.broadcast_chat_mode_update(str(chat_id), mode)
+    logger.info(f"User {current_user.id} changed mode of chat {chat_id} to {mode}")

@@ -170,6 +170,9 @@ class RealtimeService {
       this.resetActivityTimeout();
       try {
         const data = JSON.parse(event.data as string) as EventPayload;
+        if (data.event_type === 'heartbeat_ack') {
+            return; // It's just a keep-alive, do nothing else.
+        }
         this.handleEvent(data);
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);

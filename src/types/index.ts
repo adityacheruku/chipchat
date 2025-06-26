@@ -147,6 +147,7 @@ export type EventPayload = {
   | { event_type: "authenticated" }
   | { event_type: "sse_connected", data: string }
   | { event_type: "ping", data: string }
+  | { event_type: "heartbeat_ack" }
 );
 
 // WebSocket and SSE message types
@@ -216,7 +217,7 @@ export type WebSocketEventData = EventPayload;
 export const ALL_EVENT_TYPES = [
     "new_message", "message_reaction_update", "user_presence_update",
     "typing_indicator", "thinking_of_you_received", "user_profile_update",
-    "message_ack", "error", "sse_connected", "ping", "chat_mode_changed"
+    "message_ack", "error", "sse_connected", "ping", "chat_mode_changed", "heartbeat_ack"
 ];
 
 
