@@ -17,7 +17,6 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useLongPress } from '@/hooks/useLongPress';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
 interface InputBarProps {
   onSendMessage: (text: string, mode: MessageMode) => void;
@@ -29,12 +28,11 @@ interface InputBarProps {
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
   chatMode: MessageMode;
-  setChatMode: (mode: MessageMode) => void;
+  onModeIconClick: () => void;
 }
 
-const MAX_RECORDING_SECONDS = 120; // 2 minutes
+const MAX_RECORDING_SECONDS = 120;
 
-// Component for rendering a single attachment preview
 const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => void }) => {
   const fileUrl = useMemo(() => URL.createObjectURL(file), [file]);
 
@@ -53,13 +51,7 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
           <span className="text-xs truncate text-muted-foreground">{file.name}</span>
         </div>
       )}
-      <Button
-        size="icon"
-        variant="destructive"
-        className="absolute top-0 right-0 h-5 w-5 rounded-full"
-        onClick={onRemove}
-        aria-label={`Remove ${file.name} from attachments`}
-      >
+      <Button size="icon" variant="destructive" className="absolute top-0 right-0 h-5 w-5 rounded-full" onClick={onRemove} aria-label={`Remove ${file.name} from attachments`}>
         <X className="h-3 w-3" />
         <span className="sr-only">Remove attachment</span>
       </Button>
@@ -69,16 +61,8 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
 
 
 export default function InputBar({
-  onSendMessage,
-  onSendSticker,
-  onSendVoiceMessage,
-  onSendImage,
-  onSendDocument,
-  isSending = false,
-  onTyping,
-  disabled = false,
-  chatMode,
-  setChatMode,
+  onSendMessage, onSendSticker, onSendVoiceMessage, onSendImage, onSendDocument,
+  isSending = false, onTyping, disabled = false, chatMode, onModeIconClick,
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [isToolsOpen, setIsToolsOpen] = useState(false);
@@ -90,15 +74,12 @@ export default function InputBar({
   const [emojiSearch, setEmojiSearch] = useState('');
   const [isDragging, setIsDragging] = useState(false);
 
-
-  // Voice recording state
   type RecordingStatus = 'idle' | 'recording' | 'recorded' | 'sending';
   const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>('idle');
   const [audioURL, setAudioURL] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
-  // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -107,10 +88,8 @@ export default function InputBar({
   const cameraInputRef = useRef<HTMLInputElement>(null); 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-
   const { toast } = useToast();
 
-  // Handle textarea auto-resizing
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -120,13 +99,10 @@ export default function InputBar({
     }
   }, [messageText]);
 
-  // Load recent emojis from local storage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedEmojis = localStorage.getItem('chirpChat_recentEmojis');
-      if (savedEmojis) {
-        setRecentEmojis(JSON.parse(savedEmojis));
-      }
+      if (savedEmojis) setRecentEmojis(JSON.parse(savedEmojis));
     }
   }, []);
 
@@ -148,9 +124,7 @@ export default function InputBar({
 
   const handleBlur = () => {
     if (disabled) return;
-    if (messageText.trim() === '') {
-        onTyping(false);
-    }
+    if (messageText.trim() === '') onTyping(false);
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -166,68 +140,38 @@ export default function InputBar({
   
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files) {
-      setStagedAttachments(prev => [...prev, ...Array.from(files)]);
-    }
+    if (files) setStagedAttachments(prev => [...prev, ...Array.from(files)]);
     setIsAttachmentOpen(false);
-    if (event.target) event.target.value = ""; // Reset input
+    if (event.target) event.target.value = "";
   };
   
   const handleRemoveAttachment = (index: number) => {
     setStagedAttachments(prev => prev.filter((_, i) => i !== index));
   };
   
-  const handleDragEvents = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    handleDragEvents(e);
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsDragging(true);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    handleDragEvents(e);
-    const relatedTarget = e.relatedTarget as Node | null;
-    if (!e.currentTarget.contains(relatedTarget)) {
-      setIsDragging(false);
-    }
-  };
-  
+  const handleDragEvents = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const handleDragEnter = (e: React.DragEvent) => { handleDragEvents(e); if (e.dataTransfer.items && e.dataTransfer.items.length > 0) setIsDragging(true); };
+  const handleDragLeave = (e: React.DragEvent) => { handleDragEvents(e); const relatedTarget = e.relatedTarget as Node | null; if (!e.currentTarget.contains(relatedTarget)) setIsDragging(false); };
   const handleDrop = (e: React.DragEvent) => {
-    handleDragEvents(e);
-    setIsDragging(false);
+    handleDragEvents(e); setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files);
-      setStagedAttachments(prev => [...prev, ...files]);
+      setStagedAttachments(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
       e.dataTransfer.clearData();
     }
   };
 
-
-  // --- Voice Recording Logic ---
   const cleanupRecording = useCallback(() => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop();
       if (audioURL) URL.revokeObjectURL(audioURL);
-      mediaRecorderRef.current = null;
-      audioChunksRef.current = [];
-      setRecordingStatus('idle');
-      setAudioBlob(null);
-      setAudioURL(null);
-      setRecordingSeconds(0);
+      mediaRecorderRef.current = null; audioChunksRef.current = [];
+      setRecordingStatus('idle'); setAudioBlob(null); setAudioURL(null); setRecordingSeconds(0);
   }, [audioURL]);
 
   const handleStartRecording = useCallback(async () => {
     if (recordingStatus !== 'idle') return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      toast({ variant: 'destructive', title: 'Unsupported Device', description: 'Your browser does not support voice recording.' });
-      return;
+      toast({ variant: 'destructive', title: 'Unsupported Device', description: 'Your browser does not support voice recording.' }); return;
     }
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -237,8 +181,7 @@ export default function InputBar({
         mediaRecorderRef.current.ondataavailable = (event) => audioChunksRef.current.push(event.data);
         mediaRecorderRef.current.onstop = () => {
             const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            setAudioBlob(blob);
-            setAudioURL(URL.createObjectURL(blob));
+            setAudioBlob(blob); setAudioURL(URL.createObjectURL(blob));
             setRecordingStatus('recorded');
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
             stream.getTracks().forEach(track => track.stop());
@@ -247,7 +190,7 @@ export default function InputBar({
         mediaRecorderRef.current.start();
         setRecordingStatus('recording');
         timerIntervalRef.current = setInterval(() => setRecordingSeconds(prev => prev + 1), 1000);
-        const maxDurationTimeout = setTimeout(() => {
+        setTimeout(() => {
             toast({ title: "Recording Limit Reached", description: `Maximum duration is ${MAX_RECORDING_SECONDS} seconds.`});
             if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
         }, MAX_RECORDING_SECONDS * 1000);
@@ -261,27 +204,20 @@ export default function InputBar({
       if (audioBlob) {
         const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
         setStagedAttachments(prev => [...prev, audioFile]);
-        cleanupRecording();
-        setIsAttachmentOpen(false);
+        cleanupRecording(); setIsAttachmentOpen(false);
       }
   };
 
   const handleCompositeSend = (e: FormEvent) => {
     e.preventDefault();
     if (disabled || isSending) return;
-    
-    if (messageText.trim()) {
-      onSendMessage(messageText.trim(), chatMode);
-    }
+    if (messageText.trim()) onSendMessage(messageText.trim(), chatMode);
     stagedAttachments.forEach(file => {
       if (file.type.startsWith('image/')) onSendImage(file, chatMode);
       else if (file.type.startsWith('audio/')) onSendVoiceMessage(file, chatMode);
       else onSendDocument(file, chatMode);
     });
-    setMessageText('');
-    setStagedAttachments([]);
-    setEmojiSearch('');
-    onTyping(false);
+    setMessageText(''); setStagedAttachments([]); setEmojiSearch(''); onTyping(false);
   };
   
   const showSendButton = messageText.trim() !== '' || stagedAttachments.length > 0;
@@ -292,12 +228,8 @@ export default function InputBar({
     const filtered: typeof PICKER_EMOJIS = {};
     for (const category in PICKER_EMOJIS) {
         const cat = category as keyof typeof PICKER_EMOJIS;
-        const matchingEmojis = PICKER_EMOJIS[cat].emojis.filter(emoji => 
-            PICKER_EMOJIS[cat].keywords.some(kw => kw.includes(lowerCaseSearch))
-        );
-        if (matchingEmojis.length > 0) {
-            filtered[cat] = { ...PICKER_EMOJIS[cat], emojis: matchingEmojis };
-        }
+        const matchingEmojis = PICKER_EMOJIS[cat].emojis.filter(emoji => PICKER_EMOJIS[cat].keywords.some(kw => kw.includes(lowerCaseSearch)));
+        if (matchingEmojis.length > 0) filtered[cat] = { ...PICKER_EMOJIS[cat], emojis: matchingEmojis };
     }
     return filtered;
   }, [emojiSearch]);
@@ -316,16 +248,13 @@ export default function InputBar({
       <TabsContent value="media" className="p-4">
         <div className="grid grid-cols-3 gap-4">
             <Button variant="outline" size="lg" onClick={() => cameraInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
-                <Camera size={24} className="text-red-500"/>
-                <span className="text-sm font-normal">Camera</span>
+                <Camera size={24} className="text-red-500"/><span className="text-sm font-normal">Camera</span>
             </Button>
             <Button variant="outline" size="lg" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
-                <ImageIcon size={24} className="text-purple-500"/>
-                <span className="text-sm font-normal">Gallery</span>
+                <ImageIcon size={24} className="text-purple-500"/><span className="text-sm font-normal">Gallery</span>
             </Button>
             <Button variant="outline" size="lg" onClick={() => documentInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
-                <FileText size={24} className="text-blue-500"/>
-                <span className="text-sm font-normal">Document</span>
+                <FileText size={24} className="text-blue-500"/><span className="text-sm font-normal">Document</span>
             </Button>
         </div>
       </TabsContent>
@@ -333,19 +262,13 @@ export default function InputBar({
         {recordingStatus === 'recording' ? (
           <>
             <div className="text-destructive text-2xl font-mono mb-4">{new Date(recordingSeconds * 1000).toISOString().substr(14, 5)}</div>
-            <div className="relative h-16 w-16">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                <Mic className="relative h-16 w-16 text-destructive" />
-            </div>
+            <div className="relative h-16 w-16"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span><Mic className="relative h-16 w-16 text-destructive" /></div>
             <p className="text-muted-foreground mt-4">Recording...</p>
-            <Button variant="destructive" size="lg" className="mt-8 rounded-full" onClick={() => mediaRecorderRef.current?.stop()}>
-              <StopCircle /> Stop
-            </Button>
+            <Button variant="destructive" size="lg" className="mt-8 rounded-full" onClick={() => mediaRecorderRef.current?.stop()}><StopCircle /> Stop</Button>
           </>
         ) : recordingStatus === 'recorded' && audioURL ? (
           <>
-            <p className="text-muted-foreground mb-4">Voice message ready</p>
-            <audio src={audioURL} controls className="w-full" />
+            <p className="text-muted-foreground mb-4">Voice message ready</p><audio src={audioURL} controls className="w-full" />
             <div className="flex w-full justify-between mt-8">
               <Button variant="ghost" onClick={cleanupRecording}><Trash2 className="mr-2"/> Discard</Button>
               <Button onClick={handleStageVoiceMessage}><Send className="mr-2"/> Add to message</Button>
@@ -353,11 +276,8 @@ export default function InputBar({
           </>
         ) : (
           <>
-              <Mic className="h-16 w-16 text-muted-foreground mb-4"/>
-              <p className="text-muted-foreground mb-8 text-center">Press and hold to start recording your voice note.</p>
-              <Button variant="default" size="lg" className="rounded-full bg-primary hover:bg-primary/90" {...recordButtonLongPress}>
-                  Hold to Record
-              </Button>
+              <Mic className="h-16 w-16 text-muted-foreground mb-4"/><p className="text-muted-foreground mb-8 text-center">Press and hold to start recording your voice note.</p>
+              <Button variant="default" size="lg" className="rounded-full bg-primary hover:bg-primary/90" {...recordButtonLongPress}>Hold to Record</Button>
           </>
         )}
       </TabsContent>
@@ -367,54 +287,24 @@ export default function InputBar({
   const ToolsPicker = () => (
     <Tabs defaultValue="emoji" className="w-full flex flex-col h-full">
       <SheetHeader className="p-2 border-b">
-          <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="emoji"><Smile size={18}/></TabsTrigger>
-              <TabsTrigger value="sticker"><StickyNote size={18}/></TabsTrigger>
-              <TabsTrigger value="gif" disabled><Gift size={18}/></TabsTrigger>
-          </TabsList>
+          <TabsList className="grid w-full grid-cols-3"><TabsTrigger value="emoji"><Smile size={18}/></TabsTrigger><TabsTrigger value="sticker"><StickyNote size={18}/></TabsTrigger><TabsTrigger value="gif" disabled><Gift size={18}/></TabsTrigger></TabsList>
       </SheetHeader>
       <TabsContent value="emoji" className="flex-grow overflow-hidden mt-0">
         <div className="p-2">
-            <Input
-                id="emoji-search"
-                placeholder="Search emojis..."
-                value={emojiSearch}
-                onChange={(e) => setEmojiSearch(e.target.value)}
-                className="w-full bg-muted border-none focus-visible:ring-ring"
-                aria-label="Search emojis"
-            />
+            <Input id="emoji-search" placeholder="Search emojis..." value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} className="w-full bg-muted border-none focus-visible:ring-ring" aria-label="Search emojis"/>
         </div>
         {!emojiSearch && recentEmojis.length > 0 && (
           <div className="px-2 pb-2 border-b">
               <h3 className="text-xs font-semibold text-muted-foreground mb-1">Recent</h3>
-              <div className="flex gap-1">
-                  {recentEmojis.map(emoji => (
-                      <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)} aria-label={`Select emoji ${emoji}`}>{emoji}</Button>
-                  ))}
-              </div>
+              <div className="flex gap-1">{recentEmojis.map(emoji => (<Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)} aria-label={`Select emoji ${emoji}`}>{emoji}</Button>))}</div>
           </div>
         )}
         <ScrollArea className="h-[calc(100%-110px)]">
-          <div className="p-2">
-              {Object.entries(filteredEmojis).map(([category, data]) => (
-                  <div key={category}>
-                      <h3 className="text-sm font-medium text-muted-foreground py-1">{category}</h3>
-                      <div className="grid grid-cols-8 gap-1">
-                          {data.emojis.map(emoji => (
-                              <Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)} aria-label={`Select emoji ${emoji}`}>{emoji}</Button>
-                          ))}
-                      </div>
-                  </div>
-              ))}
-          </div>
+          <div className="p-2">{Object.entries(filteredEmojis).map(([category, data]) => (<div key={category}><h3 className="text-sm font-medium text-muted-foreground py-1">{category}</h3><div className="grid grid-cols-8 gap-1">{data.emojis.map(emoji => (<Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)} aria-label={`Select emoji ${emoji}`}>{emoji}</Button>))}</div></div>))}</div>
         </ScrollArea>
       </TabsContent>
-      <TabsContent value="sticker" className="flex-grow overflow-hidden mt-0">
-          <StickerPicker onStickerSelect={handleStickerSelect} />
-      </TabsContent>
-      <TabsContent value="gif" className="flex-grow mt-0 flex items-center justify-center">
-          <p className="text-muted-foreground">GIFs are coming soon!</p>
-      </TabsContent>
+      <TabsContent value="sticker" className="flex-grow overflow-hidden mt-0"><StickerPicker onStickerSelect={handleStickerSelect} /></TabsContent>
+      <TabsContent value="gif" className="flex-grow mt-0 flex items-center justify-center"><p className="text-muted-foreground">GIFs are coming soon!</p></TabsContent>
     </Tabs>
   );
 
@@ -434,77 +324,34 @@ export default function InputBar({
     }
   };
 
-
   return (
-    <div 
-        className={cn(
-            "p-3 border-t border-border bg-card rounded-b-lg transition-colors duration-300",
-            isDragging && "bg-primary/20 border-primary"
-        )}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragEvents}
-        onDrop={handleDrop}
-    >
+    <div className={cn("p-3 border-t border-border bg-card rounded-b-lg transition-colors duration-300", isDragging && "bg-primary/20 border-primary")}
+        onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragEvents} onDrop={handleDrop}>
       {stagedAttachments.length > 0 && (
           <div className="mb-2 p-2 border rounded-lg bg-muted/50">
-              <ScrollArea className="h-24 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                      {stagedAttachments.map((file, index) => (
-                          <AttachmentPreview key={index} file={file} onRemove={() => handleRemoveAttachment(index)} />
-                      ))}
-                  </div>
-              </ScrollArea>
+              <ScrollArea className="h-24 whitespace-nowrap"><div className="flex items-center gap-2">{stagedAttachments.map((file, index) => (<AttachmentPreview key={index} file={file} onRemove={() => handleRemoveAttachment(index)} />))}</div></ScrollArea>
           </div>
       )}
 
       <form onSubmit={handleCompositeSend} className="flex items-end space-x-2">
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Change chat mode" disabled={isSending || disabled}>
-                    <ModeIcon mode={chatMode} />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-                <DropdownMenuItem onSelect={() => setChatMode('normal')}><MessageCircle className="mr-2 h-4 w-4" /> Normal</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setChatMode('fight')}><ShieldAlert className="mr-2 h-4 w-4 text-destructive" /> Fight</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setChatMode('incognito')}><EyeOff className="mr-2 h-4 w-4" /> Incognito</DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <Button variant="ghost" size="icon" type="button" onClick={onModeIconClick} className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Change chat mode" disabled={isSending || disabled}>
+            <ModeIcon mode={chatMode} />
+        </Button>
 
         <AttachmentPickerComponent open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
           <AttachmentPickerTrigger asChild>
-            <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file" disabled={isSending || disabled}>
-              <Paperclip size={22} />
-            </Button>
+            <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file" disabled={isSending || disabled}><Paperclip size={22} /></Button>
           </AttachmentPickerTrigger>
-          <AttachmentPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-auto rounded-t-lg" : "w-80 p-2")}>
-              <AttachmentPicker />
-          </AttachmentPickerContent>
+          <AttachmentPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-auto rounded-t-lg" : "w-80 p-2")}><AttachmentPicker /></AttachmentPickerContent>
         </AttachmentPickerComponent>
         
         <div className="flex-grow relative flex items-end">
-             <Textarea
-                ref={textareaRef}
-                placeholder="Type a message..."
-                value={messageText}
-                onChange={handleTypingChange}
-                onBlur={handleBlur}
-                className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[44px] max-h-[120px] pt-[11px]"
-                autoComplete="off"
-                disabled={isSending || disabled}
-                rows={1}
-                aria-label="Message input"
-             />
+             <Textarea ref={textareaRef} placeholder="Type a message..." value={messageText} onChange={handleTypingChange} onBlur={handleBlur} className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[44px] max-h-[120px] pt-[11px]" autoComplete="off" disabled={isSending || disabled} rows={1} aria-label="Message input"/>
              <ToolsPickerComponent open={isToolsOpen} onOpenChange={setIsToolsOpen}>
                 <ToolsPickerTrigger asChild>
-                    <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}>
-                        <Smile size={22} />
-                    </Button>
+                    <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}><Smile size={22} /></Button>
                 </ToolsPickerTrigger>
-                <ToolsPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col" : "w-[400px] h-[500px] p-0 flex flex-col")}>
-                   <ToolsPicker />
-                </ToolsPickerContent>
+                <ToolsPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col" : "w-[400px] h-[500px] p-0 flex flex-col")}><ToolsPicker /></ToolsPickerContent>
             </ToolsPickerComponent>
         </div>
         
@@ -513,7 +360,6 @@ export default function InputBar({
         </Button>
       </form>
       
-      {/* Hidden file inputs */}
       <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture className="hidden" onChange={handleFileSelect} />
       <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={handleFileSelect} multiple />
       <input type="file" ref={documentInputRef} className="hidden" onChange={handleFileSelect} multiple />
