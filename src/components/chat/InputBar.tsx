@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, useMemo, useCallback, memo } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -60,7 +60,7 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
 };
 
 
-export default function InputBar({
+function InputBar({
   onSendMessage, onSendSticker, onSendVoiceMessage, onSendImage, onSendDocument,
   isSending = false, onTyping, disabled = false, chatMode, onSelectMode,
 }: InputBarProps) {
@@ -404,3 +404,5 @@ export default function InputBar({
     </div>
   );
 }
+
+export default memo(InputBar);

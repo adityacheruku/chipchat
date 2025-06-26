@@ -1,4 +1,5 @@
 
+import { memo } from 'react';
 import type { Message, User, SupportedEmoji } from '@/types';
 import MessageBubble from './MessageBubble';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,7 +15,7 @@ interface MessageAreaProps {
   onShowMedia: (url: string, type: 'image' | 'video') => void; // Added for full-screen media
 }
 
-export default function MessageArea({ messages, currentUser, allUsers, onToggleReaction, onShowReactions, onShowMedia }: MessageAreaProps) {
+function MessageArea({ messages, currentUser, allUsers, onToggleReaction, onShowReactions, onShowMedia }: MessageAreaProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null); 
   const viewportRef = useRef<HTMLDivElement>(null); 
 
@@ -49,3 +50,5 @@ export default function MessageArea({ messages, currentUser, allUsers, onToggleR
     </ScrollArea>
   );
 }
+
+export default memo(MessageArea);

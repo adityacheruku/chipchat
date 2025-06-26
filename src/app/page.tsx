@@ -124,6 +124,7 @@ export default function AuthPage() {
                     required
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
+                    autoComplete="tel"
                   />
                 </div>
                 <div className="space-y-2">
@@ -137,6 +138,7 @@ export default function AuthPage() {
                     required
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
+                    autoComplete="current-password"
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
@@ -157,6 +159,7 @@ export default function AuthPage() {
                     required
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
+                    autoComplete="name"
                   />
                 </div>
                 <div className="space-y-2">
@@ -181,6 +184,7 @@ export default function AuthPage() {
                       required
                       className="flex-1 bg-input focus-visible:ring-ring"
                       disabled={loading}
+                      autoComplete="tel-national"
                     />
                   </div>
                 </div>
@@ -196,6 +200,7 @@ export default function AuthPage() {
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
                     minLength={8}
+                    autoComplete="new-password"
                   />
                 </div>
                 <div className="space-y-2">
@@ -208,6 +213,7 @@ export default function AuthPage() {
                     onChange={(e) => setRegOptionalEmail(e.target.value)}
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
+                    autoComplete="email"
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>

@@ -178,11 +178,11 @@ export default function UserProfileModal({
                 )}
                 <div className="space-y-2">
                   <Label htmlFor="displayNameModal">Name</Label>
-                  <Input id="displayNameModal" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="bg-input" disabled={isSaving}/>
+                  <Input id="displayNameModal" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="bg-input" disabled={isSaving} autoComplete="name" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phoneModal">Phone</Label>
-                  <Input id="phoneModal" value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-input" placeholder="Optional" disabled={isSaving}/>
+                  <Input id="phoneModal" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-input" placeholder="Optional" disabled={isSaving} autoComplete="tel" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="moodModal">Current Mood</Label>

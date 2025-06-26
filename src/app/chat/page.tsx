@@ -30,6 +30,8 @@ import { Loader2, MessagesSquare, Wifi, WifiOff } from 'lucide-react';
 import ReactionSummaryModal from '@/components/chat/ReactionSummaryModal';
 
 const MemoizedMessageArea = memo(MessageArea);
+const MemoizedChatHeader = memo(ChatHeader);
+const MemoizedInputBar = memo(InputBar);
 const FIRST_MESSAGE_SENT_KEY = 'chirpChat_firstMessageSent';
 
 export default function ChatPage() {
@@ -196,22 +198,18 @@ export default function ChatPage() {
   }, []);
 
   const handleWSPresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => {
-    if (otherUser && data.user_id === otherUser.id) {
-      setOtherUser(prev => prev ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : null);
-    }
-     if (currentUser && data.user_id === currentUser.id) {
+    setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : prev);
+    if (currentUser && data.user_id === currentUser.id) {
       fetchAndUpdateUser(); 
     }
-  }, [otherUser, currentUser, fetchAndUpdateUser]);
+  }, [currentUser, fetchAndUpdateUser]);
 
   const handleWSUserProfileUpdate = useCallback((data: UserProfileUpdateEventData) => {
-    if (otherUser && data.user_id === otherUser.id) {
-        setOtherUser(prev => prev ? { ...prev, ...data } : null);
-    }
+    setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, ...data } : prev);
     if (currentUser && data.user_id === currentUser.id) {
         fetchAndUpdateUser(); 
     }
-  }, [currentUser, otherUser, fetchAndUpdateUser]);
+  }, [currentUser, fetchAndUpdateUser]);
 
   const handleWSTypingUpdate = useCallback((data: TypingIndicatorEventData) => {
     if (activeChat && data.chat_id === activeChat.id) {
@@ -239,8 +237,7 @@ export default function ChatPage() {
   const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => {
     if (activeChat && data.chat_id === activeChat.id) {
         setChatMode(data.mode);
-        // Only show toast if the other user changed it
-        if (otherUser) {
+        if (currentUser && data.event_type === 'chat_mode_changed' && otherUser) {
             toast({
                 title: "Mode Changed",
                 description: `${otherUser.display_name} switched the chat to ${data.mode} mode.`,
@@ -248,7 +245,7 @@ export default function ChatPage() {
             });
         }
     }
-  }, [activeChat, otherUser, toast]);
+  }, [activeChat, currentUser, otherUser, toast]);
 
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     onMessageReceived: handleWSMessageReceived,
@@ -279,7 +276,7 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isAuthLoading, currentUser?.id]);
 
- const handleSendMessage = (text: string, mode: MessageMode) => {
+ const handleSendMessage = useCallback((text: string, mode: MessageMode) => {
     if (!currentUser || !activeChat) return;
     if (!text.trim()) return;
 
@@ -308,16 +305,16 @@ export default function ChatPage() {
             setTimeout(() => setShowNotificationPrompt(true), 2000);
         }
     }
-  };
+  }, [currentUser, activeChat, handleTyping, sendMessage, addAppEvent, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
 
-  const handleSendSticker = (stickerId: string, mode: MessageMode) => {
+  const handleSendSticker = useCallback((stickerId: string, mode: MessageMode) => {
     if (!currentUser || !activeChat) return;
     const clientTempId = uuidv4();
     sendMessage({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker", mode });
     addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
-  };
+  }, [currentUser, activeChat, sendMessage, addAppEvent]);
   
-  const handleFileUpload = async (
+  const handleFileUpload = useCallback(async (
     file: File,
     subtype: MessageType['message_subtype'],
     mode: MessageMode,
@@ -366,11 +363,11 @@ export default function ChatPage() {
           toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
           setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, status: 'failed' } : msg));
       }
-  };
+  }, [currentUser, activeChat, sendMessage, addAppEvent, toast]);
 
-  const handleSendImage = (file: File, mode: MessageMode) => handleFileUpload(file, 'image', mode, api.uploadChatImage);
-  const handleSendDocument = (file: File, mode: MessageMode) => handleFileUpload(file, 'document', mode, api.uploadChatDocument);
-  const handleSendVoiceMessage = (file: File, mode: MessageMode) => handleFileUpload(file, 'voice_message', mode, api.uploadVoiceMessage);
+  const handleSendImage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'image', mode, api.uploadChatImage), [handleFileUpload]);
+  const handleSendDocument = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'document', mode, api.uploadChatDocument), [handleFileUpload]);
+  const handleSendVoiceMessage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'voice_message', mode, api.uploadVoiceMessage), [handleFileUpload]);
   
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat) return;
@@ -404,7 +401,7 @@ export default function ChatPage() {
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
   }, [currentUser, activeChat, sendMessage, addAppEvent, messages, toast]);
 
-  const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File, onProgress?: (progress: number) => void) => {
+  const handleSaveProfile = useCallback(async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File, onProgress?: (progress: number) => void) => {
     if (!currentUser) return;
     try {
       if (newAvatarFile && onProgress) await api.uploadAvatar(newAvatarFile, onProgress);
@@ -417,7 +414,7 @@ export default function ChatPage() {
       toast({ variant: 'destructive', title: 'Profile Save Failed', description: error.message });
       throw error;
     }
-  };
+  }, [currentUser, fetchAndUpdateUser, toast, addAppEvent]);
 
   const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
     if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
@@ -504,12 +501,12 @@ export default function ChatPage() {
 
   const handleShowMedia = useCallback((url: string, type: 'image' | 'video') => setMediaModalData({ url, type }), []);
 
-  const handleSelectMode = (mode: MessageMode) => {
+  const handleSelectMode = useCallback((mode: MessageMode) => {
     if (!activeChat) return;
     setChatMode(mode);
     sendMessage({ event_type: "change_chat_mode", chat_id: activeChat.id, mode: mode });
     toast({ title: `Switched to ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode`, duration: 2000 });
-  };
+  }, [activeChat, sendMessage, toast]);
   
   const filteredMessages = useMemo(() => {
     // Show incognito messages temporarily regardless of current mode
@@ -547,18 +544,19 @@ export default function ChatPage() {
   if (!otherUser || !activeChat) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}<Button variant="link" className="mt-4" onClick={() => router.push('/onboarding/find-partner')}>Find a Partner</Button></div></div>;
 
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
-  const allUsersForMessageArea = currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {};
-  
+  const allUsersForMessageArea = useMemo(() => (currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {}), [currentUser, otherUser]);
+  const onProfileClick = useCallback(() => setIsProfileModalOpen(true), []);
+
   return (
-    <div className={cn("flex flex-col h-screen transition-colors duration-500", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
+    <div className={cn("flex flex-col h-[100svh] transition-colors duration-500", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
       <ConnectionStatusBanner />
       <div className={cn("flex-grow w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden", (protocol !== 'websocket' && protocol !== 'disconnected') && 'pt-10')}>
         <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try refreshing the page.">
           <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
             <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
-            <ChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={() => setIsProfileModalOpen(true)} onSendThinkingOfYou={() => handleSendThoughtRef.current?.()} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
+            <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
             <MemoizedMessageArea messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} />
-            <InputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
+            <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
           </div>
         </ErrorBoundary>
       </div>

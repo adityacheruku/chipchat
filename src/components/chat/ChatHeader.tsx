@@ -1,4 +1,5 @@
 
+import { memo } from 'react';
 import type { User } from '@/types';
 import MoodIndicator from './MoodIndicator';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -17,13 +18,13 @@ interface ChatHeaderProps {
   currentUser: User;
   otherUser: User | null; 
   onProfileClick: () => void; // This will now be triggered by UserCircle2 icon
-  onSendThinkingOfYou: (targetUserId: string) => void;
+  onSendThinkingOfYou: () => void;
   isTargetUserBeingThoughtOf: boolean;
   onOtherUserAvatarClick: () => void;
   isOtherUserTyping?: boolean;
 }
 
-export default function ChatHeader({ 
+function ChatHeader({ 
   currentUser, 
   otherUser, 
   onProfileClick, 
@@ -162,7 +163,7 @@ export default function ChatHeader({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => onSendThinkingOfYou(otherUser!.id)} 
+                  onClick={onSendThinkingOfYou}
                   className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 active:bg-red-500/20 rounded-full w-11 h-11"
                   aria-label={`Send ${otherUser.display_name} a "Thinking of You"`}
                   disabled={!otherUser}
@@ -198,3 +199,5 @@ export default function ChatHeader({
     </header>
   );
 }
+
+export default memo(ChatHeader);
