@@ -37,7 +37,7 @@ async def get_message_with_details_from_db(message_id: UUID) -> Optional[Message
             "*, stickers(image_url)"  # Assumes FK is on messages.sticker_id -> stickers.id
         ).eq("id", str(message_id)).maybe_single()
         
-        response = await query.execute()
+        response = query.execute()
 
         if not response or not response.data:
             return None
@@ -118,7 +118,7 @@ async def create_chat(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    new_chat_insert_resp_obj = await db_manager.get_table("chats").insert(new_chat_data).execute()
+    new_chat_insert_resp_obj = db_manager.get_table("chats").insert(new_chat_data).execute()
     if not new_chat_insert_resp_obj or not new_chat_insert_resp_obj.data:
         logger.error(f"Failed to create new chat entry in DB for users {current_user.id}, {recipient_id}.")
         raise HTTPException(status_code=500, detail="Failed to create chat")
@@ -131,13 +131,13 @@ async def create_chat(
         {"chat_id": str(created_chat_data["id"]), "user_id": str(recipient_id), "joined_at": datetime.now(timezone.utc).isoformat()}
     ]
     
-    await db_manager.get_table("chat_participants").insert(participants_to_add).execute() 
+    db_manager.get_table("chat_participants").insert(participants_to_add).execute() 
     logger.info(f"Added participants to chat_participants for chat {created_chat_data['id']}")
 
     participant_ids_to_fetch = [current_user.id, recipient_id]
     final_participant_details = []
     for user_uuid_to_fetch in participant_ids_to_fetch:
-        user_resp_obj_final = await db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen, partner_id").eq("id", str(user_uuid_to_fetch)).maybe_single().execute() 
+        user_resp_obj_final = db_manager.get_table("users").select("id, display_name, avatar_url, mood, phone, email, is_online, last_seen, partner_id").eq("id", str(user_uuid_to_fetch)).maybe_single().execute() 
         if not user_resp_obj_final or not user_resp_obj_final.data:
              logger.error(f"Participant user details for new chat not found for ID: {user_uuid_to_fetch}")
              raise HTTPException(status_code=500, detail="Error fetching participant details for new chat.")
@@ -170,7 +170,7 @@ async def get_messages(
     current_user: UserPublic = Depends(get_current_active_user),
 ):
     logger.info(f"User {current_user.id} requesting messages for chat {chat_id}. Limit: {limit}, Before: {before_timestamp}")
-    participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
+    participant_check_resp_obj = db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp_obj or not participant_check_resp_obj.data:
         logger.warning(f"User {current_user.id} forbidden to access messages for chat {chat_id} - not a participant.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
@@ -185,7 +185,7 @@ async def get_messages(
         if before_timestamp:
             query = query.lt("created_at", before_timestamp.isoformat())
         
-        messages_resp = await query.execute()
+        messages_resp = query.execute()
 
         messages_data_list = messages_resp.data if messages_resp and messages_resp.data else []
         
@@ -216,7 +216,7 @@ async def send_message_http(
     logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Mode: {message_create.mode}. Client ID: '{message_create.client_temp_id}'")
     
     # Check if user is a participant
-    participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
+    participant_check_resp_obj = db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp_obj or not participant_check_resp_obj.data:
         logger.warning(f"User {current_user.id} forbidden to send message to chat {chat_id} - not a participant.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
@@ -274,7 +274,7 @@ async def send_message_http(
         "reactions": {},
     })
     
-    insert_resp_obj = await db_manager.get_table("messages").insert(message_data_to_insert).execute()
+    insert_resp_obj = db_manager.get_table("messages").insert(message_data_to_insert).execute()
     if not insert_resp_obj or not insert_resp_obj.data:
         logger.error(f"Failed to insert message into DB for chat {chat_id} via HTTP. Payload: {message_data_to_insert}")
         raise HTTPException(status_code=500, detail="Failed to send message")
@@ -284,7 +284,7 @@ async def send_message_http(
     new_message_db_id = insert_resp_obj.data[0]['id']
     logger.info(f"Message {new_message_db_id} successfully saved to DB for chat {chat_id} via HTTP.")
 
-    await db_manager.get_table("chats").update({ "updated_at": now.isoformat() }).eq("id", str(chat_id)).execute()
+    db_manager.get_table("chats").update({ "updated_at": now.isoformat() }).eq("id", str(chat_id)).execute()
 
     message_for_response = await get_message_with_details_from_db(new_message_db_id)
     if not message_for_response:
@@ -308,7 +308,7 @@ async def react_to_message(
     current_user: UserPublic = Depends(get_current_active_user),
 ):
     logger.info(f"User {current_user.id} toggling reaction '{reaction_toggle.emoji}' for message {message_id}")
-    message_resp_obj = await db_manager.get_table("messages").select("*").eq("id", str(message_id)).maybe_single().execute()
+    message_resp_obj = db_manager.get_table("messages").select("*").eq("id", str(message_id)).maybe_single().execute()
     if not message_resp_obj or not message_resp_obj.data:
         logger.warning(f"Message {message_id} not found for reaction by user {current_user.id}.")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
@@ -320,7 +320,7 @@ async def react_to_message(
     if message_db.get("mode") == MessageModeEnum.INCOGNITO.value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot react to incognito messages.")
 
-    participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).eq("user_id", str(current_user.id)).maybe_single().execute()
+    participant_check_resp_obj = db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp_obj or not participant_check_resp_obj.data:
         logger.warning(f"User {current_user.id} forbidden to react to message {message_id} in chat {chat_id_str} - not a participant.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
@@ -341,7 +341,7 @@ async def react_to_message(
         reactions[emoji].append(user_id_str)
         logger.debug(f"User {user_id_str} added reaction '{emoji}' to message {message_id}. New reactions: {reactions}")
     
-    update_reactions_resp_obj = await db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
+    update_reactions_resp_obj = db_manager.get_table("messages").update({"reactions": reactions, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(message_id)).execute()
     if not update_reactions_resp_obj or not update_reactions_resp_obj.data:
         logger.error(f"Failed to update reaction for message {message_id}. Payload: {reactions}")
         raise HTTPException(status_code=500, detail="Failed to update reaction")
@@ -356,5 +356,5 @@ async def react_to_message(
     await ws_manager.broadcast_reaction_update(chat_id_str, message_for_response)
     
     return message_for_response
-
+    
     
