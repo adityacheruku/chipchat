@@ -1,5 +1,4 @@
 
-
 export type Mood = string;
 // NOTE: This list MUST be kept in sync with the list in the backend: `app/auth/schemas.py`
 export const ALL_MOODS: Mood[] = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"];

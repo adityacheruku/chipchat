@@ -37,12 +37,12 @@ async def connect(websocket: WebSocket, user_id: UUID):
     
     await redis.hset(USER_CONNECTIONS_KEY, str(user_id), SERVER_ID)
     
-    await db_manager.get_table("users").update({
+    db_manager.get_table("users").update({
         "is_online": True, 
         "last_seen": "now()"
     }).eq("id", str(user_id)).execute()
     
-    user_mood_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
+    user_mood_resp = db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
     
     await broadcast_presence_update(
         user_id,
@@ -58,12 +58,12 @@ async def disconnect(user_id: UUID):
     redis = await get_redis_client()
     await redis.hdel(USER_CONNECTIONS_KEY, str(user_id))
     
-    await db_manager.get_table("users").update({
+    db_manager.get_table("users").update({
         "is_online": False,
         "last_seen": "now()"
     }).eq("id", str(user_id)).execute()
     
-    user_mood_resp = await db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
+    user_mood_resp = db_manager.get_table("users").select("mood").eq("id", str(user_id)).maybe_single().execute()
 
     await broadcast_presence_update(
         user_id,
@@ -128,7 +128,7 @@ async def broadcast_to_users(user_ids: List[UUID], payload: Dict[str, Any]):
 
 async def _get_chat_participants(chat_id: str) -> List[UUID]:
     try:
-        participants_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id).execute()
+        participants_resp = db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id).execute()
         return [UUID(row["user_id"]) for row in participants_resp.data] if participants_resp.data else []
     except Exception as e:
         logger.error(f"DB error fetching participants for chat {chat_id}: {e}", exc_info=True)
@@ -171,11 +171,11 @@ async def broadcast_typing_indicator(chat_id: str, typing_user_id: UUID, is_typi
         await broadcast_to_users(recipients, payload)
 
 async def broadcast_presence_update(user_id: UUID, is_online: bool, mood: str):
-    user_chats_resp = await db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(user_id)).execute()
+    user_chats_resp = db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(user_id)).execute()
     if not user_chats_resp.data: return
 
     chat_ids = [row["chat_id"] for row in user_chats_resp.data]
-    recipients_resp = await db_manager.get_table("chat_participants").select("user_id").in_("chat_id", chat_ids).execute()
+    recipients_resp = db_manager.get_table("chat_participants").select("user_id").in_("chat_id", chat_ids).execute()
     if not recipients_resp.data: return
     
     unique_recipients = {UUID(row["user_id"]) for row in recipients_resp.data if UUID(row["user_id"]) != user_id}
@@ -191,10 +191,10 @@ async def broadcast_presence_update(user_id: UUID, is_online: bool, mood: str):
 
 async def broadcast_user_profile_update(user_id: UUID, updated_data: dict):
      # Same logic as presence update to find recipients
-    user_chats_resp = await db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(user_id)).execute()
+    user_chats_resp = db_manager.get_table("chat_participants").select("chat_id").eq("user_id", str(user_id)).execute()
     if not user_chats_resp.data: return
     chat_ids = [row["chat_id"] for row in user_chats_resp.data]
-    recipients_resp = await db_manager.get_table("chat_participants").select("user_id").in_("chat_id", chat_ids).execute()
+    recipients_resp = db_manager.get_table("chat_participants").select("user_id").in_("chat_id", chat_ids).execute()
     if not recipients_resp.data: return
     unique_recipients = {UUID(row["user_id"]) for row in recipients_resp.data if UUID(row["user_id"]) != user_id}
 
@@ -247,11 +247,11 @@ async def update_user_last_seen_throttled(user_id: UUID):
     last_update = user_last_activity_update_db.get(user_id)
     if not last_update or (now - last_update) > THROTTLE_LAST_SEEN_UPDATE_SECONDS:
         try:
-            await db_manager.get_table("users").update({"last_seen": "now()"}).eq("id", str(user_id)).execute()
+            db_manager.get_table("users").update({"last_seen": "now()"}).eq("id", str(user_id)).execute()
             user_last_activity_update_db[user_id] = now
         except Exception as e:
             logger.error(f"Error in throttled last_seen update for {user_id}: {e}")
 
 async def is_user_in_chat(user_id: UUID, chat_id: UUID) -> bool:
-    resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
+    resp = db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
     return bool(resp.data)
