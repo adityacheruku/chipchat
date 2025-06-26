@@ -24,7 +24,7 @@ router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 @router.websocket("/connect") 
 async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
-    current_user: Optional[UserPublic] = await try_get_user_from_token(token)
+    current_user: Optional[UserPublic] = await try_get_user_from_token(token, "access")
 
     if not current_user:
         await websocket.accept() 
