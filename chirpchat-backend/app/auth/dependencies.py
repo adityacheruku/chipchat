@@ -82,10 +82,10 @@ async def try_get_user_from_token(token: Optional[str], expected_token_type: str
     try:
         if token_data.user_id:
             response = await db_manager.get_table("users").select("*").eq("id", str(token_data.user_id)).maybe_single().execute()
-            user_dict = response.data
+            user_dict = response.data if response else None
         elif token_data.phone: 
             response = await db_manager.get_table("users").select("*").eq("phone", token_data.phone).maybe_single().execute()
-            user_dict = response.data
+            user_dict = response.data if response else None
 
     except Exception as e:
         logger.error(f"Auth: Database error fetching user: {e}", exc_info=True)
@@ -140,3 +140,4 @@ async def get_current_active_user(current_user: UserPublic = Depends(get_current
     # This is where you might check if a user account is active (e.g., not banned or soft-deleted)
     # For now, it just returns the current_user if get_current_user succeeds.
     return current_user
+

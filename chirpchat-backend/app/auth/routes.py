@@ -37,7 +37,7 @@ async def send_otp(phone_data: PhoneSchema):
     
     # Check if user already exists
     existing_user_resp = await db_manager.get_table("users").select("id").eq("phone", phone).maybe_single().execute()
-    if existing_user_resp.data:
+    if existing_user_resp and existing_user_resp.data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number already registered.")
 
     # Generate and store OTP
@@ -96,7 +96,7 @@ async def complete_registration(reg_data: CompleteRegistrationRequest):
 
     # Double-check that user doesn't exist (race condition mitigation)
     existing_user_resp = await db_manager.get_table("users").select("id").eq("phone", phone).maybe_single().execute()
-    if existing_user_resp.data:
+    if existing_user_resp and existing_user_resp.data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number was registered by another user. Please start over.")
 
     hashed_password = get_password_hash(reg_data.password)
@@ -127,7 +127,7 @@ async def complete_registration(reg_data: CompleteRegistrationRequest):
             detail=f"Database error during user creation: {getattr(e, 'message', 'Unknown database error')}",
         )
     
-    if not insert_response_obj.data:
+    if not insert_response_obj or not insert_response_obj.data:
         logger.error(f"User insert operation returned no data. Payload: {new_user_data}.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -175,7 +175,7 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user_dict_from_db = user_response_obj.data 
+    user_dict_from_db = user_response_obj.data if user_response_obj else None
     
     if user_dict_from_db is None:
         logger.warning(f"Login attempt failed for phone: {form_data.username} - User not found in DB.")
