@@ -432,8 +432,17 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    setDynamicBgClass(currentUser?.mood && otherUser?.mood ? getDynamicBackgroundClass(currentUser.mood, otherUser.mood) : 'bg-mood-default-chat-area');
-  }, [currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
+    let newBgClass = 'bg-mood-default-chat-area';
+    if (chatMode === 'fight') {
+      newBgClass = 'bg-mode-fight';
+    } else if (chatMode === 'incognito') {
+      newBgClass = 'bg-mode-incognito';
+    } else if (currentUser?.mood && otherUser?.mood) {
+      newBgClass = getDynamicBackgroundClass(currentUser.mood, otherUser.mood);
+    }
+    setDynamicBgClass(newBgClass);
+  }, [chatMode, currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
+
 
   const handleOtherUserAvatarClick = useCallback(() => {
     if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); }
@@ -485,10 +494,16 @@ export default function ChatPage() {
   
   const filteredMessages = useMemo(() => {
     return messages.filter(msg => {
-      // Incognito messages are always shown temporarily, regardless of current mode
-      if (msg.mode === 'incognito') return true;
-      // In a specific mode, show only messages of that mode.
-      return msg.mode === chatMode || (chatMode === 'normal' && !msg.mode);
+      // Always show incognito messages (they will be removed by a timer)
+      if (msg.mode === 'incognito') {
+        return true;
+      }
+      // For Normal mode, show messages with 'normal' mode OR no mode at all (legacy messages)
+      if (chatMode === 'normal') {
+        return msg.mode === 'normal' || !msg.mode;
+      }
+      // For other modes (like 'fight'), match the mode exactly
+      return msg.mode === chatMode;
     });
   }, [messages, chatMode]);
 

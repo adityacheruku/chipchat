@@ -191,8 +191,10 @@ export default function InputBar({
         setRecordingStatus('recording');
         timerIntervalRef.current = setInterval(() => setRecordingSeconds(prev => prev + 1), 1000);
         setTimeout(() => {
-            toast({ title: "Recording Limit Reached", description: `Maximum duration is ${MAX_RECORDING_SECONDS} seconds.`});
-            if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+            if (mediaRecorderRef.current?.state === "recording") {
+              toast({ title: "Recording Limit Reached", description: `Maximum duration is ${MAX_RECORDING_SECONDS} seconds.`});
+              mediaRecorderRef.current.stop();
+            }
         }, MAX_RECORDING_SECONDS * 1000);
     } catch (err) {
         toast({ variant: 'destructive', title: 'Microphone Access Denied', description: 'Please enable microphone permissions in your browser settings.' });
@@ -228,14 +230,16 @@ export default function InputBar({
     const filtered: typeof PICKER_EMOJIS = {};
     for (const category in PICKER_EMOJIS) {
         const cat = category as keyof typeof PICKER_EMOJIS;
-        const matchingEmojis = PICKER_EMOJIS[cat].emojis.filter(emoji => PICKER_EMOJIS[cat].keywords.some(kw => kw.includes(lowerCaseSearch)));
+        const matchingEmojis = PICKER_EMOJIS[cat].emojis.filter(emoji => 
+            PICKER_EMOJIS[cat].keywords.some(kw => kw.includes(lowerCaseSearch) || emoji.includes(lowerCaseSearch))
+        );
         if (matchingEmojis.length > 0) filtered[cat] = { ...PICKER_EMOJIS[cat], emojis: matchingEmojis };
     }
     return filtered;
   }, [emojiSearch]);
 
   const recordButtonLongPress = useLongPress(handleStartRecording, {
-    onFinish: () => { if(mediaRecorderRef.current) mediaRecorderRef.current.stop() },
+    onFinish: () => { if(mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop() },
     threshold: 250
   });
 
@@ -263,8 +267,7 @@ export default function InputBar({
           <>
             <div className="text-destructive text-2xl font-mono mb-4">{new Date(recordingSeconds * 1000).toISOString().substr(14, 5)}</div>
             <div className="relative h-16 w-16"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span><Mic className="relative h-16 w-16 text-destructive" /></div>
-            <p className="text-muted-foreground mt-4">Recording...</p>
-            <Button variant="destructive" size="lg" className="mt-8 rounded-full" onClick={() => mediaRecorderRef.current?.stop()}><StopCircle /> Stop</Button>
+            <p className="text-muted-foreground mt-4">Release to stop...</p>
           </>
         ) : recordingStatus === 'recorded' && audioURL ? (
           <>
