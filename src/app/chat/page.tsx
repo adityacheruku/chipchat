@@ -161,7 +161,7 @@ export default function ChatPage() {
     }
   }, [currentUser, router, setAvatarPreview, toast]);
 
-  const handleWSMessageAck = useCallback((ackData: MessageAckEventData) => {
+  const handleMessageAck = useCallback((ackData: MessageAckEventData) => {
       setMessages(prevMessages => 
           prevMessages.map(msg => 
               msg.client_temp_id === ackData.client_temp_id
@@ -171,7 +171,7 @@ export default function ChatPage() {
       );
   }, []);
 
-  const handleWSMessageReceived = useCallback((newMessageFromServer: MessageType) => {
+  const handleNewMessage = useCallback((newMessageFromServer: MessageType) => {
       setMessages(prevMessages => {
         if (prevMessages.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)) {
             return prevMessages.map(m => 
@@ -189,7 +189,7 @@ export default function ChatPage() {
     }
   }, [activeChat]);
 
-  const handleWSReactionUpdate = useCallback((data: MessageReactionUpdateEventData) => {
+  const handleReactionUpdate = useCallback((data: MessageReactionUpdateEventData) => {
     setMessages(prevMessages =>
       prevMessages.map(msg =>
         msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg
@@ -197,42 +197,25 @@ export default function ChatPage() {
     );
   }, []);
 
-  const handleWSPresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => {
+  const handlePresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => {
     setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : prev);
     if (currentUser && data.user_id === currentUser.id) {
       fetchAndUpdateUser(); 
     }
   }, [currentUser, fetchAndUpdateUser]);
 
-  const handleWSUserProfileUpdate = useCallback((data: UserProfileUpdateEventData) => {
+  const handleProfileUpdate = useCallback((data: UserProfileUpdateEventData) => {
     setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, ...data } : prev);
     if (currentUser && data.user_id === currentUser.id) {
         fetchAndUpdateUser(); 
     }
   }, [currentUser, fetchAndUpdateUser]);
 
-  const handleWSTypingUpdate = useCallback((data: TypingIndicatorEventData) => {
+  const handleTypingUpdate = useCallback((data: TypingIndicatorEventData) => {
     if (activeChat && data.chat_id === activeChat.id) {
       setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }));
     }
   }, [activeChat]);
-
-  const handleSendThoughtRef = useRef<() => void>(() => {});
-
-  const handleWSThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
-    if (otherUser && data.sender_id === otherUser.id) {
-      toast({
-        title: "❤️ Thinking of You!",
-        description: `${otherUser.display_name} is thinking of you.`,
-        duration: THINKING_OF_YOU_DURATION,
-        action: (
-          <ToastAction altText="Send one back" onClick={() => handleSendThoughtRef.current()}>
-            Send one back?
-          </ToastAction>
-        ),
-      });
-    }
-  }, [otherUser, toast]);
   
   const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => {
     if (activeChat && data.chat_id === activeChat.id) {
@@ -247,14 +230,32 @@ export default function ChatPage() {
     }
   }, [activeChat, currentUser, otherUser, toast]);
 
+  const handleSendThoughtRef = useRef<() => void>(() => {});
+
+  const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
+    if (otherUser && data.sender_id === otherUser.id) {
+      toast({
+        title: "❤️ Thinking of You!",
+        description: `${otherUser.display_name} is thinking of you.`,
+        duration: THINKING_OF_YOU_DURATION,
+        action: (
+          <ToastAction altText="Send one back" onClick={() => handleSendThoughtRef.current()}>
+            Send one back?
+          </ToastAction>
+        ),
+      });
+    }
+  }, [otherUser, toast]);
+  
+
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
-    onMessageReceived: handleWSMessageReceived,
-    onReactionUpdate: handleWSReactionUpdate,
-    onPresenceUpdate: handleWSPresenceUpdate,
-    onTypingUpdate: handleWSTypingUpdate,
-    onThinkingOfYouReceived: handleWSThinkingOfYou,
-    onUserProfileUpdate: handleWSUserProfileUpdate,
-    onMessageAck: handleWSMessageAck,
+    onMessageReceived: handleNewMessage,
+    onReactionUpdate: handleReactionUpdate,
+    onPresenceUpdate: handlePresenceUpdate,
+    onTypingUpdate: handleTypingUpdate,
+    onThinkingOfYouReceived: handleThinkingOfYou,
+    onUserProfileUpdate: handleProfileUpdate,
+    onMessageAck: handleMessageAck,
     onChatModeChanged: handleChatModeChanged,
   });
 
