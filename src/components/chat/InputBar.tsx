@@ -350,7 +350,7 @@ function InputBar({
           </div>
         )}
         <ScrollArea className="h-[calc(100%-110px)]">
-          <div className="p-2">{Object.entries(filteredEmojis).map(([category, data]) => (<div key={category}><h3 className="text-sm font-medium text-muted-foreground py-1">{category}</h3><div className="grid grid-cols-8 gap-1">{data.emojis.map(emoji => (<Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)} aria-label={`Select emoji ${emoji}`}>{emoji}</Button>))}</div></div>))}</div>
+          <div className="p-2">{Object.entries(filteredEmojis).map(([category, data]) => (<div key={category}><h3 className="text-sm font-medium text-muted-foreground py-1">{category}</h3><div className="grid grid-cols-7 sm:grid-cols-8 gap-1">{data.emojis.map(emoji => (<Button key={emoji} variant="ghost" className="text-xl p-0 h-9 w-9 rounded-md" onClick={() => handleEmojiSelect(emoji)} aria-label={`Select emoji ${emoji}`}>{emoji}</Button>))}</div></div>))}</div>
         </ScrollArea>
       </TabsContent>
       <TabsContent value="sticker" className="flex-grow overflow-hidden mt-0"><StickerPicker onStickerSelect={handleStickerSelect} /></TabsContent>

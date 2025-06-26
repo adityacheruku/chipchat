@@ -69,7 +69,7 @@ function ChatHeader({
   return (
     <header className="flex items-center justify-between p-3 sm:p-4 border-b border-border bg-card rounded-t-lg h-16">
       {/* Left Section: Other User's Avatar */}
-      <div className="flex-shrink-0 w-1/5">
+      <div className="flex-shrink-0">
         {otherUser ? (
           <button
             onClick={onOtherUserAvatarClick}
@@ -134,7 +134,7 @@ function ChatHeader({
       </div>
 
       {/* Right Section: Action Icons */}
-      <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 w-1/5 justify-end">
+      <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 justify-end">
         {otherUser && otherUser.phone && (
           <TooltipProvider>
             <Tooltip>
