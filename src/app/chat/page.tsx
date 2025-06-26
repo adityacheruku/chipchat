@@ -330,6 +330,16 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isAuthLoading, currentUser?.id]);
 
+ const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+ const handleTyping = useCallback((isTyping: boolean) => {
+   if (!activeChat) return;
+   if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+   sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChat.id });
+   if (isTyping) {
+       typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChat.id }), 3000);
+   }
+ }, [activeChat, sendMessage]);
+
  const handleSendMessage = useCallback((text: string, mode: MessageMode) => {
     if (!currentUser || !activeChat) return;
     if (!text.trim()) return;
@@ -516,16 +526,6 @@ export default function ChatPage() {
   const handleOtherUserAvatarClick = useCallback(() => {
     if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); }
   }, [otherUser]);
-
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const handleTyping = useCallback((isTyping: boolean) => {
-    if (!activeChat) return;
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChat.id });
-    if (isTyping) {
-        typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChat.id }), 3000);
-    }
-  }, [activeChat, sendMessage]);
 
   const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
     if (currentUser) {
