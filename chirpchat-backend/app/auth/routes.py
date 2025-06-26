@@ -6,8 +6,10 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from app.auth.schemas import UserCreate, UserLogin, UserUpdate, UserPublic, Token
-from app.auth.dependencies import get_current_user, get_current_active_user
-from app.utils.security import get_password_hash, verify_password, create_access_token
+# 🔒 Security: Import the new dependency for the /refresh endpoint.
+from app.auth.dependencies import get_current_user, get_current_active_user, get_user_from_refresh_token
+# 🔒 Security: Import refresh token creation utility.
+from app.utils.security import get_password_hash, verify_password, create_access_token, create_refresh_token
 from app.database import db_manager
 from app.config import settings
 from app.utils.email_utils import send_login_notification_email
@@ -118,7 +120,11 @@ async def register(user_create: UserCreate):
         data={"sub": created_user_raw["phone"], "user_id": str(created_user_raw["id"])},
         expires_delta=access_token_expires
     )
-    return Token(access_token=access_token, token_type="bearer", user=user_public_info)
+    # 🔒 Security: Create a refresh token upon successful registration.
+    refresh_token = create_refresh_token(
+        data={"sub": created_user_raw["phone"], "user_id": str(created_user_raw["id"])}
+    )
+    return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer", user=user_public_info)
 
 
 @auth_router.post("/login", response_model=Token)
@@ -202,6 +208,10 @@ async def login(
         data={"sub": user_dict_from_db["phone"], "user_id": str(user_dict_from_db["id"])},
         expires_delta=access_token_expires
     )
+    # 🔒 Security: Create a refresh token upon successful login.
+    refresh_token = create_refresh_token(
+        data={"sub": user_dict_from_db["phone"], "user_id": str(user_dict_from_db["id"])}
+    )
     
     if settings.NOTIFICATION_EMAIL_TO:
         login_time_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -217,7 +227,37 @@ async def login(
     else:
         logger.info(f"NOTIFICATION_EMAIL_TO not set. Skipping login notification email for user: {user_dict_from_db['display_name']}")
 
-    return Token(access_token=access_token, token_type="bearer", user=user_public_info)
+    return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer", user=user_public_info)
+
+# 🔒 Security: Add a /refresh endpoint to issue a new access token using a valid refresh token.
+@auth_router.post("/refresh", response_model=Token, summary="Refresh access token")
+async def refresh_access_token(current_user: UserPublic = Depends(get_user_from_refresh_token)):
+    """
+    Takes a valid `refresh_token` and returns a new `access_token` and a new `refresh_token`.
+    This allows clients to maintain their session without requiring the user to log in again.
+    """
+    logger.info(f"Refreshing tokens for user {current_user.id}")
+    
+    # The `get_user_from_refresh_token` dependency has already validated the refresh token
+    # and loaded the current user's data. Now we just issue a new set of tokens.
+    
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    new_access_token = create_access_token(
+        data={"sub": current_user.phone, "user_id": str(current_user.id)},
+        expires_delta=access_token_expires
+    )
+    
+    # 🔒 Security: Implement refresh token rotation by issuing a new refresh token.
+    new_refresh_token = create_refresh_token(
+         data={"sub": current_user.phone, "user_id": str(current_user.id)}
+    )
+    
+    return Token(
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
+        token_type="bearer",
+        user=current_user
+    )
 
 
 @user_router.get("/me", response_model=UserPublic)

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30 # Default to 30 minutes
+    # 🔒 Security: Define a longer expiration for refresh tokens for persistent sessions.
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days
     
     # Cloudinary
     CLOUDINARY_CLOUD_NAME: str

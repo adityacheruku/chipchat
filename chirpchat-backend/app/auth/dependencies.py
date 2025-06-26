@@ -1,3 +1,4 @@
+
 from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt, ExpiredSignatureError, JWTClaimsError
@@ -34,7 +35,8 @@ async def get_token_from_header_or_query(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-async def try_get_user_from_token(token: Optional[str]) -> Optional[UserPublic]:
+# 🔒 Security: Refactored to check for an expected token type ('access' or 'refresh').
+async def try_get_user_from_token(token: Optional[str], expected_token_type: str) -> Optional[UserPublic]:
     """
     Safely decodes a JWT and fetches the user from the database.
     Returns the UserPublic object on success, or None on any failure (e.g., invalid token, user not found).
@@ -48,16 +50,22 @@ async def try_get_user_from_token(token: Optional[str]) -> Optional[UserPublic]:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         phone: Optional[str] = payload.get("sub")
         user_id_str: Optional[str] = payload.get("user_id")
+        
+        # 🔒 Security: Check that the provided token is of the expected type.
+        if payload.get("token_type") != expected_token_type:
+            logger.warning(f"Auth: Invalid token type. Expected '{expected_token_type}', got '{payload.get('token_type')}'.")
+            return None
 
         if phone is None and user_id_str is None:
             logger.warning("Auth: Token missing both phone (sub) and user_id.")
             return None
         
-        token_data = TokenData(phone=phone, user_id=UUID(user_id_str) if user_id_str else None)
-        logger.info(f"Auth: Token decoded for user_id='{token_data.user_id}', phone='{token_data.phone}'")
+        # 🔒 Security: Add token_type to the Pydantic model for completeness.
+        token_data = TokenData(phone=phone, user_id=UUID(user_id_str) if user_id_str else None, token_type=payload.get("token_type"))
+        logger.info(f"Auth: Token decoded for user_id='{token_data.user_id}', phone='{token_data.phone}', type='{token_data.token_type}'")
 
     except ExpiredSignatureError:
-        logger.warning("Auth: Token has expired.")
+        logger.warning(f"Auth: Token has expired (type: {expected_token_type}).")
         return None
     except (JWTError, ValidationError) as e:
         logger.warning(f"Auth: Token validation error: {e}")
@@ -95,11 +103,32 @@ async def get_current_user(token: str = Depends(get_token_from_header_or_query))
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    user = await try_get_user_from_token(token)
+    # 🔒 Security: Explicitly require an 'access' token for standard API access.
+    user = await try_get_user_from_token(token, expected_token_type="access")
     if not user:
         raise credentials_exception
     
     logger.info(f"Successfully authenticated user: {user.id} ({user.display_name})")
+    return user
+
+# 🔒 Security: New dependency to exclusively validate refresh tokens for the /refresh endpoint.
+async def get_user_from_refresh_token(token: str = Depends(oauth2_scheme)) -> UserPublic:
+    if token is None:
+         raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token missing",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate refresh token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    user = await try_get_user_from_token(token, expected_token_type="refresh")
+    if not user:
+        raise credentials_exception
+    
+    logger.info(f"Successfully authenticated user from refresh token: {user.id} ({user.display_name})")
     return user
 
 

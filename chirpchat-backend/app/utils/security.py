@@ -17,10 +17,25 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
+    # 🔒 Security: Add a token_type claim to distinguish access from refresh tokens.
+    to_encode.update({"token_type": "access"})
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+# 🔒 Security: Create a separate function for refresh tokens with a much longer expiry.
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = data.copy()
+    # 🔒 Security: Add a token_type claim to distinguish access from refresh tokens.
+    to_encode.update({"token_type": "refresh"})
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt

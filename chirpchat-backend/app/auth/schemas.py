@@ -63,10 +63,15 @@ class UserPublic(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    # 🔒 Security: Add refresh_token to the response model for persistent sessions.
+    refresh_token: str
     token_type: str = "bearer"
     user: UserPublic
 
 class TokenData(BaseModel):
     phone: Optional[str] = None # Changed from email to phone
     user_id: Optional[UUID] = None
+    # 🔒 Security: Add token_type to internal token data model for validation.
+    token_type: Optional[str] = None
+
 
