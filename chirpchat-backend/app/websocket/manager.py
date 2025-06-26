@@ -138,7 +138,7 @@ async def broadcast_chat_message(chat_id: str, message_data: Any):
     participant_ids = await _get_chat_participants(chat_id)
     payload = {
         "event_type": "new_message",
-        "message": message_data.model_dump(),
+        "message": message_data.model_dump(mode='json'),
         "chat_id": chat_id
     }
     if participant_ids:
@@ -146,11 +146,15 @@ async def broadcast_chat_message(chat_id: str, message_data: Any):
 
 async def broadcast_reaction_update(chat_id: str, message_data: Any):
     participant_ids = await _get_chat_participants(chat_id)
+    
+    # Use model_dump to ensure all nested UUIDs are converted to strings
+    dumped_message_data = message_data.model_dump(mode='json')
+
     payload = {
         "event_type": "message_reaction_update",
-        "message_id": str(message_data.id),
+        "message_id": dumped_message_data["id"],
         "chat_id": chat_id,
-        "reactions": message_data.reactions,
+        "reactions": dumped_message_data.get("reactions", {}),
     }
     if participant_ids:
         await broadcast_to_users(participant_ids, payload)
