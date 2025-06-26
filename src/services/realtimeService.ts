@@ -64,17 +64,27 @@ class RealtimeService {
     
     if (this.protocol === 'websocket' && this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(payload));
-    } else if (this.protocol === 'sse' && payload.event_type !== 'start_typing' && payload.event_type !== 'stop_typing') {
+    } else if (this.protocol === 'sse' || this.protocol === 'fallback') {
+      // For SSE/fallback, only certain actions are sent via HTTP
       if (payload.event_type === 'send_message') {
           const { chat_id, ...messageData } = payload;
           api.sendMessageHttp(chat_id, messageData).catch(err => {
               this.emit('error', { title: 'Send Failed (HTTP)', description: err.message });
               pendingMessages.delete(payload.client_temp_id);
           });
-      } else {
-           console.warn(`Cannot send event type "${payload.event_type}" over SSE/HTTP channel.`);
+      } else if (payload.event_type === 'ping_thinking_of_you') {
+          api.sendThinkingOfYouPing(payload.recipient_user_id).catch(err => {
+             this.emit('error', { title: 'Ping Failed (HTTP)', description: err.message });
+          });
+      } else if (payload.event_type === 'toggle_reaction') {
+           api.toggleReactionHttp(payload.message_id, payload.emoji).catch(err => {
+             this.emit('error', { title: 'Reaction Failed (HTTP)', description: err.message });
+          });
       }
-    } else if (this.protocol !== 'websocket' && this.protocol !== 'sse') {
+      else {
+           console.warn(`Event type "${payload.event_type}" is not sent over HTTP fallback.`);
+      }
+    } else if (this.protocol !== 'websocket' && this.protocol !== 'sse' && this.protocol !== 'fallback') {
         this.emit('error', { title: 'Not Connected', description: 'Cannot send message. Please check your connection.' });
     }
   }
@@ -202,7 +212,7 @@ class RealtimeService {
     if (!this.token) return;
     console.log("WebSocket failed. Falling back to SSE.");
     
-    this.setProtocol('sse');
+    this.setProtocol('fallback');
     const sseUrl = `${EVENTS_BASE_URL}/events/subscribe?token=${encodeURIComponent(this.token)}`;
     this.sse = new EventSource(sseUrl, { withCredentials: false });
 

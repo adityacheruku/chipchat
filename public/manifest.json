@@ -1,7 +1,7 @@
 {
   "name": "ChirpChat",
   "short_name": "ChirpChat",
-  "description": "A friendly chat application with PWA shortcuts.",
+  "description": "An emotionally intelligent chat application for two.",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -10,21 +10,16 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-384.png",
-      "sizes": "384x384",
-      "type": "image/png"
-    },
-    {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
-  "theme_color": "#A991B5",
-  "background_color": "#F0F4F7",
-  "start_url": "/",
+  "start_url": "/chat",
   "display": "standalone",
-  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#90AFC5",
   "shortcuts": [
     {
       "name": "Set My Mood",
@@ -34,16 +29,16 @@
       "icons": [{ "src": "/icons/shortcut-mood.png", "sizes": "192x192" }]
     },
     {
-      "name": "Thinking of You",
-      "short_name": "Think",
-      "description": "Send a 'thinking of you' ping to your partner",
+      "name": "Send a Thought",
+      "short_name": "Ping",
+      "description": "Let your partner know you're thinking of them",
       "url": "/quick/think",
       "icons": [{ "src": "/icons/shortcut-think.png", "sizes": "192x192" }]
     },
     {
-      "name": "Send Mood Image",
+      "name": "Share an Image",
       "short_name": "Image",
-      "description": "Quickly send an image expressing your mood",
+      "description": "Quickly send an image to your chat",
       "url": "/quick/image",
       "icons": [{ "src": "/icons/shortcut-image.png", "sizes": "192x192" }]
     }

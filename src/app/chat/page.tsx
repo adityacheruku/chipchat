@@ -273,7 +273,7 @@ export default function ChatPage() {
   const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => {
     if (activeChat && data.chat_id === activeChat.id) {
         setChatMode(data.mode);
-        if (currentUser && data.event_type === 'chat_mode_changed' && otherUser) {
+        if (currentUser && otherUser) {
             toast({
                 title: "Mode Changed",
                 description: `${otherUser.display_name} switched the chat to ${data.mode} mode.`,
@@ -579,7 +579,7 @@ export default function ChatPage() {
 
   const ConnectionStatusBanner = () => {
     if (protocol === 'disconnected' && !isBrowserOnline) return <div className="fixed top-0 left-0 right-0 bg-destructive text-destructive-foreground p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><WifiOff size={16} />You are offline. Features may be limited.</div>;
-    if (protocol === 'sse') return <div className="fixed top-0 left-0 right-0 bg-amber-500 text-black p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Wifi size={16} />Connected via fallback. Some features may be slower.</div>;
+    if (protocol === 'sse' || protocol === 'fallback') return <div className="fixed top-0 left-0 right-0 bg-amber-500 text-black p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Wifi size={16} />Connected via fallback. Some features may be slower.</div>;
     if (protocol === 'connecting' || protocol === 'syncing') return <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" />{protocol === 'syncing' ? 'Syncing...' : 'Connecting...'}</div>;
     return null;
   };
@@ -629,3 +629,4 @@ export default function ChatPage() {
     
 
     
+
