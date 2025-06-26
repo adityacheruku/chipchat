@@ -280,5 +280,3 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 }
 
 export default memo(MessageBubble);
-
-    

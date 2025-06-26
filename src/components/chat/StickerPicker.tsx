@@ -93,6 +93,7 @@ const StickerItem = ({ sticker, onSelect, onToggleFavorite, isFavorite }: { stic
                         <button
                             onClick={() => onSelect(sticker)}
                             className="p-1 w-full h-full flex items-center justify-center rounded-md hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label={`Select sticker: ${sticker.name || 'Sticker'}`}
                         >
                             <Image
                                 src={sticker.image_url}
