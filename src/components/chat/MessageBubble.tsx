@@ -40,6 +40,7 @@ interface MessageBubbleProps {
   onShowMedia: (url: string, type: 'image' | 'video') => void;
   allUsers: Record<string, User>;
   onRetrySend?: (message: Message) => void;
+  wrapperId?: string;
 }
 
 function formatDuration(seconds: number | null | undefined): string {
@@ -133,7 +134,7 @@ const MessageStatusIndicator = ({ status }: { status: Message['status'] }) => {
     }
 };
 
-function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, allUsers, onRetrySend }: MessageBubbleProps) {
+function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, allUsers, onRetrySend, wrapperId }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
 
   const handleCopy = () => {
@@ -217,7 +218,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const reactionsDisabled = message.mode === 'incognito';
 
   return (
-    <div className={cn(
+    <div id={wrapperId} className={cn(
         'flex flex-col group transition-opacity duration-500', 
         bubbleAlignment, 
         isCurrentUser ? 'pl-10' : 'pr-10',
@@ -279,3 +280,5 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 }
 
 export default memo(MessageBubble);
+
+    

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData } from '@/types';
@@ -64,6 +64,12 @@ export default function ChatPage() {
   const [mediaModalData, setMediaModalData] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
 
   const [chatMode, setChatMode] = useState<MessageMode>('normal');
+  
+  // State for infinite scroll
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [topMessageId, setTopMessageId] = useState<string | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string, metadata?: Record<string, any>) => {
     setAppEvents(prevEvents => {
@@ -138,7 +144,8 @@ export default function ChatPage() {
         setActiveChat(chatSession);
 
         if (chatSession) {
-            const messagesData = await api.getMessages(chatSession.id);
+            const messagesData = await api.getMessages(chatSession.id, 50);
+            if(messagesData.messages.length < 50) setHasMoreMessages(false);
             setMessages(messagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' })).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
         } else {
             throw new Error("Failed to establish a chat session with your partner.");
@@ -160,6 +167,43 @@ export default function ChatPage() {
         setIsChatLoading(false);
     }
   }, [currentUser, router, setAvatarPreview, toast]);
+
+  useLayoutEffect(() => {
+    if (topMessageId && viewportRef.current) {
+        const topMessageElement = viewportRef.current.querySelector(`#message-${topMessageId}`);
+        if (topMessageElement) {
+            topMessageElement.scrollIntoView({ block: 'start', behavior: 'instant' });
+        }
+        setTopMessageId(null);
+    }
+  }, [topMessageId, messages]);
+
+  const loadMoreMessages = useCallback(async () => {
+    if (isLoadingMore || !hasMoreMessages || !activeChat || messages.length === 0) return;
+
+    setIsLoadingMore(true);
+    try {
+        const oldestMessage = messages[0];
+        if(!oldestMessage) return;
+
+        setTopMessageId(oldestMessage.id);
+
+        const olderMessagesData = await api.getMessages(activeChat.id, 50, oldestMessage.created_at);
+        
+        if (olderMessagesData.messages && olderMessagesData.messages.length > 0) {
+            const newMessages = olderMessagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' }));
+            setMessages(prevMessages => [...newMessages, ...prevMessages]);
+            if (olderMessagesData.messages.length < 50) setHasMoreMessages(false);
+        } else {
+            setHasMoreMessages(false);
+        }
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not load older messages.' });
+    } finally {
+        setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMoreMessages, activeChat, messages, toast]);
+
 
   const handleMessageAck = useCallback((ackData: MessageAckEventData) => {
       setMessages(prevMessages => 
@@ -358,7 +402,7 @@ export default function ChatPage() {
           }
           
           sendMessage(messagePayload);
-          addAppEvent('messageSent', `${currentUser.display_name} sent a ${subtype}.`, currentUser.id, currentUser.display_name);
+          addAppEvent('messageSent', `${currentUser.display_name} sent a ${subtype}.`, currentUser.display_name, currentUser.id);
           setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, status: 'sending', uploadProgress: 100 } : msg));
       } catch (error: any) {
           toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
@@ -510,24 +554,15 @@ export default function ChatPage() {
   }, [activeChat, sendMessage, toast]);
   
   const filteredMessages = useMemo(() => {
-    // Show incognito messages temporarily regardless of current mode
     const incognitoMessages = messages.filter(msg => msg.mode === 'incognito');
   
     const modeSpecificMessages = messages.filter(msg => {
-      // Don't show incognito messages here, they are handled separately
       if (msg.mode === 'incognito') return false;
-      
-      // For Normal mode, show messages with 'normal' mode OR no mode at all (legacy messages)
-      if (chatMode === 'normal') {
-        return msg.mode === 'normal' || !msg.mode;
-      }
-      // For other modes (like 'fight'), match the mode exactly
+      if (chatMode === 'normal') return msg.mode === 'normal' || !msg.mode;
       return msg.mode === chatMode;
     });
 
-    // Combine and sort
     return [...modeSpecificMessages, ...incognitoMessages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-
   }, [messages, chatMode]);
 
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
@@ -549,14 +584,25 @@ export default function ChatPage() {
   const onProfileClick = useCallback(() => setIsProfileModalOpen(true), []);
 
   return (
-    <div className={cn("flex flex-col h-[100svh] transition-colors duration-500", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
+    <div className={cn("flex flex-col h-[100dvh] transition-colors duration-500", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
       <ConnectionStatusBanner />
       <div className={cn("flex-grow w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden", (protocol !== 'websocket' && protocol !== 'disconnected') && 'pt-10')}>
         <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try refreshing the page.">
           <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
             <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
             <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
-            <MemoizedMessageArea messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} />
+            <MemoizedMessageArea 
+              viewportRef={viewportRef}
+              messages={filteredMessages} 
+              currentUser={currentUser} 
+              allUsers={allUsersForMessageArea} 
+              onToggleReaction={handleToggleReaction} 
+              onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} 
+              onShowMedia={handleShowMedia}
+              onLoadMore={loadMoreMessages}
+              hasMore={hasMoreMessages}
+              isLoadingMore={isLoadingMore}
+            />
             <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
           </div>
         </ErrorBoundary>
@@ -570,3 +616,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
