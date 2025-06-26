@@ -80,10 +80,12 @@ async def send_personal_message(websocket: WebSocket, payload: dict):
 
 # --- Message Deduplication ---
 async def is_message_processed(client_temp_id: str) -> bool:
+    if not client_temp_id: return False
     redis = await get_redis_client()
     return await redis.exists(f"{PROCESSED_MESSAGES_PREFIX}{client_temp_id}")
 
 async def mark_message_as_processed(client_temp_id: str):
+    if not client_temp_id: return
     redis = await get_redis_client()
     await redis.set(f"{PROCESSED_MESSAGES_PREFIX}{client_temp_id}", "1", ex=PROCESSED_MESSAGE_TTL_SECONDS)
 

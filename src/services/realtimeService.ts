@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Message, WebSocketEventData, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, HeartbeatClientEvent, EventPayload } from '@/types';
+import type { Message, WebSocketEventData, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, HeartbeatClientEvent, EventPayload, ChatModeChangedEventData } from '@/types';
 import { api } from './api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://ef9e-49-43-230-78.ngrok-free.app';
@@ -241,7 +241,7 @@ class RealtimeService {
     };
 
     // Use a set of known event types to add listeners
-    const ALL_EVENT_TYPES = ["new_message", "message_reaction_update", "user_presence_update", "typing_indicator", "thinking_of_you_received", "user_profile_update", "message_ack", "error", "ping"];
+    const ALL_EVENT_TYPES = ["new_message", "message_reaction_update", "user_presence_update", "typing_indicator", "thinking_of_you_received", "user_profile_update", "message_ack", "error", "ping", "chat_mode_changed"];
     ALL_EVENT_TYPES.forEach(type => this.sse?.addEventListener(type, sseMessageHandler));
   }
 
