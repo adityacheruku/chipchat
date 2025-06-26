@@ -34,51 +34,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // ⚡️ Memoized with useCallback to prevent re-renders in consumers
   const handleAuthSuccess = useCallback((data: AuthResponse) => {
     localStorage.setItem('chirpChatToken', data.access_token);
-    localStorage.setItem('chirpChatUser', JSON.stringify(data.user));
     api.setAuthToken(data.access_token);
     setCurrentUser(data.user);
     setToken(data.access_token);
-    if (data.user.partner_id) {
-      router.push('/chat');
-    } else {
-      router.push('/onboarding/find-partner');
-    }
-  }, [router]);
+    // ⚡️ The routing logic is now handled by the central useEffect hook
+  }, []);
 
   const logout = useCallback(() => {
     setCurrentUser(null);
     setToken(null);
     api.setAuthToken(null);
     localStorage.removeItem('chirpChatToken');
-    localStorage.removeItem('chirpChatUser');
-    router.push('/');
-    toast({ title: 'Logged Out', description: "You've been successfully logged out." });
-  }, [router, toast]);
-  
-  const loadUserFromToken = useCallback(async (storedToken: string) => {
-    setIsLoading(true);
-    try {
-      api.setAuthToken(storedToken);
-      const userProfile = await api.getCurrentUserProfile();
-      setCurrentUser(userProfile);
-      setToken(storedToken);
-    } catch (error) {
-      console.error("Failed to load user from token", error);
-      logout();
-    } finally {
-      setIsLoading(false);
+    if (pathname !== '/') {
+        router.push('/');
     }
-  }, [logout]);
-
-
+    toast({ title: 'Logged Out', description: "You've been successfully logged out." });
+  }, [router, toast, pathname]);
+  
+  // ⚡️ This effect now exclusively handles loading the initial state from localStorage.
   useEffect(() => {
     const storedToken = localStorage.getItem('chirpChatToken');
     if (storedToken) {
+      const loadUserFromToken = async (tokenToLoad: string) => {
+        try {
+          api.setAuthToken(tokenToLoad);
+          const userProfile = await api.getCurrentUserProfile();
+          setCurrentUser(userProfile);
+          setToken(tokenToLoad);
+        } catch (error) {
+          console.error("Failed to load user from token", error);
+          logout(); // This clears invalid tokens
+        } finally {
+          setIsLoading(false);
+        }
+      };
       loadUserFromToken(storedToken);
     } else {
       setIsLoading(false);
     }
-  }, [loadUserFromToken]);
+  }, [logout]);
   
   const login = useCallback(async (phone: string, password_plaintext: string) => { 
     setIsLoading(true);
@@ -87,10 +81,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       handleAuthSuccess(data);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Login Failed', description: error.message || 'Please check your credentials.' });
+      setIsLoading(false); // Ensure loading is stopped on error
       throw error;
-    } finally {
-      setIsLoading(false);
-    }
+    } 
+    // isLoading will be set to false by the useEffect that handles routing
   }, [handleAuthSuccess, toast]);
 
   const register = useCallback(async (userData: BackendUserCreate) => {
@@ -101,10 +95,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
        toast({ title: 'Registration Successful!', description: 'Welcome to ChirpChat.' });
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Registration Failed', description: error.message || 'Please try again.' });
+      setIsLoading(false); // Ensure loading is stopped on error
       throw error;
-    } finally {
-      setIsLoading(false);
     }
+    // isLoading will be set to false by the useEffect that handles routing
   }, [handleAuthSuccess, toast]);
 
   const fetchAndUpdateUser = useCallback(async () => {
@@ -112,26 +106,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userProfile = await api.getCurrentUserProfile();
       setCurrentUser(userProfile);
-      localStorage.setItem('chirpChatUser', JSON.stringify(userProfile));
     } catch (error) {
       console.error("Failed to refresh user profile", error);
       logout();
     }
   }, [token, logout]);
 
+  // ⚡️ This central useEffect now handles all routing logic based on auth state.
+  // This prevents race conditions and ensures a single source of truth for redirects.
   useEffect(() => {
-    if (!isLoading && isAuthenticated && currentUser) {
-      const isAuthPage = pathname === '/';
-      const isOnboardingPage = pathname === '/onboarding/find-partner';
+    if (isLoading) return; // Don't do anything while initial token/user is loading
 
+    const isAuthPage = pathname === '/';
+    const isOnboardingPage = pathname === '/onboarding/find-partner';
+    
+    if (isAuthenticated && currentUser) {
+      // User is logged in
       if (currentUser.partner_id) {
-        if (isAuthPage || isOnboardingPage) {
+        // User has a partner, should be on the chat page
+        if (pathname !== '/chat') {
           router.push('/chat');
         }
       } else {
+        // User has no partner, should be on the find-partner page
         if (!isOnboardingPage) {
           router.push('/onboarding/find-partner');
         }
+      }
+    } else {
+      // User is not logged in, should be on the auth page
+      if (!isAuthPage) {
+        router.push('/');
       }
     }
   }, [isLoading, isAuthenticated, currentUser, pathname, router]);

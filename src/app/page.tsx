@@ -124,6 +124,7 @@ export default function AuthPage() {
                     required
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
+                    // ⚡️ Added autoComplete for better accessibility and user experience
                     autoComplete="tel"
                   />
                 </div>
@@ -138,6 +139,7 @@ export default function AuthPage() {
                     required
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
+                    // ⚡️ Added autoComplete for better accessibility and password manager integration
                     autoComplete="current-password"
                   />
                 </div>
@@ -159,6 +161,7 @@ export default function AuthPage() {
                     required
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
+                    // ⚡️ Added autoComplete for better accessibility and user experience
                     autoComplete="name"
                   />
                 </div>
@@ -184,6 +187,7 @@ export default function AuthPage() {
                       required
                       className="flex-1 bg-input focus-visible:ring-ring"
                       disabled={loading}
+                      // ⚡️ Added autoComplete for better accessibility and user experience
                       autoComplete="tel-national"
                     />
                   </div>
@@ -200,6 +204,7 @@ export default function AuthPage() {
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
                     minLength={8}
+                    // ⚡️ Added autoComplete for better accessibility and password manager integration
                     autoComplete="new-password"
                   />
                 </div>
@@ -213,6 +218,7 @@ export default function AuthPage() {
                     onChange={(e) => setRegOptionalEmail(e.target.value)}
                     className="bg-input focus-visible:ring-ring"
                     disabled={loading}
+                    // ⚡️ Added autoComplete for better accessibility and user experience
                     autoComplete="email"
                   />
                 </div>
