@@ -4,14 +4,11 @@
 import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
+import dynamic from 'next/dynamic';
 import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
-import UserProfileModal from '@/components/chat/UserProfileModal';
-import FullScreenAvatarModal from '@/components/chat/FullScreenAvatarModal';
-import FullScreenMediaModal from '@/components/chat/FullScreenMediaModal';
-import MoodEntryModal from '@/components/chat/MoodEntryModal';
 import NotificationPrompt from '@/components/chat/NotificationPrompt';
 import { Button } from '@/components/ui/button';
 import { ToastAction } from "@/components/ui/toast";
@@ -27,12 +24,24 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useRealtime } from '@/hooks/useRealtime';
 import { Loader2, MessagesSquare, Wifi, WifiOff } from 'lucide-react';
-import ReactionSummaryModal from '@/components/chat/ReactionSummaryModal';
 
 const MemoizedMessageArea = memo(MessageArea);
 const MemoizedChatHeader = memo(ChatHeader);
 const MemoizedInputBar = memo(InputBar);
 const FIRST_MESSAGE_SENT_KEY = 'chirpChat_firstMessageSent';
+
+const ModalLoader = () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <Loader2 className="h-8 w-8 animate-spin text-white" />
+    </div>
+  );
+
+const UserProfileModal = dynamic(() => import('@/components/chat/UserProfileModal'), { ssr: false, loading: () => <ModalLoader /> });
+const FullScreenAvatarModal = dynamic(() => import('@/components/chat/FullScreenAvatarModal'), { ssr: false, loading: () => <ModalLoader /> });
+const FullScreenMediaModal = dynamic(() => import('@/components/chat/FullScreenMediaModal'), { ssr: false, loading: () => <ModalLoader /> });
+const MoodEntryModal = dynamic(() => import('@/components/chat/MoodEntryModal'), { ssr: false, loading: () => <ModalLoader /> });
+const ReactionSummaryModal = dynamic(() => import('@/components/chat/ReactionSummaryModal'), { ssr: false, loading: () => <ModalLoader /> });
+
 
 export default function ChatPage() {
   const router = useRouter();
@@ -584,7 +593,7 @@ export default function ChatPage() {
   const onProfileClick = useCallback(() => setIsProfileModalOpen(true), []);
 
   return (
-    <div className={cn("flex flex-col h-[100dvh] transition-colors duration-500", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
+    <div className={cn("flex flex-col h-screen overflow-hidden", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
       <ConnectionStatusBanner />
       <div className={cn("flex-grow w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden", (protocol !== 'websocket' && protocol !== 'disconnected') && 'pt-10')}>
         <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try refreshing the page.">
@@ -616,5 +625,7 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
 
     
