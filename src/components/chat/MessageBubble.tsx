@@ -214,23 +214,30 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   };
 
   const showRetry = message.status === 'failed' && onRetrySend;
+  const reactionsDisabled = message.mode === 'incognito';
 
   return (
-    <div className={cn('flex flex-col group', bubbleAlignment, isCurrentUser ? 'pl-10' : 'pr-10')}>
+    <div className={cn(
+        'flex flex-col group transition-opacity duration-500', 
+        bubbleAlignment, 
+        isCurrentUser ? 'pl-10' : 'pr-10',
+        message.mode === 'incognito' && 'opacity-70'
+    )}>
       <DropdownMenu open={isActionMenuOpen} onOpenChange={setIsActionMenuOpen}>
         <DropdownMenuTrigger asChild>
            <div {...longPressEvents} className={cn(
-              'relative rounded-xl shadow-md max-w-md',
+              'relative rounded-xl shadow-md max-w-md transition-all',
               isMediaBubble ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
               !isMediaBubble && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
               !isMediaBubble && tailPosition,
-              !isMediaBubble && tailColor
+              !isMediaBubble && tailColor,
+              message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80'
             )}>
               {renderMessageContent()}
             </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
-            <DropdownMenuItem onSelect={() => onToggleReaction(message.id, '❤️')}><SmilePlus className="mr-2 h-4 w-4" /> React</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onToggleReaction(message.id, '❤️')} disabled={reactionsDisabled}><SmilePlus className="mr-2 h-4 w-4" /> React</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => handleCopy()} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
             <DropdownMenuItem disabled><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
             <DropdownMenuItem disabled><Forward className="mr-2 h-4 w-4" /> Forward</DropdownMenuItem>
@@ -239,7 +246,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       </DropdownMenu>
 
       <div className={cn('pt-1', isCurrentUser ? 'pr-2' : 'pl-2')}>
-        {message.reactions && Object.keys(message.reactions).length > 0 && (
+        {!reactionsDisabled && message.reactions && Object.keys(message.reactions).length > 0 && (
             <div className={cn("flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
             {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
                 const reactors = message.reactions?.[emoji];

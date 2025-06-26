@@ -5,28 +5,31 @@ import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, u
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift } from 'lucide-react';
+import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift, ShieldAlert, EyeOff, MessageCircle } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
-import { PICKER_EMOJIS } from '@/types';
+import { PICKER_EMOJIS, type MessageMode } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useLongPress } from '@/hooks/useLongPress';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
 interface InputBarProps {
-  onSendMessage: (text: string) => void;
-  onSendSticker: (stickerId: string) => void;
-  onSendVoiceMessage: (file: File) => void;
-  onSendImage: (file: File) => void;
-  onSendDocument: (file: File) => void;
+  onSendMessage: (text: string, mode: MessageMode) => void;
+  onSendSticker: (stickerId: string, mode: MessageMode) => void;
+  onSendVoiceMessage: (file: File, mode: MessageMode) => void;
+  onSendImage: (file: File, mode: MessageMode) => void;
+  onSendDocument: (file: File, mode: MessageMode) => void;
   isSending?: boolean;
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
+  chatMode: MessageMode;
+  setChatMode: (mode: MessageMode) => void;
 }
 
 const MAX_RECORDING_SECONDS = 120; // 2 minutes
@@ -74,6 +77,8 @@ export default function InputBar({
   isSending = false,
   onTyping,
   disabled = false,
+  chatMode,
+  setChatMode,
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [isToolsOpen, setIsToolsOpen] = useState(false);
@@ -155,7 +160,7 @@ export default function InputBar({
 
   const handleStickerSelect = (stickerId: string) => {
     if (disabled) return;
-    onSendSticker(stickerId);
+    onSendSticker(stickerId, chatMode);
     setIsToolsOpen(false);
   };
   
@@ -266,12 +271,12 @@ export default function InputBar({
     if (disabled || isSending) return;
     
     if (messageText.trim()) {
-      onSendMessage(messageText.trim());
+      onSendMessage(messageText.trim(), chatMode);
     }
     stagedAttachments.forEach(file => {
-      if (file.type.startsWith('image/')) onSendImage(file);
-      else if (file.type.startsWith('audio/')) onSendVoiceMessage(file);
-      else onSendDocument(file);
+      if (file.type.startsWith('image/')) onSendImage(file, chatMode);
+      else if (file.type.startsWith('audio/')) onSendVoiceMessage(file, chatMode);
+      else onSendDocument(file, chatMode);
     });
     setMessageText('');
     setStagedAttachments([]);
@@ -421,6 +426,14 @@ export default function InputBar({
   const ToolsPickerTrigger = isMobile ? SheetTrigger : PopoverTrigger;
   const ToolsPickerContent = isMobile ? SheetContent : PopoverContent;
 
+  const ModeIcon = ({ mode }: { mode: MessageMode }) => {
+    switch (mode) {
+      case 'fight': return <ShieldAlert size={22} className="text-destructive" />;
+      case 'incognito': return <EyeOff size={22} className="text-muted-foreground" />;
+      default: return <MessageCircle size={22} className="text-muted-foreground" />;
+    }
+  };
+
 
   return (
     <div 
@@ -446,6 +459,19 @@ export default function InputBar({
       )}
 
       <form onSubmit={handleCompositeSend} className="flex items-end space-x-2">
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Change chat mode" disabled={isSending || disabled}>
+                    <ModeIcon mode={chatMode} />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+                <DropdownMenuItem onSelect={() => setChatMode('normal')}><MessageCircle className="mr-2 h-4 w-4" /> Normal</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setChatMode('fight')}><ShieldAlert className="mr-2 h-4 w-4 text-destructive" /> Fight</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setChatMode('incognito')}><EyeOff className="mr-2 h-4 w-4" /> Incognito</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+
         <AttachmentPickerComponent open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
           <AttachmentPickerTrigger asChild>
             <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file" disabled={isSending || disabled}>

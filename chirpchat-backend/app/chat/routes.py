@@ -15,6 +15,7 @@ from app.chat.schemas import (
     ChatParticipant,
     MessageStatusEnum,
     MessageSubtypeEnum,
+    MessageModeEnum,
 )
 from app.auth.dependencies import get_current_active_user, get_current_user
 from app.auth.schemas import UserPublic
@@ -205,30 +206,62 @@ async def send_message_http(
     message_create: MessageCreate,
     current_user: UserPublic = Depends(get_current_active_user),
 ):
-    logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Payload: text='{message_create.text[:20] if message_create.text else ''}...', client_temp_id='{message_create.client_temp_id}'")
+    logger.info(f"User {current_user.id} sending HTTP message to chat {chat_id}. Mode: {message_create.mode}. Client ID: '{message_create.client_temp_id}'")
+    
+    # Check if user is a participant
     participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp_obj or not participant_check_resp_obj.data:
         logger.warning(f"User {current_user.id} forbidden to send message to chat {chat_id} - not a participant.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
 
     # This is a fallback endpoint. The primary logic is in ws.py.
-    # We mainly need to save the message and broadcast it.
-    
     processed = await ws_manager.is_message_processed(message_create.client_temp_id)
     if processed:
         logger.warning(f"HTTP: Duplicate message detected with client_temp_id: {message_create.client_temp_id}. Ignoring.")
-        # We can't easily ACK here, so we just drop it. The client's resend queue should handle this.
         raise HTTPException(status_code=status.HTTP_200_OK, detail="Duplicate message, already processed.")
 
-    message_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
+    message_id = uuid.uuid4()
     
+    # If mode is incognito, broadcast without saving
+    if message_create.mode == MessageModeEnum.INCOGNITO:
+        logger.info(f"HTTP: Processing incognito message for chat {chat_id}")
+        
+        # Construct an in-memory MessageInDB-like object for broadcasting
+        incognito_message_obj = MessageInDB(
+            id=message_id,
+            chat_id=chat_id,
+            user_id=current_user.id,
+            text=message_create.text,
+            message_subtype=message_create.message_subtype,
+            sticker_id=message_create.sticker_id,
+            # Add other media fields from message_create
+            clip_url=message_create.clip_url,
+            image_url=message_create.image_url,
+            document_url=message_create.document_url,
+            document_name=message_create.document_name,
+            client_temp_id=message_create.client_temp_id,
+            status=MessageStatusEnum.SENT,
+            created_at=now,
+            updated_at=now,
+            reactions={},
+            mode=MessageModeEnum.INCOGNITO
+        )
+        
+        await ws_manager.mark_message_as_processed(message_create.client_temp_id)
+        await ws_manager.broadcast_chat_message(str(chat_id), incognito_message_obj)
+        # Note: No push notification for incognito messages
+        
+        return incognito_message_obj
+
+    # For normal or fight mode, save to DB
     message_data_to_insert = message_create.model_dump()
     message_data_to_insert.update({
         "id": str(message_id),
         "chat_id": str(chat_id),
         "user_id": str(current_user.id),
-        "status": MessageStatusEnum.SENT.value, 
+        "status": MessageStatusEnum.SENT.value,
+        "mode": message_create.mode.value,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "reactions": {},
@@ -275,6 +308,10 @@ async def react_to_message(
     
     message_db = message_resp_obj.data 
     chat_id_str = str(message_db["chat_id"])
+
+    # Prevent reacting to incognito messages (though they shouldn't be in DB anyway)
+    if message_db.get("mode") == MessageModeEnum.INCOGNITO.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot react to incognito messages.")
 
     participant_check_resp_obj = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", chat_id_str).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp_obj or not participant_check_resp_obj.data:

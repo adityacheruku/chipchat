@@ -18,6 +18,11 @@ class MessageSubtypeEnum(str, enum.Enum):
     VOICE_MESSAGE = "voice_message"
     EMOJI_ONLY = "emoji_only"
 
+class MessageModeEnum(str, enum.Enum):
+    NORMAL = "normal"
+    FIGHT = "fight"
+    INCOGNITO = "incognito"
+
 # =================================================================
 # CUSTOMIZE YOUR EMOJIS HERE (BACKEND)
 # =================================================================
@@ -41,6 +46,7 @@ class MessageStatusEnum(str, enum.Enum):
 class MessageBase(BaseModel):
     text: Optional[str] = None
     message_subtype: Optional[MessageSubtypeEnum] = MessageSubtypeEnum.TEXT
+    mode: Optional[MessageModeEnum] = MessageModeEnum.NORMAL # New field for message mode
     
     # Sticker fields - now just sticker_id
     sticker_id: Optional[UUID] = None

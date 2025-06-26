@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -61,6 +61,8 @@ export default function ChatPage() {
 
   // State for the new FullScreenMediaModal
   const [mediaModalData, setMediaModalData] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
+
+  const [chatMode, setChatMode] = useState<MessageMode>('normal');
 
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string, metadata?: Record<string, any>) => {
     setAppEvents(prevEvents => {
@@ -171,6 +173,12 @@ export default function ChatPage() {
   }, []);
 
   const handleWSMessageReceived = useCallback((newMessageFromServer: MessageType) => {
+      if (newMessageFromServer.mode === 'incognito') {
+          setTimeout(() => {
+              setMessages(prev => prev.filter(m => m.id !== newMessageFromServer.id));
+          }, 30 * 1000); // Remove incognito message after 30 seconds
+      }
+
       setMessages(prevMessages => {
         if (prevMessages.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)) {
             return prevMessages.map(m => 
@@ -183,7 +191,7 @@ export default function ChatPage() {
             .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
 
-    if (activeChat && newMessageFromServer.chat_id === activeChat.id) {
+    if (activeChat && newMessageFromServer.chat_id === activeChat.id && newMessageFromServer.mode !== 'incognito') {
         setActiveChat(prev => prev ? ({...prev, last_message: newMessageFromServer, updated_at: newMessageFromServer.updated_at }) : null);
     }
   }, [activeChat]);
@@ -266,7 +274,7 @@ export default function ChatPage() {
   }, [isAuthenticated, isAuthLoading, currentUser?.id]);
 
 
- const handleSendMessage = (text: string) => {
+ const handleSendMessage = (text: string, mode: MessageMode) => {
     if (!currentUser || !activeChat) return;
     if (!text.trim()) return;
 
@@ -275,12 +283,12 @@ export default function ChatPage() {
     const optimisticMessage: MessageType = {
       id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, text,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text",
+      reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text", mode: mode,
     };
     setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
 
     sendMessage({
-        event_type: "send_message", chat_id: activeChat.id, text,
+        event_type: "send_message", chat_id: activeChat.id, text, mode,
         client_temp_id: clientTempId, message_subtype: "text",
     });
 
@@ -297,16 +305,17 @@ export default function ChatPage() {
     }
   };
 
-  const handleSendSticker = (stickerId: string) => {
+  const handleSendSticker = (stickerId: string, mode: MessageMode) => {
     if (!currentUser || !activeChat) return;
     const clientTempId = uuidv4();
-    sendMessage({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker" });
+    sendMessage({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker", mode });
     addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
   };
   
   const handleFileUpload = async (
     file: File,
     subtype: MessageType['message_subtype'],
+    mode: MessageMode,
     uploadFunction: (file: File, onProgress: (progress: number) => void) => Promise<any>
   ) => {
       if (!currentUser || !activeChat) return;
@@ -322,6 +331,7 @@ export default function ChatPage() {
         uploadProgress: 0,
         client_temp_id: clientTempId,
         message_subtype: subtype,
+        mode: mode,
         file: file,
         image_url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
         clip_url: file.type.startsWith('video/') ? URL.createObjectURL(file) : undefined,
@@ -344,6 +354,7 @@ export default function ChatPage() {
               chat_id: activeChat.id,
               client_temp_id: clientTempId,
               message_subtype: subtype,
+              mode: mode,
           };
 
           if (subtype === 'image') {
@@ -375,12 +386,19 @@ export default function ChatPage() {
       }
   };
 
-  const handleSendImage = (file: File) => handleFileUpload(file, 'image', api.uploadChatImage);
-  const handleSendDocument = (file: File) => handleFileUpload(file, 'document', api.uploadChatDocument);
-  const handleSendVoiceMessage = (file: File) => handleFileUpload(file, 'voice_message', api.uploadVoiceMessage);
+  const handleSendImage = (file: File, mode: MessageMode) => handleFileUpload(file, 'image', mode, api.uploadChatImage);
+  const handleSendDocument = (file: File, mode: MessageMode) => handleFileUpload(file, 'document', mode, api.uploadChatDocument);
+  const handleSendVoiceMessage = (file: File, mode: MessageMode) => handleFileUpload(file, 'voice_message', mode, api.uploadVoiceMessage);
   
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat) return;
+
+    const message = messages.find(m => m.id === messageId);
+    if (message?.mode === 'incognito') {
+        toast({ title: "Can't React", description: "Reactions are disabled for incognito messages.", duration: 2000 });
+        return;
+    }
+
     const RATE_LIMIT_MS = 500;
     const key = `${messageId}_${emoji}`;
     const now = Date.now();
@@ -406,7 +424,7 @@ export default function ChatPage() {
     );
     sendMessage({ event_type: "toggle_reaction", message_id: messageId, chat_id: activeChat.id, emoji });
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
-  }, [currentUser, activeChat, sendMessage, addAppEvent]);
+  }, [currentUser, activeChat, sendMessage, addAppEvent, messages, toast]);
 
   const handleSaveProfile = async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File, onProgress?: (progress: number) => void) => {
     if (!currentUser) return;
@@ -539,7 +557,7 @@ export default function ChatPage() {
               <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
               <ChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={() => setIsProfileModalOpen(true)} onSendThinkingOfYou={() => handleSendThoughtRef.current?.()} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
               <MemoizedMessageArea messages={messages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} />
-              <InputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled}/>
+              <InputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} setChatMode={setChatMode} />
             </div>
           </ErrorBoundary>
         </div>

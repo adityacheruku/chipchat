@@ -9,7 +9,7 @@ import asyncio
 from app.websocket import manager as ws_manager
 from app.auth.schemas import UserPublic
 from app.auth.dependencies import try_get_user_from_token
-from app.chat.schemas import MessageCreate, MessageStatusEnum, SUPPORTED_EMOJIS, MessageSubtypeEnum
+from app.chat.schemas import MessageCreate, MessageStatusEnum, SUPPORTED_EMOJIS, MessageSubtypeEnum, MessageModeEnum, MessageInDB
 from app.database import db_manager
 from app.utils.logging import logger
 from app.notifications.service import notification_service
@@ -90,9 +90,15 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
     message_create = MessageCreate(**data)
     client_temp_id = message_create.client_temp_id
     user_id = current_user.id
+    chat_id = message_create.chat_id
+    now = datetime.now(timezone.utc)
+    message_db_id = uuid4()
 
     if not client_temp_id:
         logger.warning(f"WS user {user_id}: Message received without client_temp_id. Ignoring.")
+        return
+    if not chat_id:
+        logger.warning(f"WS user {user_id}: send_message event missing chat_id.")
         return
 
     if await ws_manager.is_message_processed(client_temp_id):
@@ -100,19 +106,41 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
         await ws_manager.send_ack(websocket, client_temp_id)
         return
 
-    chat_id = message_create.chat_id
-    if not chat_id:
-        logger.warning(f"WS user {user_id}: send_message event missing chat_id.")
-        return
-
-    is_participant = await ws_manager.is_user_in_chat(user_id, chat_id)
-    if not is_participant:
+    if not await ws_manager.is_user_in_chat(user_id, chat_id):
         logger.warning(f"User {user_id} not in chat {chat_id}")
         return
+        
+    # Handle Incognito messages: broadcast without saving
+    if message_create.mode == MessageModeEnum.INCOGNITO:
+        logger.info(f"WS: Processing incognito message {client_temp_id} for chat {chat_id}")
+        
+        incognito_message = MessageInDB(
+            id=message_db_id,
+            chat_id=chat_id,
+            user_id=user_id,
+            text=message_create.text,
+            message_subtype=message_create.message_subtype,
+            sticker_id=message_create.sticker_id,
+            client_temp_id=client_temp_id,
+            status=MessageStatusEnum.SENT,
+            created_at=now,
+            updated_at=now,
+            reactions={},
+            mode=MessageModeEnum.INCOGNITO,
+            # Add other media fields from message_create
+            clip_url=message_create.clip_url,
+            image_url=message_create.image_url,
+            document_url=message_create.document_url,
+            document_name=message_create.document_name,
+        )
+        
+        await ws_manager.mark_message_as_processed(client_temp_id)
+        await ws_manager.send_ack(websocket, client_temp_id, str(message_db_id))
+        await ws_manager.broadcast_chat_message(str(chat_id), incognito_message)
+        # Note: No push notification for incognito messages
+        return
 
-    message_db_id = uuid4()
-    now = datetime.now(timezone.utc)
-    
+    # Handle Normal and Fight messages: save to DB and broadcast
     message_data_to_insert = {
         "id": str(message_db_id),
         "chat_id": str(chat_id),
@@ -129,6 +157,7 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
         "document_name": message_create.document_name,
         "client_temp_id": client_temp_id, 
         "status": MessageStatusEnum.SENT.value, 
+        "mode": message_create.mode.value, # Save the mode to DB
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "reactions": {},
@@ -171,9 +200,14 @@ async def handle_toggle_reaction(data: Dict[str, Any], websocket: WebSocket, cur
     if not await ws_manager.is_user_in_chat(user_id, chat_id):
         raise ValueError("User not in chat")
 
-    msg_resp_obj = await db_manager.get_table("messages").select("reactions, chat_id").eq("id", str(message_id)).maybe_single().execute()
+    msg_resp_obj = await db_manager.get_table("messages").select("reactions, chat_id, mode").eq("id", str(message_id)).maybe_single().execute()
     if not msg_resp_obj.data or str(msg_resp_obj.data["chat_id"]) != str(chat_id):
         raise ValueError("Message not found or not in specified chat")
+        
+    # Prevent reacting to incognito messages (double check, as they shouldn't be in DB)
+    if msg_resp_obj.data.get("mode") == MessageModeEnum.INCOGNITO.value:
+        raise ValueError("Cannot react to incognito messages.")
+
 
     reactions = msg_resp_obj.data.get("reactions", {}) or {}
     user_id_str = str(user_id)
