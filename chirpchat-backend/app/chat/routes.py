@@ -30,11 +30,8 @@ router = APIRouter(prefix="/chats", tags=["Chats"])
 async def get_message_with_details_from_db(message_id: UUID) -> Optional[MessageInDB]:
     """Helper function to fetch a message and join its sticker details."""
     try:
-        # NOTE: Replaced RPC 'get_message_with_details' with a direct query
-        # to bypass a PostgREST type mismatch error where the RPC returns
-        # varchar(10) for status but expects text.
         query = db_manager.get_table("messages").select(
-            "*, stickers(image_url)"  # Assumes FK is on messages.sticker_id -> stickers.id
+            "*, stickers(image_url)"
         ).eq("id", str(message_id)).maybe_single()
         
         response = query.execute()
@@ -44,6 +41,15 @@ async def get_message_with_details_from_db(message_id: UUID) -> Optional[Message
         
         message_data = response.data
         
+        # Data migration for status enum
+        status_map = {
+            "sent_to_server": "sent",
+            "delivered_to_recipient": "delivered",
+            "read_by_recipient": "read",
+        }
+        if message_data.get("status") in status_map:
+            message_data["status"] = status_map[message_data["status"]]
+
         # Flatten the joined sticker data
         if message_data.get("stickers"):
             message_data["sticker_image_url"] = message_data["stickers"].get("image_url")
@@ -51,7 +57,6 @@ async def get_message_with_details_from_db(message_id: UUID) -> Optional[Message
         if "stickers" in message_data:
             del message_data["stickers"]
 
-        # Pydantic will handle validation from here.
         return MessageInDB(**message_data)
         
     except Exception as e:
@@ -61,9 +66,6 @@ async def get_message_with_details_from_db(message_id: UUID) -> Optional[Message
 async def get_chat_list_for_user(user_id: UUID) -> List[ChatResponse]:
     """Helper to get a user's chat list, with last message details including sticker URL."""
     try:
-        # NOTE: This RPC call is kept for performance, but may fail if it also has the type mismatch issue.
-        # If errors occur on the chat list page, this function will need to be refactored
-        # to use direct queries similar to get_messages().
         rpc_response = await db_manager.admin_client.rpc(
             'get_user_chat_list', {'p_user_id': str(user_id)}
         ).execute()
@@ -71,11 +73,21 @@ async def get_chat_list_for_user(user_id: UUID) -> List[ChatResponse]:
         if not rpc_response or not rpc_response.data:
             return []
 
-        # WORKAROUND for potential type issues from the RPC, though this may not be sufficient if the error is at the API level.
+        status_map = {
+            "sent_to_server": "sent",
+            "delivered_to_recipient": "delivered",
+            "read_by_recipient": "read",
+        }
+
         processed_data = []
         for chat_data in rpc_response.data:
-            if 'last_message' in chat_data and chat_data['last_message'] and 'status' in chat_data['last_message'] and chat_data['last_message']['status'] is not None:
-                chat_data['last_message']['status'] = str(chat_data['last_message']['status'])
+            if 'last_message' in chat_data and chat_data['last_message']:
+                last_message_status = chat_data['last_message'].get('status')
+                if last_message_status in status_map:
+                    chat_data['last_message']['status'] = status_map[last_message_status]
+                elif last_message_status is not None:
+                     chat_data['last_message']['status'] = str(last_message_status)
+
             processed_data.append(chat_data)
 
         chat_responses = [ChatResponse.model_validate(chat_data) for chat_data in processed_data]
@@ -176,8 +188,6 @@ async def get_messages(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
     
     try:
-        # NOTE: Replaced RPC 'get_messages_for_chat' with a direct query to bypass a PostgREST type mismatch error.
-        # This fetches the latest {limit} messages in descending order.
         query = db_manager.get_table("messages").select(
             "*, stickers(image_url)"
         ).eq("chat_id", str(chat_id)).order("created_at", desc=True).limit(limit)
@@ -189,9 +199,18 @@ async def get_messages(
 
         messages_data_list = messages_resp.data if messages_resp and messages_resp.data else []
         
+        # Data migration layer for status enum
+        status_map = {
+            "sent_to_server": MessageStatusEnum.SENT.value,
+            "delivered_to_recipient": MessageStatusEnum.DELIVERED.value,
+            "read_by_recipient": MessageStatusEnum.READ.value,
+        }
+        
         cleaned_messages_data = []
-        # Reverse the list to be in chronological order for the frontend, and flatten sticker data.
         for m in reversed(messages_data_list):
+            if m.get("status") in status_map:
+                m["status"] = status_map[m["status"]]
+
             if m.get("stickers"):
                 m["sticker_image_url"] = m["stickers"].get("image_url")
             if "stickers" in m:
@@ -357,4 +376,6 @@ async def react_to_message(
     
     return message_for_response
     
+    
+
     
