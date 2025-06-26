@@ -119,6 +119,8 @@ async def complete_registration(reg_data: CompleteRegistrationRequest):
     logger.info(f"Attempting to complete registration for user with phone {phone}")
 
     try:
+        # 🔑 Security Fix: Use the admin client (service_role key) to insert into the users table.
+        # This is a protected operation that cannot be done with the public anon key.
         insert_response_obj = await db_manager.admin_client.table("users").insert(new_user_data).execute()
     except APIError as e:
         logger.error(f"PostgREST APIError during user insert. Details: {e}", exc_info=True)
