@@ -1,9 +1,10 @@
 
+// ⚡️ Wrapped with React.memo to avoid re-renders when props don’t change
 import { memo } from 'react';
 import type { User } from '@/types';
 import MoodIndicator from './MoodIndicator';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { UserCircle2, Heart, Phone } from 'lucide-react'; // Changed Settings to UserCircle2
+import { UserCircle2, Heart, Phone } from 'lucide-react';
 import Image from 'next/image';
 import {
   Tooltip,
@@ -17,7 +18,7 @@ import { differenceInDays, formatDistanceToNowStrict, parseISO } from 'date-fns'
 interface ChatHeaderProps {
   currentUser: User;
   otherUser: User | null; 
-  onProfileClick: () => void; // This will now be triggered by UserCircle2 icon
+  onProfileClick: () => void;
   onSendThinkingOfYou: () => void;
   isTargetUserBeingThoughtOf: boolean;
   onOtherUserAvatarClick: () => void;

@@ -1,6 +1,7 @@
 
 "use client";
 
+// ⚡️ Wrapped with React.memo to avoid re-renders when props don’t change
 import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, useMemo, useCallback, memo } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -106,7 +107,7 @@ function InputBar({
     }
   }, []);
 
-  const addRecentEmoji = (emoji: string) => {
+  const addRecentEmoji = useCallback((emoji: string) => {
     setRecentEmojis(prev => {
       const newRecents = [emoji, ...prev.filter(e => e !== emoji)].slice(0, 20);
       if (typeof window !== 'undefined') {
@@ -114,51 +115,51 @@ function InputBar({
       }
       return newRecents;
     });
-  };
+  }, []);
 
-  const handleTypingChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleTypingChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessageText(e.target.value);
     if (disabled) return;
     onTyping(e.target.value.trim() !== '');
-  };
+  }, [disabled, onTyping]);
 
-  const handleBlur = () => {
+  const handleBlur = useCallback(() => {
     if (disabled) return;
     if (messageText.trim() === '') onTyping(false);
-  };
+  }, [disabled, messageText, onTyping]);
 
-  const handleEmojiSelect = (emoji: string) => {
+  const handleEmojiSelect = useCallback((emoji: string) => {
     setMessageText(prev => prev + emoji);
     addRecentEmoji(emoji);
-  };
+  }, [addRecentEmoji]);
 
-  const handleStickerSelect = (stickerId: string) => {
+  const handleStickerSelect = useCallback((stickerId: string) => {
     if (disabled) return;
     onSendSticker(stickerId, chatMode);
     setIsToolsOpen(false);
-  };
+  }, [disabled, onSendSticker, chatMode]);
   
-  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) setStagedAttachments(prev => [...prev, ...Array.from(files)]);
     setIsAttachmentOpen(false);
     if (event.target) event.target.value = "";
-  };
+  }, []);
   
-  const handleRemoveAttachment = (index: number) => {
+  const handleRemoveAttachment = useCallback((index: number) => {
     setStagedAttachments(prev => prev.filter((_, i) => i !== index));
-  };
+  }, []);
   
   const handleDragEvents = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); };
   const handleDragEnter = (e: React.DragEvent) => { handleDragEvents(e); if (e.dataTransfer.items && e.dataTransfer.items.length > 0) setIsDragging(true); };
   const handleDragLeave = (e: React.DragEvent) => { handleDragEvents(e); const relatedTarget = e.relatedTarget as Node | null; if (!e.currentTarget.contains(relatedTarget)) setIsDragging(false); };
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     handleDragEvents(e); setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       setStagedAttachments(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
       e.dataTransfer.clearData();
     }
-  };
+  }, []);
 
   const cleanupRecording = useCallback(() => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -202,15 +203,15 @@ function InputBar({
     }
   }, [cleanupRecording, recordingStatus, toast]);
 
-  const handleStageVoiceMessage = () => {
+  const handleStageVoiceMessage = useCallback(() => {
       if (audioBlob) {
         const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
         setStagedAttachments(prev => [...prev, audioFile]);
         cleanupRecording(); setIsAttachmentOpen(false);
       }
-  };
+  }, [audioBlob, cleanupRecording]);
 
-  const handleCompositeSend = (e: FormEvent) => {
+  const handleCompositeSend = useCallback((e: FormEvent) => {
     e.preventDefault();
     if (disabled || isSending) return;
     if (messageText.trim()) onSendMessage(messageText.trim(), chatMode);
@@ -220,9 +221,9 @@ function InputBar({
       else onSendDocument(file, chatMode);
     });
     setMessageText(''); setStagedAttachments([]); setEmojiSearch(''); onTyping(false);
-  };
+  }, [disabled, isSending, messageText, stagedAttachments, onSendMessage, onSendImage, onSendVoiceMessage, onSendDocument, onTyping, chatMode]);
   
-  const showSendButton = messageText.trim() !== '' || stagedAttachments.length > 0;
+  const showSendButton = useMemo(() => messageText.trim() !== '' || stagedAttachments.length > 0, [messageText, stagedAttachments]);
 
   const filteredEmojis = useMemo(() => {
     if (!emojiSearch) return PICKER_EMOJIS;
@@ -243,7 +244,7 @@ function InputBar({
     threshold: 250
   });
 
-  const modeDetails = {
+  const modeDetails = useMemo(() => ({
     normal: {
       icon: MessageCircle,
       title: "Normal Mode",
@@ -259,14 +260,14 @@ function InputBar({
       title: "Incognito Mode",
       description: "Messages disappear after 30s. Not saved.",
     },
-  };
+  }), []);
 
-  const handleModeButtonClick = (mode: MessageMode) => {
+  const handleModeButtonClick = useCallback((mode: MessageMode) => {
     onSelectMode(mode);
     setIsAttachmentOpen(false); // Close the sheet after selection
-  }
+  }, [onSelectMode]);
 
-  const AttachmentPicker = () => (
+  const AttachmentPicker = useCallback(() => (
     <Tabs defaultValue="media" className="w-full">
       <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="media">Media & Files</TabsTrigger>
@@ -332,9 +333,9 @@ function InputBar({
         </div>
       </TabsContent>
     </Tabs>
-  );
+  ), [recordingStatus, recordingSeconds, audioURL, cleanupRecording, handleStageVoiceMessage, recordButtonLongPress, modeDetails, chatMode, handleModeButtonClick]);
 
-  const ToolsPicker = () => (
+  const ToolsPicker = useCallback(() => (
     <Tabs defaultValue="emoji" className="w-full flex flex-col h-full">
       <SheetHeader className="p-2 border-b">
           <TabsList className="grid w-full grid-cols-3"><TabsTrigger value="emoji"><Smile size={18}/></TabsTrigger><TabsTrigger value="sticker"><StickyNote size={18}/></TabsTrigger><TabsTrigger value="gif" disabled><Gift size={18}/></TabsTrigger></TabsList>
@@ -356,7 +357,7 @@ function InputBar({
       <TabsContent value="sticker" className="flex-grow overflow-hidden mt-0"><StickerPicker onStickerSelect={handleStickerSelect} /></TabsContent>
       <TabsContent value="gif" className="flex-grow mt-0 flex items-center justify-center"><p className="text-muted-foreground">GIFs are coming soon!</p></TabsContent>
     </Tabs>
-  );
+  ), [emojiSearch, recentEmojis, filteredEmojis, handleEmojiSelect, handleStickerSelect]);
 
   const AttachmentPickerComponent = isMobile ? Sheet : Popover;
   const AttachmentPickerTrigger = isMobile ? SheetTrigger : PopoverTrigger;

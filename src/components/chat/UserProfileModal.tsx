@@ -97,7 +97,8 @@ export default function UserProfileModal({
     }
   }
 
-  const handleSave = async (e: FormEvent) => {
+  // ⚡️ Memoized with useCallback to prevent re-renders when passed to form
+  const handleSave = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
@@ -121,7 +122,7 @@ export default function UserProfileModal({
       setIsSaving(false);
       setAvatarUploadProgress(null);
     }
-  };
+  }, [user, displayName, mood, phone, onSave, selectedAvatarFile, notificationSettings, localSettings, updateNotificationSettings, onClose]);
 
   const handleSettingsChange = (key: keyof NotificationSettings, value: any) => {
     setLocalSettings(prev => ({...prev, [key]: value}));

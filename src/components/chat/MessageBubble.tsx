@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
+// ⚡️ Wrapped with React.memo to avoid re-renders when props don’t change
 import { useState, useEffect, useRef, memo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useLongPress } from '@/hooks/useLongPress';

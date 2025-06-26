@@ -6,16 +6,14 @@ import { useRouter, usePathname } from 'next/navigation';
 import { api } from '@/services/api';
 import type { UserInToken, AuthResponse } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-// Assuming BackendUserCreate is the Pydantic model from your backend for user creation
 import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
-
 
 interface AuthContextType {
   currentUser: UserInToken | null;
   token: string | null;
   isLoading: boolean;
-  login: (phone: string, password_plaintext: string) => Promise<void>; // Changed from username_email
-  register: (userData: BackendUserCreate) => Promise<void>; // Use backend's UserCreate
+  login: (phone: string, password_plaintext: string) => Promise<void>;
+  register: (userData: BackendUserCreate) => Promise<void>;
   logout: () => void;
   fetchAndUpdateUser: () => Promise<void>;
   isAuthenticated: boolean;
@@ -33,9 +31,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const isAuthenticated = !!token && !!currentUser;
 
-  const handleAuthSuccess = (data: AuthResponse) => {
+  // ⚡️ Memoized with useCallback to prevent re-renders in consumers
+  const handleAuthSuccess = useCallback((data: AuthResponse) => {
     localStorage.setItem('chirpChatToken', data.access_token);
     localStorage.setItem('chirpChatUser', JSON.stringify(data.user));
+    api.setAuthToken(data.access_token);
     setCurrentUser(data.user);
     setToken(data.access_token);
     if (data.user.partner_id) {
@@ -43,27 +43,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } else {
       router.push('/onboarding/find-partner');
     }
-  };
+  }, [router]);
 
+  const logout = useCallback(() => {
+    setCurrentUser(null);
+    setToken(null);
+    api.setAuthToken(null);
+    localStorage.removeItem('chirpChatToken');
+    localStorage.removeItem('chirpChatUser');
+    router.push('/');
+    toast({ title: 'Logged Out', description: "You've been successfully logged out." });
+  }, [router, toast]);
+  
   const loadUserFromToken = useCallback(async (storedToken: string) => {
     setIsLoading(true);
     try {
-      api.setAuthToken(storedToken); // Ensure API client has token for subsequent calls
+      api.setAuthToken(storedToken);
       const userProfile = await api.getCurrentUserProfile();
       setCurrentUser(userProfile);
       setToken(storedToken);
     } catch (error) {
       console.error("Failed to load user from token", error);
-      localStorage.removeItem('chirpChatToken');
-      localStorage.removeItem('chirpChatUser');
-      api.setAuthToken(null);
-      setToken(null);
-      setCurrentUser(null);
-      if (pathname !== '/') router.push('/');
+      logout();
     } finally {
       setIsLoading(false);
     }
-  }, [pathname, router]);
+  }, [logout]);
 
 
   useEffect(() => {
@@ -74,28 +79,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(false);
     }
   }, [loadUserFromToken]);
-
-  useEffect(() => {
-    // This effect handles redirection after the user is loaded.
-    if (!isLoading && isAuthenticated && currentUser) {
-      const isAuthPage = pathname === '/';
-      const isOnboardingPage = pathname === '/onboarding/find-partner';
-
-      if (currentUser.partner_id) {
-        // If partnered, should be on chat page
-        if (isAuthPage || isOnboardingPage) {
-          router.push('/chat');
-        }
-      } else {
-        // If not partnered, should be on onboarding page
-        if (!isOnboardingPage) {
-          router.push('/onboarding/find-partner');
-        }
-      }
-    }
-  }, [isLoading, isAuthenticated, currentUser, pathname, router]);
-
-  const login = async (phone: string, password_plaintext: string) => { 
+  
+  const login = useCallback(async (phone: string, password_plaintext: string) => { 
     setIsLoading(true);
     try {
       const data: AuthResponse = await api.login(phone, password_plaintext); 
@@ -106,9 +91,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [handleAuthSuccess, toast]);
 
-  const register = async (userData: BackendUserCreate) => {
+  const register = useCallback(async (userData: BackendUserCreate) => {
     setIsLoading(true);
     try {
       const data: AuthResponse = await api.register(userData);
@@ -120,18 +105,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-
-  const logout = useCallback(() => {
-    setCurrentUser(null);
-    setToken(null);
-    api.setAuthToken(null);
-    localStorage.removeItem('chirpChatToken');
-    localStorage.removeItem('chirpChatUser');
-    router.push('/');
-    toast({ title: 'Logged Out', description: "You've been successfully logged out." });
-  }, [router, toast]);
+  }, [handleAuthSuccess, toast]);
 
   const fetchAndUpdateUser = useCallback(async () => {
     if (!token) return;
@@ -145,8 +119,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [token, logout]);
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && currentUser) {
+      const isAuthPage = pathname === '/';
+      const isOnboardingPage = pathname === '/onboarding/find-partner';
 
-
+      if (currentUser.partner_id) {
+        if (isAuthPage || isOnboardingPage) {
+          router.push('/chat');
+        }
+      } else {
+        if (!isOnboardingPage) {
+          router.push('/onboarding/find-partner');
+        }
+      }
+    }
+  }, [isLoading, isAuthenticated, currentUser, pathname, router]);
 
   return (
     <AuthContext.Provider value={{ currentUser, token, isLoading, login, register, logout, fetchAndUpdateUser, isAuthenticated }}>

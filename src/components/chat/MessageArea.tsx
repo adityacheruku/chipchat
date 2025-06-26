@@ -1,4 +1,5 @@
 
+// ⚡️ Wrapped with React.memo to avoid re-renders when props don’t change
 import { memo, type RefObject } from 'react';
 import type { Message, User, SupportedEmoji } from '@/types';
 import MessageBubble from './MessageBubble';
@@ -76,5 +77,3 @@ function MessageArea({
 }
 
 export default memo(MessageArea);
-
-    

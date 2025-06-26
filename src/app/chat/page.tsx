@@ -1,6 +1,7 @@
 
 "use client";
 
+// ⚡️ Added React.memo for component memoization
 import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
@@ -25,6 +26,7 @@ import { api } from '@/services/api';
 import { useRealtime } from '@/hooks/useRealtime';
 import { Loader2, MessagesSquare, Wifi, WifiOff } from 'lucide-react';
 
+// ⚡️ Memoized components to prevent re-renders when props don't change
 const MemoizedMessageArea = memo(MessageArea);
 const MemoizedChatHeader = memo(ChatHeader);
 const MemoizedInputBar = memo(InputBar);
@@ -36,6 +38,7 @@ const ModalLoader = () => (
     </div>
   );
 
+// ⚡️ Lazy-loaded non-critical components for faster initial page load
 const UserProfileModal = dynamic(() => import('@/components/chat/UserProfileModal'), { ssr: false, loading: () => <ModalLoader /> });
 const FullScreenAvatarModal = dynamic(() => import('@/components/chat/FullScreenAvatarModal'), { ssr: false, loading: () => <ModalLoader /> });
 const FullScreenMediaModal = dynamic(() => import('@/components/chat/FullScreenMediaModal'), { ssr: false, loading: () => <ModalLoader /> });
@@ -44,7 +47,7 @@ const ReactionSummaryModal = dynamic(() => import('@/components/chat/ReactionSum
 
 
 export default function ChatPage() {
-  // 1. Hooks: Router, Contexts, and other basic hooks
+  // 1. Hooks: All hooks are now at the top level to follow Rules of Hooks
   const router = useRouter();
   const { toast } = useToast();
   const { currentUser, token, logout, fetchAndUpdateUser, isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -79,7 +82,7 @@ export default function ChatPage() {
   const lastMessageTextRef = useRef<string>("");
   const handleSendThoughtRef = useRef<() => void>(() => {});
 
-  // 4. Callback Handler Declarations
+  // 4. Callback Handler Declarations (memoized with useCallback)
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string, metadata?: Record<string, any>) => {
     setAppEvents(prevEvents => {
       const newEvent: AppEvent = { id: `event_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, timestamp: Date.now(), type, description, userId, userName, metadata };
@@ -158,6 +161,7 @@ export default function ChatPage() {
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast: toast });
   const { avatarPreview, handleFileChange: handleAvatarFileChangeHook, setAvatarPreview, } = useAvatar({ maxSizeKB: MAX_AVATAR_SIZE_KB, toast });
 
+  // ⚡️ Memoized callbacks to prevent re-renders in child components
   const handleMoodChangeForAISuggestion = useCallback(async (newMood: Mood) => {
     if (currentUser) {
       try {
@@ -216,13 +220,6 @@ export default function ChatPage() {
     } catch (error: any) { toast({ variant: 'destructive', title: 'Error', description: 'Could not load older messages.' });
     } finally { setIsLoadingMore(false); }
   }, [isLoadingMore, hasMoreMessages, activeChat, messages, toast]);
-
-  handleSendThoughtRef.current = useCallback(async () => {
-    if (!currentUser || !otherUser) return;
-    sendMessage({ event_type: "ping_thinking_of_you", recipient_user_id: otherUser.id });
-    initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
-    addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
-  }, [currentUser, otherUser, sendMessage, initiateThoughtNotification, addAppEvent]);
 
   const handleTyping = useCallback((isTyping: boolean) => {
     if (!activeChat) return;
@@ -339,7 +336,15 @@ export default function ChatPage() {
     if (((mood1 === 'Happy' && (mood2 === 'Sad' || mood2 === 'Angry')) || ((mood1 === 'Sad' || mood1 === 'Angry') && mood2 === 'Happy')) || (mood1 === 'Excited' && (mood2 === 'Sad' || mood2 === 'Chilling' || mood2 === 'Angry')) || (((mood1 === 'Sad' || mood1 === 'Chilling' || mood1 === 'Angry') && mood2 === 'Excited'))) { return 'bg-mood-thoughtful-thoughtful'; }
     return 'bg-mood-default-chat-area';
   }, []);
+  
+  handleSendThoughtRef.current = useCallback(async () => {
+    if (!currentUser || !otherUser) return;
+    sendMessage({ event_type: "ping_thinking_of_you", recipient_user_id: otherUser.id });
+    initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
+    addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
+  }, [currentUser, otherUser, sendMessage, initiateThoughtNotification, addAppEvent]);
 
+  const onProfileClick = useCallback(() => setIsProfileModalOpen(true), []);
   const handleOtherUserAvatarClick = useCallback(() => { if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); } }, [otherUser]);
   const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
     if (currentUser) {
@@ -364,7 +369,6 @@ export default function ChatPage() {
     sendMessage({ event_type: "change_chat_mode", chat_id: activeChat.id, mode: mode });
     toast({ title: `Switched to ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode`, duration: 2000 });
   }, [activeChat, sendMessage, toast]);
-  const onProfileClick = useCallback(() => setIsProfileModalOpen(true), []);
 
   // 6. Effect Hooks
   useEffect(() => {
@@ -397,7 +401,7 @@ export default function ChatPage() {
     }
   }, [topMessageId, messages]);
 
-  // 7. Memoized Values
+  // 7. Memoized Values (useMemo)
   const filteredMessages = useMemo(() => {
     const incognitoMessages = messages.filter(msg => msg.mode === 'incognito');
     const modeSpecificMessages = messages.filter(msg => {
@@ -428,24 +432,26 @@ export default function ChatPage() {
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
 
   return (
-    <div className={cn("flex flex-col h-screen overflow-hidden", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
-      <ConnectionStatusBanner />
-      <div className={cn("flex-grow w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden", (protocol !== 'websocket' && protocol !== 'disconnected') && 'pt-10')}>
-        <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try refreshing the page.">
-          <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
-            <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
-            <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
-            <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} />
-            <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
-          </div>
-        </ErrorBoundary>
+    <div className="flex h-screen flex-col overflow-hidden">
+      <div className={cn("flex flex-1 flex-col overflow-hidden", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
+        <ConnectionStatusBanner />
+        <div className={cn("flex-grow w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden", (protocol !== 'websocket' && protocol !== 'disconnected') && 'pt-10')}>
+          <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try refreshing the page.">
+            <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
+              <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
+              <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
+              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} />
+              <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
+            </div>
+          </ErrorBoundary>
+        </div>
+        {isProfileModalOpen && currentUser && <UserProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} user={currentUser} onSave={handleSaveProfile} avatarPreview={avatarPreview || currentUser.avatar_url} onAvatarFileChange={handleAvatarFileChangeHook}/>}
+        {fullScreenUserData && <FullScreenAvatarModal isOpen={isFullScreenAvatarOpen} onClose={() => setIsFullScreenAvatarOpen(false)} user={fullScreenUserData}/>}
+        {mediaModalData && <FullScreenMediaModal isOpen={!!mediaModalData} onClose={() => setMediaModalData(null)} mediaUrl={mediaModalData.url} mediaType={mediaModalData.type}/>}
+        {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={() => setIsMoodModalOpen(false)} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}
+        <ReasoningDialog />
+        {reactionModalData && <ReactionSummaryModal isOpen={!!reactionModalData} onClose={() => setReactionModalData(null)} reactions={reactionModalData.reactions} allUsers={reactionModalData.allUsers}/>}
       </div>
-      {isProfileModalOpen && currentUser && <UserProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} user={currentUser} onSave={handleSaveProfile} avatarPreview={avatarPreview || currentUser.avatar_url} onAvatarFileChange={handleAvatarFileChangeHook}/>}
-      {fullScreenUserData && <FullScreenAvatarModal isOpen={isFullScreenAvatarOpen} onClose={() => setIsFullScreenAvatarOpen(false)} user={fullScreenUserData}/>}
-      {mediaModalData && <FullScreenMediaModal isOpen={!!mediaModalData} onClose={() => setMediaModalData(null)} mediaUrl={mediaModalData.url} mediaType={mediaModalData.type}/>}
-      {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={() => setIsMoodModalOpen(false)} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}
-      <ReasoningDialog />
-      {reactionModalData && <ReactionSummaryModal isOpen={!!reactionModalData} onClose={() => setReactionModalData(null)} reactions={reactionModalData.reactions} allUsers={reactionModalData.allUsers}/>}
     </div>
   );
 }

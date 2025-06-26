@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +45,7 @@ export default function AuthPage() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLoginSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleLoginSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
     if (!loginPhone.trim() || !loginPassword.trim()) {
@@ -60,9 +60,9 @@ export default function AuthPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [login, loginPhone, loginPassword, toast]);
 
-  const handleRegisterSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleRegisterSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
     if (!regNationalPhone.trim() || !regPassword.trim() || !regDisplayName.trim()) {
@@ -92,7 +92,7 @@ export default function AuthPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [register, regCountryCode, regNationalPhone, regPassword, regDisplayName, regOptionalEmail, toast]);
 
   const loading = isAuthLoading || isSubmitting;
 

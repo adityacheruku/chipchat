@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import Image from 'next/image';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,8 @@ interface StickerPickerProps {
 
 type PickerStatus = 'idle' | 'loading' | 'error' | 'success';
 
-const StickerGrid = ({
+// ⚡️ Memoized StickerGrid to prevent re-rendering the entire grid when only one part changes
+const StickerGrid = memo(({
     stickerList,
     status,
     onRetry,
@@ -67,9 +68,12 @@ const StickerGrid = ({
             </div>
         </ScrollArea>
     );
-};
+});
+StickerGrid.displayName = "StickerGrid";
 
-const StickerItem = ({ sticker, onSelect, onToggleFavorite, isFavorite }: { sticker: Sticker; onSelect: (sticker: Sticker) => void; onToggleFavorite: (stickerId: string) => void; isFavorite: boolean; }) => {
+
+// ⚡️ Memoized StickerItem to avoid re-rendering every sticker in a grid on state changes
+const StickerItem = memo(({ sticker, onSelect, onToggleFavorite, isFavorite }: { sticker: Sticker; onSelect: (sticker: Sticker) => void; onToggleFavorite: (stickerId: string) => void; isFavorite: boolean; }) => {
     
     const longPressEvents = useLongPress(() => {
         onToggleFavorite(sticker.id);
@@ -117,7 +121,8 @@ const StickerItem = ({ sticker, onSelect, onToggleFavorite, isFavorite }: { stic
             )}
         </div>
     );
-};
+});
+StickerItem.displayName = "StickerItem";
 
 
 export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
@@ -190,7 +195,7 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
     fetchFavorites();
   }, [fetchPacks, fetchRecent, fetchFavorites]);
 
-  const handleTabChange = (tabValue: string) => {
+  const handleTabChange = useCallback((tabValue: string) => {
     setActiveTab(tabValue);
     if (tabValue === 'recent') {
       fetchRecent();
@@ -199,12 +204,12 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
     } else if (tabValue !== 'search') {
       fetchStickersForPack(tabValue);
     }
-  };
+  }, [fetchRecent, fetchFavorites, fetchStickersForPack]);
 
-  const handleSelect = (sticker: Sticker) => {
+  const handleSelect = useCallback((sticker: Sticker) => {
     onStickerSelect(sticker.id);
     setRecentStickers(prev => [sticker, ...prev.filter(s => s.id !== sticker.id)].slice(0, 20));
-  };
+  }, [onStickerSelect]);
   
   const handleSearch = useCallback(async (query: string) => {
     if (!query) {
