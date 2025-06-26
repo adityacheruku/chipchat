@@ -120,7 +120,7 @@ class NotificationService:
     
     async def _get_recipients_for_chat(self, chat_id: UUID, exclude_user_id: UUID) -> List[UUID]:
         try:
-            resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).neq("user_id", str(exclude_user_id)).execute()
+            resp = db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).neq("user_id", str(exclude_user_id)).execute()
             return [UUID(row['user_id']) for row in resp.data] if resp.data else []
         except Exception as e:
             logger.error(f"Error fetching recipients for chat {chat_id}: {e}")
@@ -157,8 +157,11 @@ class NotificationService:
             await self._send_notification_to_user(recipient_id, "messages", payload)
 
     async def send_mood_change_notification(self, user: UserPublic, new_mood: str):
-        recipients = await self._get_recipients_for_chat(None, user.id) # This needs a way to find all partners
-        
+        # This needs a way to find the user's partner. For now, this is a placeholder.
+        # This assumes the user has a partner_id field.
+        if not user.partner_id:
+            return
+
         payload = {
             "type": "mood_update",
             "title": f"{user.display_name} has updated their mood!",
@@ -168,9 +171,7 @@ class NotificationService:
                 "tag": f"mood-{user.id}"
             }
         }
-        # In a real app, you'd fetch all chat partners of the user. For now, this is a placeholder.
-        # for recipient_id in recipients:
-        #     await self._send_notification_to_user(recipient_id, "mood_updates", payload)
+        await self._send_notification_to_user(user.partner_id, "mood_updates", payload)
 
     async def send_thinking_of_you_notification(self, sender: UserPublic, recipient_id: UUID):
          payload = {
