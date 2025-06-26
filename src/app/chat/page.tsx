@@ -25,10 +25,9 @@ import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
-import { useRealtime, type RealtimeProtocol } from '@/hooks/useRealtime';
+import { useRealtime } from '@/hooks/useRealtime';
 import { Loader2, MessagesSquare, Wifi, WifiOff } from 'lucide-react';
 import ReactionSummaryModal from '@/components/chat/ReactionSummaryModal';
-import ModeSelectionSheet from '@/components/chat/ModeSelectionSheet'; // Import the new component
 
 const MemoizedMessageArea = memo(MessageArea);
 const FIRST_MESSAGE_SENT_KEY = 'chirpChat_firstMessageSent';
@@ -61,7 +60,6 @@ export default function ChatPage() {
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
 
   const [mediaModalData, setMediaModalData] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
-  const [isModeSheetOpen, setIsModeSheetOpen] = useState(false);
 
   const [chatMode, setChatMode] = useState<MessageMode>('normal');
 
@@ -488,7 +486,6 @@ export default function ChatPage() {
 
   const handleSelectMode = (mode: MessageMode) => {
     setChatMode(mode);
-    setIsModeSheetOpen(false);
     toast({ title: `Switched to ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode`, duration: 2000 });
   };
   
@@ -533,7 +530,7 @@ export default function ChatPage() {
               <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
               <ChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={() => setIsProfileModalOpen(true)} onSendThinkingOfYou={() => handleSendThoughtRef.current?.()} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
               <MemoizedMessageArea messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} />
-              <InputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onModeIconClick={() => setIsModeSheetOpen(true)} />
+              <InputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
             </div>
           </ErrorBoundary>
         </div>
@@ -543,7 +540,6 @@ export default function ChatPage() {
       {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={() => setIsMoodModalOpen(false)} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}
       <ReasoningDialog />
       {reactionModalData && <ReactionSummaryModal isOpen={!!reactionModalData} onClose={() => setReactionModalData(null)} reactions={reactionModalData.reactions} allUsers={reactionModalData.allUsers}/>}
-      <ModeSelectionSheet isOpen={isModeSheetOpen} onClose={() => setIsModeSheetOpen(false)} onSelectMode={handleSelectMode} currentMode={chatMode} />
     </div>
   );
 }

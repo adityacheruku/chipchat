@@ -28,7 +28,7 @@ interface InputBarProps {
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
   chatMode: MessageMode;
-  onModeIconClick: () => void;
+  onSelectMode: (mode: MessageMode) => void;
 }
 
 const MAX_RECORDING_SECONDS = 120;
@@ -62,7 +62,7 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
 
 export default function InputBar({
   onSendMessage, onSendSticker, onSendVoiceMessage, onSendImage, onSendDocument,
-  isSending = false, onTyping, disabled = false, chatMode, onModeIconClick,
+  isSending = false, onTyping, disabled = false, chatMode, onSelectMode,
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [isToolsOpen, setIsToolsOpen] = useState(false);
@@ -243,11 +243,35 @@ export default function InputBar({
     threshold: 250
   });
 
+  const modeDetails = {
+    normal: {
+      icon: MessageCircle,
+      title: "Normal Mode",
+      description: "Standard chat. Messages are saved to history.",
+    },
+    fight: {
+      icon: ShieldAlert,
+      title: "Fight Mode",
+      description: "For arguments. Distinct look, saved to history.",
+    },
+    incognito: {
+      icon: EyeOff,
+      title: "Incognito Mode",
+      description: "Messages disappear after 30s. Not saved.",
+    },
+  };
+
+  const handleModeButtonClick = (mode: MessageMode) => {
+    onSelectMode(mode);
+    setIsAttachmentOpen(false); // Close the sheet after selection
+  }
+
   const AttachmentPicker = () => (
     <Tabs defaultValue="media" className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="media">Media & Files</TabsTrigger>
         <TabsTrigger value="audio">Voice Note</TabsTrigger>
+        <TabsTrigger value="mode">Chat Mode</TabsTrigger>
       </TabsList>
       <TabsContent value="media" className="p-4">
         <div className="grid grid-cols-3 gap-4">
@@ -284,6 +308,29 @@ export default function InputBar({
           </>
         )}
       </TabsContent>
+      <TabsContent value="mode" className="p-4">
+        <div className="grid gap-4">
+          {Object.entries(modeDetails).map(([mode, details]) => {
+            const isSelected = mode === chatMode;
+            return (
+              <Button
+                key={mode}
+                variant={isSelected ? "default" : "outline"}
+                className="h-auto p-4 w-full justify-start text-left"
+                onClick={() => handleModeButtonClick(mode as MessageMode)}
+              >
+                <details.icon className={cn("mr-4 h-6 w-6 flex-shrink-0", mode === 'fight' && 'text-destructive', mode === 'incognito' && 'text-muted-foreground')} />
+                <div className="flex flex-col">
+                  <span className="font-semibold">{details.title}</span>
+                  <span className="text-xs text-muted-foreground font-normal">
+                    {details.description}
+                  </span>
+                </div>
+              </Button>
+            );
+          })}
+        </div>
+      </TabsContent>
     </Tabs>
   );
 
@@ -319,14 +366,6 @@ export default function InputBar({
   const ToolsPickerTrigger = isMobile ? SheetTrigger : PopoverTrigger;
   const ToolsPickerContent = isMobile ? SheetContent : PopoverContent;
 
-  const ModeIcon = ({ mode }: { mode: MessageMode }) => {
-    switch (mode) {
-      case 'fight': return <ShieldAlert size={22} className="text-destructive" />;
-      case 'incognito': return <EyeOff size={22} className="text-muted-foreground" />;
-      default: return <MessageCircle size={22} className="text-muted-foreground" />;
-    }
-  };
-
   return (
     <div className={cn("p-3 border-t border-border bg-card rounded-b-lg transition-colors duration-300", isDragging && "bg-primary/20 border-primary")}
         onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragEvents} onDrop={handleDrop}>
@@ -337,13 +376,9 @@ export default function InputBar({
       )}
 
       <form onSubmit={handleCompositeSend} className="flex items-end space-x-2">
-        <Button variant="ghost" size="icon" type="button" onClick={onModeIconClick} className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Change chat mode" disabled={isSending || disabled}>
-            <ModeIcon mode={chatMode} />
-        </Button>
-
         <AttachmentPickerComponent open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
           <AttachmentPickerTrigger asChild>
-            <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file" disabled={isSending || disabled}><Paperclip size={22} /></Button>
+            <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file or change mode" disabled={isSending || disabled}><Paperclip size={22} /></Button>
           </AttachmentPickerTrigger>
           <AttachmentPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-auto rounded-t-lg" : "w-80 p-2")}><AttachmentPicker /></AttachmentPickerContent>
         </AttachmentPickerComponent>
