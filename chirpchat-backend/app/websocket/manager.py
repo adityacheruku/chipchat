@@ -202,6 +202,16 @@ async def broadcast_user_profile_update(user_id: UUID, updated_data: dict):
     if unique_recipients:
         await broadcast_to_users(list(unique_recipients), payload)
 
+async def broadcast_chat_mode_update(chat_id: str, new_mode: str):
+    participant_ids = await _get_chat_participants(chat_id)
+    payload = {
+        "event_type": "chat_mode_changed",
+        "chat_id": chat_id,
+        "mode": new_mode,
+    }
+    if participant_ids:
+        await broadcast_to_users(participant_ids, payload)
+
 
 # --- Pub/Sub Listener ---
 async def listen_for_broadcasts():

@@ -65,6 +65,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                     await handle_typing_indicator(data, current_user)
                 elif event_type == "ping_thinking_of_you":
                     await handle_ping(data, current_user)
+                elif event_type == "change_chat_mode":
+                    await handle_change_chat_mode(data, current_user)
                 elif event_type == "HEARTBEAT":
                     pass # Activity already updated
                 else:
@@ -253,3 +255,17 @@ async def handle_ping(data: Dict[str, Any], current_user: UserPublic):
         sender=current_user,
         recipient_id=recipient_user_id
     )
+
+async def handle_change_chat_mode(data: Dict[str, Any], current_user: UserPublic):
+    chat_id = UUID(data["chat_id"])
+    mode = data["mode"]
+    
+    # Validate mode
+    if mode not in [m.value for m in MessageModeEnum]:
+        raise ValueError(f"Invalid chat mode: {mode}")
+
+    if not await ws_manager.is_user_in_chat(current_user.id, chat_id):
+        raise ValueError("User not in chat")
+    
+    await ws_manager.broadcast_chat_mode_update(str(chat_id), mode)
+    logger.info(f"User {current_user.id} changed mode of chat {chat_id} to {mode}")

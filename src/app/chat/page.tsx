@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -170,12 +170,6 @@ export default function ChatPage() {
   }, []);
 
   const handleWSMessageReceived = useCallback((newMessageFromServer: MessageType) => {
-      if (newMessageFromServer.mode === 'incognito') {
-          setTimeout(() => {
-              setMessages(prev => prev.filter(m => m.id !== newMessageFromServer.id));
-          }, 30 * 1000);
-      }
-
       setMessages(prevMessages => {
         if (prevMessages.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)) {
             return prevMessages.map(m => 
@@ -240,7 +234,21 @@ export default function ChatPage() {
         ),
       });
     }
-  }, [otherUser, toast]); 
+  }, [otherUser, toast]);
+  
+  const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => {
+    if (activeChat && data.chat_id === activeChat.id) {
+        setChatMode(data.mode);
+        // Only show toast if the other user changed it
+        if (otherUser) {
+            toast({
+                title: "Mode Changed",
+                description: `${otherUser.display_name} switched the chat to ${data.mode} mode.`,
+                duration: 3000,
+            });
+        }
+    }
+  }, [activeChat, otherUser, toast]);
 
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     onMessageReceived: handleWSMessageReceived,
@@ -250,6 +258,7 @@ export default function ChatPage() {
     onThinkingOfYouReceived: handleWSThinkingOfYou,
     onUserProfileUpdate: handleWSUserProfileUpdate,
     onMessageAck: handleWSMessageAck,
+    onChatModeChanged: handleChatModeChanged,
   });
 
   handleSendThoughtRef.current = useCallback(async () => {
@@ -441,6 +450,17 @@ export default function ChatPage() {
     setDynamicBgClass(newBgClass);
   }, [chatMode, currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
 
+  // Remove incognito messages after 30 seconds
+  useEffect(() => {
+    const incognitoMessages = messages.filter(m => m.mode === 'incognito');
+    if (incognitoMessages.length > 0) {
+      const timer = setTimeout(() => {
+        setMessages(prev => prev.filter(m => m.mode !== 'incognito'));
+      }, 30 * 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [messages]);
+
 
   const handleOtherUserAvatarClick = useCallback(() => {
     if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); }
@@ -485,16 +505,20 @@ export default function ChatPage() {
   const handleShowMedia = useCallback((url: string, type: 'image' | 'video') => setMediaModalData({ url, type }), []);
 
   const handleSelectMode = (mode: MessageMode) => {
+    if (!activeChat) return;
     setChatMode(mode);
+    sendMessage({ event_type: "change_chat_mode", chat_id: activeChat.id, mode: mode });
     toast({ title: `Switched to ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode`, duration: 2000 });
   };
   
   const filteredMessages = useMemo(() => {
-    return messages.filter(msg => {
-      // Always show incognito messages (they will be removed by a timer)
-      if (msg.mode === 'incognito') {
-        return true;
-      }
+    // Show incognito messages temporarily regardless of current mode
+    const incognitoMessages = messages.filter(msg => msg.mode === 'incognito');
+  
+    const modeSpecificMessages = messages.filter(msg => {
+      // Don't show incognito messages here, they are handled separately
+      if (msg.mode === 'incognito') return false;
+      
       // For Normal mode, show messages with 'normal' mode OR no mode at all (legacy messages)
       if (chatMode === 'normal') {
         return msg.mode === 'normal' || !msg.mode;
@@ -502,6 +526,10 @@ export default function ChatPage() {
       // For other modes (like 'fight'), match the mode exactly
       return msg.mode === chatMode;
     });
+
+    // Combine and sort
+    return [...modeSpecificMessages, ...incognitoMessages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
   }, [messages, chatMode]);
 
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
