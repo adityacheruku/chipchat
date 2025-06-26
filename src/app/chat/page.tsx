@@ -79,6 +79,10 @@ export default function ChatPage() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [topMessageId, setTopMessageId] = useState<string | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const handleSendThoughtRef = useRef<() => void>(() => {});
+
+  // All hooks must be called at the top level, before any conditional returns.
 
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string, metadata?: Record<string, any>) => {
     setAppEvents(prevEvents => {
@@ -177,16 +181,6 @@ export default function ChatPage() {
     }
   }, [currentUser, router, setAvatarPreview, toast]);
 
-  useLayoutEffect(() => {
-    if (topMessageId && viewportRef.current) {
-        const topMessageElement = viewportRef.current.querySelector(`#message-${topMessageId}`);
-        if (topMessageElement) {
-            topMessageElement.scrollIntoView({ block: 'start', behavior: 'instant' });
-        }
-        setTopMessageId(null);
-    }
-  }, [topMessageId, messages]);
-
   const loadMoreMessages = useCallback(async () => {
     if (isLoadingMore || !hasMoreMessages || !activeChat || messages.length === 0) return;
 
@@ -212,7 +206,6 @@ export default function ChatPage() {
         setIsLoadingMore(false);
     }
   }, [isLoadingMore, hasMoreMessages, activeChat, messages, toast]);
-
 
   const handleMessageAck = useCallback((ackData: MessageAckEventData) => {
       setMessages(prevMessages => 
@@ -283,24 +276,6 @@ export default function ChatPage() {
     }
   }, [activeChat, currentUser, otherUser, toast]);
 
-  const handleSendThoughtRef = useRef<() => void>(() => {});
-
-  const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
-    if (otherUser && data.sender_id === otherUser.id) {
-      toast({
-        title: "❤️ Thinking of You!",
-        description: `${otherUser.display_name} is thinking of you.`,
-        duration: THINKING_OF_YOU_DURATION,
-        action: (
-          <ToastAction altText="Send one back" onClick={() => handleSendThoughtRef.current()}>
-            Send one back?
-          </ToastAction>
-        ),
-      });
-    }
-  }, [otherUser, toast]);
-  
-
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     onMessageReceived: handleNewMessage,
     onReactionUpdate: handleReactionUpdate,
@@ -319,28 +294,16 @@ export default function ChatPage() {
     addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
   }, [currentUser, otherUser, sendMessage, initiateThoughtNotification, addAppEvent]);
 
-  useEffect(() => {
-    if (!isAuthLoading && !isAuthenticated) {
-        router.push('/');
-        return;
+  const handleTyping = useCallback((isTyping: boolean) => {
+    if (!activeChat) return;
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChat.id });
+    if (isTyping) {
+        typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChat.id }), 3000);
     }
-    if (isAuthenticated && currentUser) {
-        performLoadChatData();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAuthLoading, currentUser?.id]);
+  }, [activeChat, sendMessage]);
 
- const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
- const handleTyping = useCallback((isTyping: boolean) => {
-   if (!activeChat) return;
-   if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-   sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChat.id });
-   if (isTyping) {
-       typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChat.id }), 3000);
-   }
- }, [activeChat, sendMessage]);
-
- const handleSendMessage = useCallback((text: string, mode: MessageMode) => {
+  const handleSendMessage = useCallback((text: string, mode: MessageMode) => {
     if (!currentUser || !activeChat) return;
     if (!text.trim()) return;
 
@@ -370,13 +333,6 @@ export default function ChatPage() {
         }
     }
   }, [currentUser, activeChat, handleTyping, sendMessage, addAppEvent, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
-
-  const handleSendSticker = useCallback((stickerId: string, mode: MessageMode) => {
-    if (!currentUser || !activeChat) return;
-    const clientTempId = uuidv4();
-    sendMessage({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker", mode });
-    addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.id, currentUser.display_name);
-  }, [currentUser, activeChat, sendMessage, addAppEvent]);
   
   const handleFileUpload = useCallback(async (
     file: File,
@@ -432,6 +388,12 @@ export default function ChatPage() {
   const handleSendImage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'image', mode, api.uploadChatImage), [handleFileUpload]);
   const handleSendDocument = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'document', mode, api.uploadChatDocument), [handleFileUpload]);
   const handleSendVoiceMessage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'voice_message', mode, api.uploadVoiceMessage), [handleFileUpload]);
+  const handleSendSticker = useCallback((stickerId: string, mode: MessageMode) => {
+    if (!currentUser || !activeChat) return;
+    const clientTempId = uuidv4();
+    sendMessage({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker", mode });
+    addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.display_name, currentUser.id);
+  }, [currentUser, activeChat, sendMessage, addAppEvent]);
   
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat) return;
@@ -480,6 +442,21 @@ export default function ChatPage() {
     }
   }, [currentUser, fetchAndUpdateUser, toast, addAppEvent]);
 
+  const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
+    if (otherUser && data.sender_id === otherUser.id) {
+      toast({
+        title: "❤️ Thinking of You!",
+        description: `${otherUser.display_name} is thinking of you.`,
+        duration: THINKING_OF_YOU_DURATION,
+        action: (
+          <ToastAction altText="Send one back" onClick={() => handleSendThoughtRef.current()}>
+            Send one back?
+          </ToastAction>
+        ),
+      });
+    }
+  }, [otherUser, toast]);
+
   const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
     if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
     if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
@@ -498,30 +475,6 @@ export default function ChatPage() {
     }
     return 'bg-mood-default-chat-area';
   }, []);
-
-  useEffect(() => {
-    let newBgClass = 'bg-mood-default-chat-area';
-    if (chatMode === 'fight') {
-      newBgClass = 'bg-mode-fight';
-    } else if (chatMode === 'incognito') {
-      newBgClass = 'bg-mode-incognito';
-    } else if (currentUser?.mood && otherUser?.mood) {
-      newBgClass = getDynamicBackgroundClass(currentUser.mood, otherUser.mood);
-    }
-    setDynamicBgClass(newBgClass);
-  }, [chatMode, currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
-
-  // Remove incognito messages after 30 seconds
-  useEffect(() => {
-    const incognitoMessages = messages.filter(m => m.mode === 'incognito');
-    if (incognitoMessages.length > 0) {
-      const timer = setTimeout(() => {
-        setMessages(prev => prev.filter(m => m.mode !== 'incognito'));
-      }, 30 * 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [messages]);
-
 
   const handleOtherUserAvatarClick = useCallback(() => {
     if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); }
@@ -552,7 +505,6 @@ export default function ChatPage() {
 
   const handleEnableNotifications = useCallback(() => { subscribeToPush(); setShowNotificationPrompt(false); }, [subscribeToPush]);
   const handleDismissNotificationPrompt = useCallback(() => { setShowNotificationPrompt(false); sessionStorage.setItem('notificationPromptDismissed', 'true'); }, []);
-
   const handleShowMedia = useCallback((url: string, type: 'image' | 'video') => setMediaModalData({ url, type }), []);
 
   const handleSelectMode = useCallback((mode: MessageMode) => {
@@ -561,7 +513,7 @@ export default function ChatPage() {
     sendMessage({ event_type: "change_chat_mode", chat_id: activeChat.id, mode: mode });
     toast({ title: `Switched to ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode`, duration: 2000 });
   }, [activeChat, sendMessage, toast]);
-  
+
   const filteredMessages = useMemo(() => {
     const incognitoMessages = messages.filter(msg => msg.mode === 'incognito');
   
@@ -573,6 +525,54 @@ export default function ChatPage() {
 
     return [...modeSpecificMessages, ...incognitoMessages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   }, [messages, chatMode]);
+
+  const allUsersForMessageArea = useMemo(() => (currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {}), [currentUser, otherUser]);
+  const onProfileClick = useCallback(() => setIsProfileModalOpen(true), []);
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+        router.push('/');
+        return;
+    }
+    if (isAuthenticated && currentUser) {
+        performLoadChatData();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isAuthLoading, currentUser?.id]);
+
+  useEffect(() => {
+    let newBgClass = 'bg-mood-default-chat-area';
+    if (chatMode === 'fight') {
+      newBgClass = 'bg-mode-fight';
+    } else if (chatMode === 'incognito') {
+      newBgClass = 'bg-mode-incognito';
+    } else if (currentUser?.mood && otherUser?.mood) {
+      newBgClass = getDynamicBackgroundClass(currentUser.mood, otherUser.mood);
+    }
+    setDynamicBgClass(newBgClass);
+  }, [chatMode, currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
+
+  useEffect(() => {
+    const incognitoMessages = messages.filter(m => m.mode === 'incognito');
+    if (incognitoMessages.length > 0) {
+      const timer = setTimeout(() => {
+        setMessages(prev => prev.filter(m => m.mode !== 'incognito'));
+      }, 30 * 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [messages]);
+
+  useLayoutEffect(() => {
+    if (topMessageId && viewportRef.current) {
+        const topMessageElement = viewportRef.current.querySelector(`#message-${topMessageId}`);
+        if (topMessageElement) {
+            topMessageElement.scrollIntoView({ block: 'start', behavior: 'instant' });
+        }
+        setTopMessageId(null);
+    }
+  }, [topMessageId, messages]);
+
+  // --- Early Returns & Non-Hook Logic ---
 
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
   const isInputDisabled = protocol === 'disconnected';
@@ -589,8 +589,6 @@ export default function ChatPage() {
   if (!otherUser || !activeChat) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}<Button variant="link" className="mt-4" onClick={() => router.push('/onboarding/find-partner')}>Find a Partner</Button></div></div>;
 
   const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
-  const allUsersForMessageArea = useMemo(() => (currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {}), [currentUser, otherUser]);
-  const onProfileClick = useCallback(() => setIsProfileModalOpen(true), []);
 
   return (
     <div className={cn("flex flex-col h-screen overflow-hidden", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
@@ -625,8 +623,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    
-
-    
-
