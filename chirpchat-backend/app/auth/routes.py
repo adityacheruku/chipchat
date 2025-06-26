@@ -4,12 +4,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from uuid import UUID, uuid4
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+import random
 
-from app.auth.schemas import UserCreate, UserLogin, UserUpdate, UserPublic, Token
+from app.auth.schemas import UserCreate, UserLogin, UserUpdate, UserPublic, Token, PhoneSchema, VerifyOtpRequest, VerifyOtpResponse, CompleteRegistrationRequest
 # 🔒 Security: Import the new dependency for the /refresh endpoint.
 from app.auth.dependencies import get_current_user, get_current_active_user, get_user_from_refresh_token
-# 🔒 Security: Import refresh token creation utility.
-from app.utils.security import get_password_hash, verify_password, create_access_token, create_refresh_token
+# 🔒 Security: Import refresh and registration token creation utilities.
+from app.utils.security import get_password_hash, verify_password, create_access_token, create_refresh_token, create_registration_token, verify_registration_token
 from app.database import db_manager
 from app.config import settings
 from app.utils.email_utils import send_login_notification_email
@@ -17,49 +18,97 @@ from app.utils.logging import logger
 from postgrest.exceptions import APIError
 from app.websocket import manager as ws_manager
 from app.notifications.service import notification_service
-
+from app.redis_client import get_redis_client
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 user_router = APIRouter(prefix="/users", tags=["Users"])
 
-@auth_router.post("/register", response_model=Token)
-async def register(user_create: UserCreate):
-    existing_user_data = None
-    try:
-        logger.info(f"Checking for existing user with phone: {user_create.phone}")
-        existing_user_response_obj = await db_manager.get_table("users").select("id").eq("phone", user_create.phone).maybe_single().execute()
-        
-        if existing_user_response_obj and hasattr(existing_user_response_obj, 'data') and existing_user_response_obj.data:
-            existing_user_data = existing_user_response_obj.data
-            logger.info(f"User check: Found existing user data for phone {user_create.phone}.")
-        else:
-            logger.info(f"User check: No existing user found with phone {user_create.phone}. Proceeding with registration.")
-            existing_user_data = None
 
-    except APIError as e:
-        logger.error(f"APIError while checking for existing user with phone {user_create.phone}: Status Code: {getattr(e, 'code', 'N/A')}, Message: {getattr(e, 'message', 'N/A')}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error while checking for existing user.",
-        )
+# 🔒 Security: New endpoint to start the OTP-based registration flow.
+@auth_router.post("/send-otp", status_code=status.HTTP_200_OK)
+async def send_otp(phone_data: PhoneSchema):
+    """
+    Checks if a phone number is available and sends an OTP.
+    In a real app, this would use an SMS service like Twilio.
+    For development, the OTP is logged to the console.
+    """
+    phone = phone_data.phone
+    logger.info(f"OTP requested for phone: {phone}")
     
-    if existing_user_data:
-        logger.warning(f"Registration attempt for already registered phone: {user_create.phone}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Phone number already registered",
-        )
+    # Check if user already exists
+    existing_user_resp = await db_manager.get_table("users").select("id").eq("phone", phone).maybe_single().execute()
+    if existing_user_resp.data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number already registered.")
 
-    hashed_password = get_password_hash(user_create.password)
+    # Generate and store OTP
+    otp = f"{random.randint(100000, 999999)}"
+    redis = await get_redis_client()
+    await redis.set(f"otp:{phone}", otp, ex=300) # 5-minute expiry
+
+    # --- SIMULATED SMS SENDING ---
+    # In a real application, you would integrate with an SMS gateway here.
+    # e.g., await send_sms(phone, f"Your ChirpChat verification code is: {otp}")
+    logger.info(f"====== DEV ONLY: OTP for {phone} is {otp} ======")
+    # Do NOT return the OTP in the response in production.
+    
+    return {"message": "OTP has been sent."}
+
+
+# 🔒 Security: New endpoint to verify the OTP and get a temporary registration token.
+@auth_router.post("/verify-otp", response_model=VerifyOtpResponse)
+async def verify_otp(request_data: VerifyOtpRequest):
+    """
+    Verifies the provided OTP for a phone number.
+    If successful, returns a short-lived registration token required for completing registration.
+    """
+    phone = request_data.phone
+    otp = request_data.otp
+    
+    redis = await get_redis_client()
+    stored_otp = await redis.get(f"otp:{phone}")
+
+    if not stored_otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP expired or not found. Please request a new one.")
+    
+    if stored_otp != otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP.")
+    
+    # OTP is correct, remove it from Redis
+    await redis.delete(f"otp:{phone}")
+
+    # Generate a temporary token to authorize the next step
+    registration_token = create_registration_token(phone=phone)
+    
+    return VerifyOtpResponse(registration_token=registration_token)
+
+
+# 🔒 Security: The final registration step, now requires a valid registration token.
+@auth_router.post("/complete-registration", response_model=Token, summary="Complete user registration")
+async def complete_registration(reg_data: CompleteRegistrationRequest):
+    """
+    Completes the user registration process after phone verification.
+    Requires a valid registration_token from the /verify-otp endpoint.
+    """
+    # Verify the registration token
+    phone = verify_registration_token(reg_data.registration_token)
+    if not phone:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired registration token.")
+
+    # Double-check that user doesn't exist (race condition mitigation)
+    existing_user_resp = await db_manager.get_table("users").select("id").eq("phone", phone).maybe_single().execute()
+    if existing_user_resp.data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number was registered by another user. Please start over.")
+
+    hashed_password = get_password_hash(reg_data.password)
     user_id = uuid4()
     
     new_user_data = {
         "id": str(user_id),
-        "phone": user_create.phone,
-        "email": user_create.email,
+        "phone": phone,
+        "email": reg_data.email,
         "hashed_password": hashed_password,
-        "display_name": user_create.display_name,
-        "avatar_url": f"https://placehold.co/100x100.png?text={user_create.display_name[:1].upper()}",
+        "display_name": reg_data.display_name,
+        "avatar_url": f"https://placehold.co/100x100.png?text={reg_data.display_name[:1].upper()}",
         "mood": "Neutral",
         "is_active": True,
         "is_online": False,
@@ -67,63 +116,32 @@ async def register(user_create: UserCreate):
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     
-    logger.info(f"Attempting to register new user with data: {new_user_data}")
+    logger.info(f"Attempting to complete registration for user with phone {phone}")
 
-    insert_response_obj = None
     try:
         insert_response_obj = await db_manager.admin_client.table("users").insert(new_user_data).execute()
     except APIError as e:
-        logger.error(f"PostgREST APIError during user insert. Status: {getattr(e, 'code', 'N/A')}, Message: {getattr(e, 'message', 'N/A')}, Details: {getattr(e, 'details', 'N/A')}, Hint: {getattr(e, 'hint', 'N/A')}", exc_info=True)
-        logger.error(f"Payload that caused APIError: {new_user_data}")
-        error_detail_json = "Could not parse error JSON from PostgREST."
-        try:
-            error_detail_json = e.json() if hasattr(e, 'json') and callable(e.json) else str(e)
-        except Exception:
-            pass
-        logger.error(f"Full APIError details (if available): {error_detail_json}")
-        
+        logger.error(f"PostgREST APIError during user insert. Details: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error during user creation: {getattr(e, 'message', 'Unknown database error')}",
         )
-    except Exception as e:
-        logger.error(f"Unexpected error during user insert: {str(e)}", exc_info=True)
-        logger.error(f"Payload that caused error: {new_user_data}")
+    
+    if not insert_response_obj.data:
+        logger.error(f"User insert operation returned no data. Payload: {new_user_data}.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred during user creation: {str(e)}",
-        )
-
-    if not insert_response_obj or not hasattr(insert_response_obj, 'data') or not insert_response_obj.data or not isinstance(insert_response_obj.data, list) or len(insert_response_obj.data) == 0:
-        logger.error(f"User insert operation returned no data or invalid data. Payload: {new_user_data}. Response: {insert_response_obj}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not create user after database operation (no data returned).",
+            detail="Could not create user after database operation.",
         )
     
     created_user_raw = insert_response_obj.data[0]
     logger.info(f"User successfully created with ID: {created_user_raw['id']}")
     
-    user_public_info = UserPublic(
-        id=created_user_raw["id"],
-        display_name=created_user_raw["display_name"],
-        avatar_url=created_user_raw["avatar_url"],
-        mood=created_user_raw["mood"],
-        phone=created_user_raw.get("phone"),
-        email=created_user_raw.get("email"),
-        is_online=created_user_raw["is_online"],
-        last_seen=created_user_raw.get("last_seen")
-    )
+    user_public_info = UserPublic.model_validate(created_user_raw)
 
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": created_user_raw["phone"], "user_id": str(created_user_raw["id"])},
-        expires_delta=access_token_expires
-    )
-    # 🔒 Security: Create a refresh token upon successful registration.
-    refresh_token = create_refresh_token(
-        data={"sub": created_user_raw["phone"], "user_id": str(created_user_raw["id"])}
-    )
+    access_token = create_access_token(data={"sub": created_user_raw["phone"], "user_id": str(created_user_raw["id"])})
+    refresh_token = create_refresh_token(data={"sub": created_user_raw["phone"], "user_id": str(created_user_raw["id"])})
+    
     return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer", user=user_public_info)
 
 
@@ -141,41 +159,26 @@ async def login(
     
     except APIError as e:
         logger.error(
-            f"Supabase APIError during login for phone {form_data.username}: "
-            f"Status Code: {getattr(e, 'code', 'N/A')}, Message: {getattr(e, 'message', 'N/A')}, "
-            f"Details: {getattr(e, 'details', 'N/A')}, Hint: {getattr(e, 'hint', 'N/A')}", 
+            f"Supabase APIError during login for phone {form_data.username}: {e}", 
             exc_info=True
         )
-        detail_msg = "Error communicating with the authentication service. Please try again later."
-        if hasattr(e, 'code') and e.code == 406:
-             logger.warning(f"Received 406 Not Acceptable from Supabase for user {form_data.username}. This may indicate RLS policy issues or other access restrictions.")
-             detail_msg = "Login failed: Could not retrieve user details due to server configuration. Please contact support."
-        
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail=detail_msg,
+            detail="Error communicating with the authentication service.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception as e:
-        logger.error(f"Unexpected error during Supabase call for login (phone {form_data.username}): {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error during Supabase call for login (phone {form_data.username}): {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected server error occurred while trying to log in.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if user_response_obj is None:
-        logger.error(f"Login attempt for phone {form_data.username} resulted in a 'None' database response object. This typically indicates a problem with the database query execution or connection not caught as an APIError.")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error communicating with the database during login.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     user_dict_from_db = user_response_obj.data 
     
     if user_dict_from_db is None:
-        logger.warning(f"Login attempt failed for phone: {form_data.username} - User not found in DB (response.data is None).")
+        logger.warning(f"Login attempt failed for phone: {form_data.username} - User not found in DB.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect phone number or password",
@@ -192,26 +195,10 @@ async def login(
     
     logger.info(f"User {form_data.username} ({user_dict_from_db['display_name']}) successfully logged in.")
 
-    user_public_info = UserPublic(
-        id=user_dict_from_db["id"],
-        display_name=user_dict_from_db["display_name"],
-        avatar_url=user_dict_from_db["avatar_url"],
-        mood=user_dict_from_db["mood"],
-        phone=user_dict_from_db.get("phone"),
-        email=user_dict_from_db.get("email"),
-        is_online=user_dict_from_db["is_online"],
-        last_seen=user_dict_from_db.get("last_seen")
-    )
+    user_public_info = UserPublic.model_validate(user_dict_from_db)
     
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user_dict_from_db["phone"], "user_id": str(user_dict_from_db["id"])},
-        expires_delta=access_token_expires
-    )
-    # 🔒 Security: Create a refresh token upon successful login.
-    refresh_token = create_refresh_token(
-        data={"sub": user_dict_from_db["phone"], "user_id": str(user_dict_from_db["id"])}
-    )
+    access_token = create_access_token(data={"sub": user_dict_from_db["phone"], "user_id": str(user_dict_from_db["id"])})
+    refresh_token = create_refresh_token(data={"sub": user_dict_from_db["phone"], "user_id": str(user_dict_from_db["id"])})
     
     if settings.NOTIFICATION_EMAIL_TO:
         login_time_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -224,8 +211,6 @@ async def login(
             client_host=client_host
         )
         logger.info(f"Login notification task added for user: {user_dict_from_db['display_name']}")
-    else:
-        logger.info(f"NOTIFICATION_EMAIL_TO not set. Skipping login notification email for user: {user_dict_from_db['display_name']}")
 
     return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer", user=user_public_info)
 
@@ -238,23 +223,12 @@ async def refresh_access_token(current_user: UserPublic = Depends(get_user_from_
     """
     logger.info(f"Refreshing tokens for user {current_user.id}")
     
-    # The `get_user_from_refresh_token` dependency has already validated the refresh token
-    # and loaded the current user's data. Now we just issue a new set of tokens.
-    
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    new_access_token = create_access_token(
-        data={"sub": current_user.phone, "user_id": str(current_user.id)},
-        expires_delta=access_token_expires
-    )
-    
-    # 🔒 Security: Implement refresh token rotation by issuing a new refresh token.
-    new_refresh_token = create_refresh_token(
-         data={"sub": current_user.phone, "user_id": str(current_user.id)}
-    )
+    access_token = create_access_token(data={"sub": current_user.phone, "user_id": str(current_user.id)})
+    refresh_token = create_refresh_token(data={"sub": current_user.phone, "user_id": str(current_user.id)})
     
     return Token(
-        access_token=new_access_token,
-        refresh_token=new_refresh_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=current_user
     )
@@ -292,13 +266,13 @@ async def update_profile(
     if "mood" in update_data:
         logger.info(f"User {current_user.id} attempting to update mood to: {update_data['mood']}")
 
-    updated_user_response_obj = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).execute()
+    updated_user_response_obj = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).select().maybe_single().execute()
     
-    if not updated_user_response_obj or not hasattr(updated_user_response_obj, 'data') or not updated_user_response_obj.data or not isinstance(updated_user_response_obj.data, list) or len(updated_user_response_obj.data) == 0:
+    if not updated_user_response_obj or not updated_user_response_obj.data:
         logger.error(f"Profile update failed for user {current_user.id} or user not found after update.")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or update failed")
 
-    refreshed_user_data = updated_user_response_obj.data[0]
+    refreshed_user_data = updated_user_response_obj.data
     logger.info(f"User {current_user.id} profile updated successfully. New mood (if changed): {refreshed_user_data.get('mood')}")
     
     # Broadcast profile update via Redis Pub/Sub
@@ -313,16 +287,7 @@ async def update_profile(
             new_mood=refreshed_user_data['mood']
         )
 
-    return UserPublic(
-        id=refreshed_user_data["id"],
-        display_name=refreshed_user_data["display_name"],
-        avatar_url=refreshed_user_data["avatar_url"],
-        mood=refreshed_user_data["mood"],
-        phone=refreshed_user_data.get("phone"),
-        email=refreshed_user_data.get("email"),
-        is_online=refreshed_user_data["is_online"],
-        last_seen=refreshed_user_data.get("last_seen")
-    )
+    return UserPublic.model_validate(refreshed_user_data)
 
 
 @user_router.post("/me/avatar", response_model=UserPublic)
@@ -345,13 +310,13 @@ async def upload_avatar_route(
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     logger.info(f"User {current_user.id} updating avatar. New URL: {file_url}")
-    updated_user_response_obj = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).execute()
+    updated_user_response_obj = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).select().maybe_single().execute()
     
-    if not updated_user_response_obj or not hasattr(updated_user_response_obj, 'data') or not updated_user_response_obj.data or not isinstance(updated_user_response_obj.data, list) or len(updated_user_response_obj.data) == 0:
+    if not updated_user_response_obj or not updated_user_response_obj.data:
         logger.error(f"Avatar URL update in DB failed for user {current_user.id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or avatar update failed")
     
-    refreshed_user_data = updated_user_response_obj.data[0]
+    refreshed_user_data = updated_user_response_obj.data
     logger.info(f"User {current_user.id} avatar updated successfully in DB.")
     
     await ws_manager.broadcast_user_profile_update(
@@ -359,16 +324,7 @@ async def upload_avatar_route(
         updated_data={"avatar_url": refreshed_user_data["avatar_url"]}
     )
 
-    return UserPublic(
-         id=refreshed_user_data["id"],
-        display_name=refreshed_user_data["display_name"],
-        avatar_url=refreshed_user_data["avatar_url"],
-        mood=refreshed_user_data["mood"],
-        phone=refreshed_user_data.get("phone"),
-        email=refreshed_user_data.get("email"),
-        is_online=refreshed_user_data["is_online"],
-        last_seen=refreshed_user_data.get("last_seen")
-    )
+    return UserPublic.model_validate(refreshed_user_data)
 
 @user_router.post("/{recipient_user_id}/ping-thinking-of-you", status_code=status.HTTP_200_OK)
 async def http_ping_thinking_of_you(

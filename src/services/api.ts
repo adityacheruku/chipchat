@@ -14,8 +14,9 @@ import type {
   NotificationSettings,
   PartnerRequest,
   EventPayload,
+  VerifyOtpResponse,
+  CompleteRegistrationRequest,
 } from '@/types';
-import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://d87c-49-43-230-78.ngrok-free.app';
 
@@ -147,8 +148,27 @@ export const api = {
     return handleResponse<AuthResponse>(response);
   },
 
-  register: async (userData: BackendUserCreate): Promise<AuthResponse> => {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+  // 🔒 Security: New API client functions for the OTP registration flow.
+  sendOtp: async (phone: string): Promise<{message: string}> => {
+    const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
+      method: 'POST',
+      headers: getApiHeaders({ includeAuth: false }),
+      body: JSON.stringify({ phone }),
+    });
+    return handleResponse<{message: string}>(response);
+  },
+  
+  verifyOtp: async (phone: string, otp: string): Promise<VerifyOtpResponse> => {
+    const response = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+      method: 'POST',
+      headers: getApiHeaders({ includeAuth: false }),
+      body: JSON.stringify({ phone, otp }),
+    });
+    return handleResponse<VerifyOtpResponse>(response);
+  },
+  
+  completeRegistration: async (userData: CompleteRegistrationRequest): Promise<AuthResponse> => {
+    const response = await fetch(`${API_BASE_URL}/auth/complete-registration`, {
       method: 'POST',
       headers: getApiHeaders({ includeAuth: false }),
       body: JSON.stringify(userData),

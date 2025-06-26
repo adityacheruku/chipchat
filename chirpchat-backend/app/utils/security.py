@@ -1,9 +1,10 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
+from jose import JWTError, jwt, ExpiredSignatureError
 from passlib.context import CryptContext
 from app.config import settings
+from app.utils.logging import logger
 from uuid import UUID
 
 # Re-using pwd_context definition from auth.models for consistency, or define here
@@ -39,6 +40,43 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+# 🔒 Security: New function to create a short-lived token for completing registration after OTP verification.
+def create_registration_token(phone: str) -> str:
+    """
+    Creates a very short-lived JWT that proves a phone number has been verified via OTP.
+    This token is required to call the /complete-registration endpoint.
+    """
+    expires_delta = timedelta(minutes=10) # User has 10 minutes to complete registration
+    expire = datetime.now(timezone.utc) + expires_delta
+    to_encode = {
+        "sub": phone,
+        "exp": expire,
+        "token_type": "registration"
+    }
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+# 🔒 Security: New function to validate the registration token.
+def verify_registration_token(token: str) -> Optional[str]:
+    """
+    Verifies a registration token. If valid, it returns the phone number.
+    Otherwise, it returns None.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("token_type") != "registration":
+            logger.warning("Attempt to use non-registration token for registration.")
+            return None
+        phone: Optional[str] = payload.get("sub")
+        return phone
+    except ExpiredSignatureError:
+        logger.warning("Expired registration token used.")
+        return None
+    except JWTError as e:
+        logger.error(f"JWTError while verifying registration token: {e}")
+        return None
+
 
 # Placeholder for image/clip validation - kept from original structure
 from fastapi import UploadFile, HTTPException, status

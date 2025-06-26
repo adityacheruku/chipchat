@@ -1,15 +1,16 @@
 
 "use client";
 
-import { useState, type FormEvent, useCallback, useEffect } from 'react';
+import { useState, type FormEvent, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Phone, User as UserIcon, Lock, Mail } from 'lucide-react';
-import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
+import { Loader2, Phone, User as UserIcon, Lock, Mail, MessageSquareText, ShieldCheck } from 'lucide-react';
+import type { CompleteRegistrationRequest } from '@/types';
 import { Checkbox } from '@/components/ui/checkbox';
+import { api } from '@/services/api';
 
 // Component for the logo
 const Logo = () => (
@@ -51,10 +52,14 @@ const PasswordStrengthIndicator = ({ strength }: { strength: number }) => {
 
 
 export default function AuthPage() {
-  const { login, register, isLoading: isAuthLoading } = useAuth();
+  const { login, completeRegistration, isLoading: isAuthLoading } = useAuth();
   const { toast } = useToast();
 
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
+  const [registerStep, setRegisterStep] = useState<'phone' | 'otp' | 'details'>('phone');
+  
+  // Shared state
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Login State
   const [loginPhone, setLoginPhone] = useState('');
@@ -62,13 +67,15 @@ export default function AuthPage() {
 
   // Register State
   const [regPhone, setRegPhone] = useState('');
+  const [regOtp, setRegOtp] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regDisplayName, setRegDisplayName] = useState('');
   const [regOptionalEmail, setRegOptionalEmail] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
-  
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
+  const [registrationToken, setRegistrationToken] = useState('');
+
+  const loading = isAuthLoading || isSubmitting;
 
   const checkPasswordStrength = useCallback((password: string) => {
     let strength = 0;
@@ -79,12 +86,6 @@ export default function AuthPage() {
     if (password.match(/[^a-zA-Z0-9]/)) strength++;
     setPasswordStrength(strength > 5 ? 5 : strength);
   }, []);
-
-  const handleRegisterPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newPassword = e.target.value;
-    setRegPassword(newPassword);
-    checkPasswordStrength(newPassword);
-  };
 
   const handleLoginSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -103,15 +104,47 @@ export default function AuthPage() {
     }
   }, [login, loginPhone, loginPassword, toast]);
 
-  const handleRegisterSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
+  // Step 1: Handle sending OTP
+  const handleSendOtp = async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setIsSubmitting(true);
+      try {
+          await api.sendOtp(regPhone);
+          toast({ title: "OTP Sent", description: "Check your messages for the verification code." });
+          setRegisterStep('otp');
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Error', description: error.message });
+      } finally {
+          setIsSubmitting(false);
+      }
+  };
+
+  // Step 2: Handle verifying OTP
+  const handleVerifyOtp = async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setIsSubmitting(true);
+      try {
+          const response = await api.verifyOtp(regPhone, regOtp);
+          setRegistrationToken(response.registration_token);
+          toast({ title: "Phone Verified!", description: "Please complete your profile." });
+          setRegisterStep('details');
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Invalid OTP', description: error.message });
+      } finally {
+          setIsSubmitting(false);
+      }
+  };
+
+  // Step 3: Handle final registration
+  const handleCompleteRegistration = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!agreeToTerms) {
         toast({ variant: 'destructive', title: 'Terms and Conditions', description: 'You must agree to the terms to sign up.' });
         return;
     }
     setIsSubmitting(true);
-    if (!regPhone.trim() || !regPassword.trim() || !regDisplayName.trim()) {
-      toast({ variant: 'destructive', title: 'Missing Fields', description: 'Phone, password, and display name are required.' });
+    if (!registrationToken || !regPassword.trim() || !regDisplayName.trim()) {
+      toast({ variant: 'destructive', title: 'Missing Fields', description: 'Password and display name are required.' });
       setIsSubmitting(false);
       return;
     }
@@ -121,23 +154,22 @@ export default function AuthPage() {
        return;
     }
     
-    const registerData: BackendUserCreate = {
-      phone: regPhone,
+    const registrationData: CompleteRegistrationRequest = {
+      registration_token: registrationToken,
       password: regPassword,
       display_name: regDisplayName,
       ...(regOptionalEmail.trim() && { email: regOptionalEmail.trim() })
     };
 
     try {
-      await register(registerData);
+      await completeRegistration(registrationData);
     } catch (error: any) {
       console.error("AuthPage - Registration error:", error.message);
     } finally {
       setIsSubmitting(false);
     }
-  }, [register, regPhone, regPassword, regDisplayName, regOptionalEmail, agreeToTerms, toast]);
+  }, [completeRegistration, registrationToken, regPassword, regDisplayName, regOptionalEmail, agreeToTerms, toast]);
 
-  const loading = isAuthLoading || isSubmitting;
 
   const BrandSection = () => (
     <div className="max-w-md">
@@ -147,15 +179,47 @@ export default function AuthPage() {
     </div>
   );
 
-  const RegisterForm = () => (
-     <form onSubmit={handleRegisterSubmit} className="space-y-4 w-full">
+  const RegisterPhoneStep = () => (
+     <form onSubmit={handleSendOtp} className="space-y-4 w-full">
+        <h2 className="text-2xl font-bold text-center mb-1 text-foreground">Create your account</h2>
+        <p className="text-center text-sm text-muted-foreground mb-6">Enter your phone number to begin.</p>
         <div className="space-y-1">
             <Label htmlFor="regPhone">Phone Number</Label>
             <div className="relative">
-                <Input id="regPhone" type="tel" placeholder="e.g., +1 234 567 8900" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required className="pl-4 pr-10" disabled={loading} autoComplete="tel" />
+                <Input id="regPhone" type="tel" placeholder="+12223334444" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required className="pl-4 pr-10" disabled={loading} autoComplete="tel" />
                 <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             </div>
         </div>
+        <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
+            {loading ? <Loader2 className="animate-spin" /> : 'Continue'}
+        </Button>
+    </form>
+  );
+
+  const RegisterOtpStep = () => (
+     <form onSubmit={handleVerifyOtp} className="space-y-4 w-full">
+        <h2 className="text-2xl font-bold text-center mb-1 text-foreground">Verify your phone</h2>
+        <p className="text-center text-sm text-muted-foreground mb-6">We sent a 6-digit code to {regPhone}.</p>
+        <div className="space-y-1">
+            <Label htmlFor="regOtp">Verification Code</Label>
+            <div className="relative">
+                <Input id="regOtp" type="text" placeholder="######" value={regOtp} onChange={(e) => setRegOtp(e.target.value)} required className="pl-4 pr-10 tracking-[1em] text-center" disabled={loading} maxLength={6} autoComplete="one-time-code" />
+                <MessageSquareText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
+        </div>
+        <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
+            {loading ? <Loader2 className="animate-spin" /> : 'Verify'}
+        </Button>
+        <div className="text-center">
+             <Button type="button" variant="link" onClick={() => setRegisterStep('phone')} disabled={loading}>Use a different number</Button>
+        </div>
+    </form>
+  );
+
+  const RegisterDetailsStep = () => (
+     <form onSubmit={handleCompleteRegistration} className="space-y-4 w-full">
+        <h2 className="text-2xl font-bold text-center mb-1 text-foreground">Just a few more details</h2>
+        <p className="text-center text-sm text-muted-foreground mb-6">Your phone number is verified!</p>
          <div className="space-y-1">
             <Label htmlFor="displayName">Display Name</Label>
              <div className="relative">
@@ -166,11 +230,10 @@ export default function AuthPage() {
         <div className="space-y-1">
             <Label htmlFor="regPassword">Password</Label>
             <div className="relative">
-                <Input id="regPassword" type="password" placeholder="Create a strong password" value={regPassword} onChange={handleRegisterPasswordChange} required className="pl-4 pr-10" disabled={loading} minLength={8} autoComplete="new-password" />
+                <Input id="regPassword" type="password" placeholder="Create a strong password" value={regPassword} onChange={(e) => {setRegPassword(e.target.value); checkPasswordStrength(e.target.value);}} required className="pl-4 pr-10" disabled={loading} minLength={8} autoComplete="new-password" />
                 <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             </div>
              <PasswordStrengthIndicator strength={passwordStrength} />
-             <p className="text-xs text-muted-foreground">Enter a password</p>
         </div>
          <div className="space-y-1">
             <Label htmlFor="regOptionalEmail">Email (Optional)</Label>
@@ -186,7 +249,7 @@ export default function AuthPage() {
             </label>
         </div>
         <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
-            {loading ? <Loader2 className="animate-spin" /> : 'Sign Up'}
+            {loading ? <Loader2 className="animate-spin" /> : 'Create Account'}
         </Button>
     </form>
   );
@@ -196,7 +259,7 @@ export default function AuthPage() {
       <div className="space-y-1">
           <Label htmlFor="loginPhone">Phone Number</Label>
           <div className="relative">
-              <Input id="loginPhone" type="tel" placeholder="e.g., +1 234 567 8900" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)} required className="pl-4 pr-10" disabled={loading} autoComplete="tel" />
+              <Input id="loginPhone" type="tel" placeholder="+12223334444" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)} required className="pl-4 pr-10" disabled={loading} autoComplete="tel" />
                <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           </div>
       </div>
@@ -227,7 +290,9 @@ export default function AuthPage() {
 
           {authMode === 'register' ? (
             <>
-              <RegisterForm />
+              {registerStep === 'phone' && <RegisterPhoneStep />}
+              {registerStep === 'otp' && <RegisterOtpStep />}
+              {registerStep === 'details' && <RegisterDetailsStep />}
               <p className="text-center text-sm mt-6">
                 Already have an account?{' '}
                 <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
@@ -237,7 +302,7 @@ export default function AuthPage() {
             </>
           ) : (
             <>
-              <h2 className="text-3xl font-bold text-center mb-6 text-foreground">Log In</h2>
+              <h2 className="text-3xl font-bold text-center mb-6 text-foreground">Welcome Back</h2>
               <LoginForm />
               <p className="text-center text-sm mt-6">
                 Don't have an account?{' '}

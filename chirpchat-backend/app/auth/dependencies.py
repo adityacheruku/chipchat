@@ -10,6 +10,7 @@ from app.config import settings
 from app.auth.schemas import TokenData, UserPublic 
 from app.database import db_manager
 from app.utils.logging import logger # Ensure logger is imported
+from app.utils.security import verify_registration_token
 
 # Set auto_error to False. This means if the token is not found in the header,
 # it won't immediately raise an error, allowing our custom dependency to check the query params.
@@ -35,12 +36,15 @@ async def get_token_from_header_or_query(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-# 🔒 Security: Refactored to check for an expected token type ('access' or 'refresh').
-async def try_get_user_from_token(token: Optional[str], expected_token_type: str) -> Optional[UserPublic]:
+# 🔒 Security: Refactored to check for an expected token type ('access', 'refresh', or 'registration').
+async def try_get_user_from_token(token: Optional[str], expected_token_type: str = "access") -> Optional[UserPublic]:
     """
     Safely decodes a JWT and fetches the user from the database.
     Returns the UserPublic object on success, or None on any failure (e.g., invalid token, user not found).
     This function does NOT raise HTTPExceptions, making it suitable for WebSocket/SSE authentication checks.
+    
+    # 🔒 Security: The expected_token_type parameter ensures that a refresh token can't be used
+    # to access APIs, and an access token can't be used to refresh the session.
     """
     if not token:
         logger.warning("Auth: Token not provided.")

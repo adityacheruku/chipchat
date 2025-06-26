@@ -116,6 +116,7 @@ export interface AppEvent {
 // API service related types
 export interface AuthResponse {
   access_token: string;
+  refresh_token: string; // Added for refresh token flow
   token_type: string;
   user: UserInToken;
 }
@@ -123,6 +124,19 @@ export interface AuthResponse {
 export interface ApiErrorResponse {
   detail?: string | { msg: string; type: string }[];
 }
+
+// 🔒 Security: Types for the new OTP flow
+export interface VerifyOtpResponse {
+  registration_token: string;
+}
+
+export interface CompleteRegistrationRequest {
+  registration_token: string;
+  display_name: string;
+  password: string;
+  email?: string;
+}
+
 
 export interface VoiceMessageUploadResponse {
     file_url: string;
@@ -219,14 +233,6 @@ export const ALL_EVENT_TYPES = [
     "typing_indicator", "thinking_of_you_received", "user_profile_update",
     "message_ack", "error", "sse_connected", "ping", "chat_mode_changed", "heartbeat_ack"
 ];
-
-
-export interface UserCreateFrontend {
-  phone: string;
-  password_plaintext: string; // To match AuthContext
-  display_name: string;
-  email?: string; // Optional email
-}
 
 // Sticker System Types
 export interface StickerPack {

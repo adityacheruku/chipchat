@@ -4,16 +4,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { api } from '@/services/api';
-import type { UserInToken, AuthResponse } from '@/types';
+import type { UserInToken, AuthResponse, CompleteRegistrationRequest } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import type { UserCreate as BackendUserCreate } from '@/chirpchat-backend/app/auth/schemas';
 
 interface AuthContextType {
   currentUser: UserInToken | null;
   token: string | null;
   isLoading: boolean;
   login: (phone: string, password_plaintext: string) => Promise<void>;
-  register: (userData: BackendUserCreate) => Promise<void>;
+  // 🔒 Security: Renamed `register` to `completeRegistration` to reflect the new multi-step flow.
+  completeRegistration: (userData: CompleteRegistrationRequest) => Promise<void>;
   logout: () => void;
   fetchAndUpdateUser: () => Promise<void>;
   isAuthenticated: boolean;
@@ -87,13 +87,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // isLoading will be set to false by the useEffect that handles routing
   }, [handleAuthSuccess, toast]);
 
-  const register = useCallback(async (userData: BackendUserCreate) => {
+  // 🔒 Security: This function now handles the final step of the new OTP flow.
+  const completeRegistration = useCallback(async (userData: CompleteRegistrationRequest) => {
     setIsLoading(true);
     try {
-      const data: AuthResponse = await api.register(userData);
+      const data: AuthResponse = await api.completeRegistration(userData);
       handleAuthSuccess(data);
        toast({ title: 'Registration Successful!', description: 'Welcome to ChirpChat.' });
-    } catch (error: any) {
+    } catch (error: any)
+    {
       toast({ variant: 'destructive', title: 'Registration Failed', description: error.message || 'Please try again.' });
       setIsLoading(false); // Ensure loading is stopped on error
       throw error;
@@ -142,7 +144,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [isLoading, isAuthenticated, currentUser, pathname, router]);
 
   return (
-    <AuthContext.Provider value={{ currentUser, token, isLoading, login, register, logout, fetchAndUpdateUser, isAuthenticated }}>
+    <AuthContext.Provider value={{ currentUser, token, isLoading, login, completeRegistration, logout, fetchAndUpdateUser, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );

@@ -9,6 +9,30 @@ import re # For phone number validation
 ALL_MOODS = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"]
 Mood = str 
 
+# 🔒 Security: New schemas for the multi-step OTP registration flow.
+
+class PhoneSchema(BaseModel):
+    phone: str
+
+    @validator('phone')
+    def validate_phone(cls, v):
+        if not re.match(r"^\+[1-9]\d{1,14}$", v):
+            raise ValueError('Phone number must be in E.164 format (e.g., +12223334444)')
+        return v
+
+class VerifyOtpRequest(PhoneSchema):
+    otp: str = Field(min_length=6, max_length=6)
+
+class VerifyOtpResponse(BaseModel):
+    registration_token: str
+
+class CompleteRegistrationRequest(BaseModel):
+    registration_token: str
+    display_name: str
+    password: str = Field(min_length=8)
+    email: Optional[EmailStr] = None
+
+
 class UserBase(BaseModel):
     id: UUID
     phone: str # Phone number is now primary for lookups if ID not in token
@@ -21,19 +45,11 @@ class UserBase(BaseModel):
     partner_id: Optional[UUID] = None
 
 class UserCreate(BaseModel):
+    # This model is now used internally by the registration endpoint, not as a direct request body.
     phone: str
     password: str = Field(min_length=8)
     display_name: str
-    email: Optional[EmailStr] = None # Optional email during registration
-    # initial_mood: Optional[Mood] = "Neutral" # Defaulted in route
-
-    @validator('phone')
-    def validate_phone(cls, v):
-        # Basic phone validation (e.g., E.164 format, or adjust to your needs)
-        # This is a simple example, consider using a more robust library for production
-        if not re.match(r"^\+[1-9]\d{1,14}$", v): # Example: +12223334444
-            raise ValueError('Phone number must be in E.164 format (e.g., +12223334444)')
-        return v
+    email: Optional[EmailStr] = None
 
 class UserLogin(BaseModel):
     phone: str # Changed from email
@@ -43,7 +59,6 @@ class UserUpdate(BaseModel):
     display_name: Optional[str] = None
     mood: Optional[Mood] = None
     email: Optional[EmailStr] = None # Allow updating optional email
-    # Phone number update should ideally be a separate, verified process. Not included here for simplicity.
     avatar_url: Optional[str] = None
 
 class UserPublic(BaseModel):
@@ -53,8 +68,8 @@ class UserPublic(BaseModel):
     mood: Optional[Mood] = "Neutral"
     is_online: Optional[bool] = False
     last_seen: Optional[datetime] = None
-    phone: Optional[str] = None # Include phone in public for display if needed (e.g. in ChatHeader if desired)
-    email: Optional[EmailStr] = None # Include optional email if needed
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
     partner_id: Optional[UUID] = None
 
     class Config:
@@ -63,15 +78,11 @@ class UserPublic(BaseModel):
 
 class Token(BaseModel):
     access_token: str
-    # 🔒 Security: Add refresh_token to the response model for persistent sessions.
     refresh_token: str
     token_type: str = "bearer"
     user: UserPublic
 
 class TokenData(BaseModel):
-    phone: Optional[str] = None # Changed from email to phone
+    phone: Optional[str] = None
     user_id: Optional[UUID] = None
-    # 🔒 Security: Add token_type to internal token data model for validation.
     token_type: Optional[str] = None
-
-
