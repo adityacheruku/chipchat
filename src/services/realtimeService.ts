@@ -124,7 +124,7 @@ class RealtimeService {
         }
     }
     
-    if (data.event_type === 'message_ack') {
+    if (data.event_type === 'message_ack' && data.client_temp_id) {
         pendingMessages.delete(data.client_temp_id);
     }
     

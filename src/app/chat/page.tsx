@@ -31,6 +31,7 @@ const MemoizedMessageArea = memo(MessageArea);
 const MemoizedChatHeader = memo(ChatHeader);
 const MemoizedInputBar = memo(InputBar);
 const FIRST_MESSAGE_SENT_KEY = 'chirpChat_firstMessageSent';
+const MESSAGE_SEND_TIMEOUT_MS = 15000; // 15 seconds
 
 const ModalLoader = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -81,6 +82,7 @@ export default function ChatPage() {
   const lastReactionToggleTimes = useRef<Record<string, number>>({});
   const lastMessageTextRef = useRef<string>("");
   const handleSendThoughtRef = useRef<() => void>(() => {});
+  const pendingMessageTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
 
   // 4. Callback Handler Declarations (memoized with useCallback)
   const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string, metadata?: Record<string, any>) => {
@@ -91,6 +93,11 @@ export default function ChatPage() {
   }, []);
 
   const handleMessageAck = useCallback((ackData: MessageAckEventData) => {
+      // Clear the timeout for this message as it has been acknowledged
+      if (pendingMessageTimeouts.current[ackData.client_temp_id]) {
+        clearTimeout(pendingMessageTimeouts.current[ackData.client_temp_id]);
+        delete pendingMessageTimeouts.current[ackData.client_temp_id];
+      }
       setMessages(prevMessages => prevMessages.map(msg => msg.client_temp_id === ackData.client_temp_id ? { ...msg, id: ackData.server_assigned_id, status: ackData.status } : msg));
   }, []);
 
@@ -230,6 +237,20 @@ export default function ChatPage() {
     }
   }, [activeChat, sendMessage]);
 
+  const setMessageAsFailed = useCallback((clientTempId: string) => {
+    setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId && msg.status === 'sending' ? { ...msg, status: 'failed' } : msg));
+    delete pendingMessageTimeouts.current[clientTempId];
+  }, []);
+  
+  const sendMessageWithTimeout = useCallback((messagePayload: any) => {
+    sendMessage(messagePayload);
+    // Set a timeout to mark the message as failed if no ack is received
+    pendingMessageTimeouts.current[messagePayload.client_temp_id] = setTimeout(() => {
+        setMessageAsFailed(messagePayload.client_temp_id);
+    }, MESSAGE_SEND_TIMEOUT_MS);
+  }, [sendMessage, setMessageAsFailed]);
+
+
   const handleSendMessage = useCallback((text: string, mode: MessageMode) => {
     if (!currentUser || !activeChat) return;
     if (!text.trim()) return;
@@ -241,7 +262,7 @@ export default function ChatPage() {
       reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text", mode: mode,
     };
     setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
-    sendMessage({ event_type: "send_message", chat_id: activeChat.id, text, mode, client_temp_id: clientTempId, message_subtype: "text" });
+    sendMessageWithTimeout({ event_type: "send_message", chat_id: activeChat.id, text, mode, client_temp_id: clientTempId, message_subtype: "text" });
     addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0, 30)}"`, currentUser.id, currentUser.display_name);
     if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) { lastMessageTextRef.current = text; aiSuggestMood(text); }
     if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
@@ -250,7 +271,7 @@ export default function ChatPage() {
             setTimeout(() => setShowNotificationPrompt(true), 2000);
         }
     }
-  }, [currentUser, activeChat, handleTyping, sendMessage, addAppEvent, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
+  }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, addAppEvent, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
   
   const handleFileUpload = useCallback(async (file: File, subtype: MessageType['message_subtype'], mode: MessageMode, uploadFunction: (file: File, onProgress: (progress: number) => void) => Promise<any>) => {
     if (!currentUser || !activeChat) return;
@@ -263,18 +284,38 @@ export default function ChatPage() {
     try {
         const onProgress = (progress: number) => { setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, uploadProgress: progress } : msg)); };
         const uploadResult = await uploadFunction(file, onProgress);
+        setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, status: 'sending', uploadProgress: 100 } : msg));
         let messagePayload: any = { event_type: "send_message", chat_id: activeChat.id, client_temp_id: clientTempId, message_subtype: subtype, mode: mode };
         if (subtype === 'image') { messagePayload.image_url = uploadResult.image_url; messagePayload.image_thumbnail_url = uploadResult.image_thumbnail_url; }
         else if (subtype === 'document') { messagePayload.document_url = uploadResult.file_url; messagePayload.document_name = uploadResult.file_name; }
         else if (subtype === 'voice_message') { messagePayload.clip_url = uploadResult.file_url; messagePayload.duration_seconds = uploadResult.duration_seconds; messagePayload.file_size_bytes = uploadResult.file_size_bytes; messagePayload.audio_format = uploadResult.audio_format; }
-        sendMessage(messagePayload);
+        sendMessageWithTimeout(messagePayload);
         addAppEvent('messageSent', `${currentUser.display_name} sent a ${subtype}.`, currentUser.display_name, currentUser.id);
-        setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, status: 'sending', uploadProgress: 100 } : msg));
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
         setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, status: 'failed' } : msg));
     }
-  }, [currentUser, activeChat, sendMessage, addAppEvent, toast]);
+  }, [currentUser, activeChat, sendMessageWithTimeout, addAppEvent, toast]);
+  
+  const handleRetrySend = useCallback((message: MessageType) => {
+    if (!currentUser || !activeChat) return;
+    // Reset status to sending
+    setMessages(prev => prev.map(msg => msg.client_temp_id === message.client_temp_id ? { ...msg, status: 'sending' } : msg));
+    
+    // Re-use the original payload creation logic
+    let messagePayload: any = { 
+        event_type: "send_message", 
+        chat_id: activeChat.id, 
+        client_temp_id: message.client_temp_id, 
+        message_subtype: message.message_subtype,
+        mode: message.mode,
+        text: message.text,
+        sticker_id: message.sticker_id,
+        // etc for other types
+    };
+     sendMessageWithTimeout(messagePayload);
+  }, [currentUser, activeChat, sendMessageWithTimeout]);
+
 
   const handleSendImage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'image', mode, api.uploadChatImage), [handleFileUpload]);
   const handleSendDocument = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'document', mode, api.uploadChatDocument), [handleFileUpload]);
@@ -282,9 +323,9 @@ export default function ChatPage() {
   const handleSendSticker = useCallback((stickerId: string, mode: MessageMode) => {
     if (!currentUser || !activeChat) return;
     const clientTempId = uuidv4();
-    sendMessage({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker", mode });
+    sendMessageWithTimeout({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker", mode });
     addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.display_name, currentUser.id);
-  }, [currentUser, activeChat, sendMessage, addAppEvent]);
+  }, [currentUser, activeChat, sendMessageWithTimeout, addAppEvent]);
   
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
     if (!currentUser || !activeChat) return;
@@ -400,6 +441,14 @@ export default function ChatPage() {
         setTopMessageId(null);
     }
   }, [topMessageId, messages]);
+  
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    const timeouts = pendingMessageTimeouts.current;
+    return () => {
+      Object.values(timeouts).forEach(clearTimeout);
+    };
+  }, []);
 
   // 7. Memoized Values (useMemo)
   const filteredMessages = useMemo(() => {
@@ -440,7 +489,7 @@ export default function ChatPage() {
             <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
               <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
               <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
-              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} />
+              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
             </div>
           </ErrorBoundary>

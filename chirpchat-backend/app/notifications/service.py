@@ -120,7 +120,7 @@ class NotificationService:
     
     async def _get_recipients_for_chat(self, chat_id: UUID, exclude_user_id: UUID) -> List[UUID]:
         try:
-            resp = db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).neq("user_id", str(exclude_user_id)).execute()
+            resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).neq("user_id", str(exclude_user_id)).execute()
             return [UUID(row['user_id']) for row in resp.data] if resp.data else []
         except Exception as e:
             logger.error(f"Error fetching recipients for chat {chat_id}: {e}")
@@ -157,9 +157,8 @@ class NotificationService:
             await self._send_notification_to_user(recipient_id, "messages", payload)
 
     async def send_mood_change_notification(self, user: UserPublic, new_mood: str):
-        # This needs a way to find the user's partner. For now, this is a placeholder.
-        # This assumes the user has a partner_id field.
         if not user.partner_id:
+            logger.info(f"User {user.id} updated mood, but has no partner. Skipping notification.")
             return
 
         payload = {

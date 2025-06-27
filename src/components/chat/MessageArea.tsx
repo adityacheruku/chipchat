@@ -20,6 +20,7 @@ interface MessageAreaProps {
   onLoadMore: () => void;
   hasMore: boolean;
   isLoadingMore: boolean;
+  onRetrySend: (message: Message) => void;
 }
 
 function MessageArea({ 
@@ -33,6 +34,7 @@ function MessageArea({
   onLoadMore,
   hasMore,
   isLoadingMore,
+  onRetrySend,
 }: MessageAreaProps) {
   const lastMessageId = messages[messages.length - 1]?.id;
   useAutoScroll(viewportRef, [lastMessageId]);
@@ -58,7 +60,7 @@ function MessageArea({
           }
           return (
             <MessageBubble
-              key={msg.id}
+              key={msg.client_temp_id}
               wrapperId={`message-${msg.id}`}
               message={msg}
               sender={sender}
@@ -68,6 +70,7 @@ function MessageArea({
               onShowReactions={(message) => onShowReactions(message, allUsers)}
               onShowMedia={onShowMedia}
               allUsers={allUsers}
+              onRetrySend={onRetrySend}
             />
           );
         })}

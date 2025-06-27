@@ -40,7 +40,7 @@ interface MessageBubbleProps {
   onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
   onShowMedia: (url: string, type: 'image' | 'video') => void;
   allUsers: Record<string, User>;
-  onRetrySend?: (message: Message) => void;
+  onRetrySend: (message: Message) => void;
   wrapperId?: string;
 }
 
@@ -271,10 +271,19 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             </div>
         )}
 
-        <p className={cn('text-xs text-muted-foreground mt-0.5 cursor-default flex items-center', isCurrentUser ? 'justify-end' : 'justify-start')}>
-            {formattedTime}
+        <div className={cn('text-xs text-muted-foreground mt-0.5 cursor-default flex items-center', isCurrentUser ? 'justify-end' : 'justify-start')}>
+            {showRetry && (
+                <div className="text-destructive flex items-center mr-2">
+                    <span>Failed to send.</span>
+                    <Button variant="link" size="sm" onClick={() => onRetrySend(message)} className="h-auto p-1 text-destructive hover:underline">
+                        <RefreshCw className="mr-1 h-3 w-3" />
+                        Retry
+                    </Button>
+                </div>
+            )}
+            <span>{formattedTime}</span>
             {isCurrentUser && <MessageStatusIndicator status={message.status} />}
-        </p>
+        </div>
       </div>
     </div>
   );
