@@ -102,9 +102,11 @@ async def update_notification_settings(
     logger.info(f"User {current_user.id} updating notification settings with: {update_data}")
     
     try:
-        updated_settings_resp = await db_manager.get_table("user_notification_settings").update(
+        await db_manager.get_table("user_notification_settings").update(
             update_data
-        ).eq("user_id", str(current_user.id)).select().execute()
+        ).eq("user_id", str(current_user.id)).execute()
+
+        updated_settings_resp = await db_manager.get_table("user_notification_settings").select("*").eq("user_id", str(current_user.id)).maybe_single().execute()
 
         if not updated_settings_resp or not updated_settings_resp.data:
              raise HTTPException(status_code=404, detail="Failed to update settings or user not found")
@@ -113,3 +115,5 @@ async def update_notification_settings(
     except APIError as e:
         logger.error(f"Error updating notification settings for user {current_user.id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not update notification settings")
+
+    

@@ -268,7 +268,8 @@ async def update_profile(
     if "mood" in update_data:
         logger.info(f"User {current_user.id} attempting to update mood to: {update_data['mood']}")
 
-    updated_user_response_obj = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).select().maybe_single().execute()
+    await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).execute()
+    updated_user_response_obj = await db_manager.get_table("users").select("*").eq("id", str(current_user.id)).maybe_single().execute()
     
     if not updated_user_response_obj or not updated_user_response_obj.data:
         logger.error(f"Profile update failed for user {current_user.id} or user not found after update.")
@@ -312,7 +313,9 @@ async def upload_avatar_route(
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     logger.info(f"User {current_user.id} updating avatar. New URL: {file_url}")
-    updated_user_response_obj = await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).select().maybe_single().execute()
+    
+    await db_manager.get_table("users").update(update_data).eq("id", str(current_user.id)).execute()
+    updated_user_response_obj = await db_manager.get_table("users").select("*").eq("id", str(current_user.id)).maybe_single().execute()
     
     if not updated_user_response_obj or not updated_user_response_obj.data:
         logger.error(f"Avatar URL update in DB failed for user {current_user.id}")
@@ -366,3 +369,5 @@ async def http_ping_thinking_of_you(
     except Exception as e:
         logger.error(f"Failed to dispatch 'Thinking of You' events for recipient {recipient_user_id} from user {current_user.id} via HTTP: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send ping.")
+
+    
