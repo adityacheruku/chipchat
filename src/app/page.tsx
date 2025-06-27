@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, type FormEvent, useCallback } from 'react';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,18 +15,17 @@ import { api } from '@/services/api';
 
 // Component for the logo
 const Logo = () => (
-    <svg 
-        className="w-32 h-auto text-foreground mx-auto" 
-        viewBox="0 0 200 80" 
-        fill="none" 
-        xmlns="http://www.w3.org/2000/svg"
-        aria-label="ChirpChat Logo"
-        data-ai-hint="signature logo"
-    >
-        <path d="M10 70 Q 20 20, 40 50 T 70 60 Q 80 20, 100 50 T 130 60 Q 140 30, 160 50 T 190 70" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none"/>
-        <path d="M75 30 Q 90 5, 105 30 T 135 25" stroke="currentColor" strokeWidth="1.5" fill="none" />
-        <path d="M170 30 A 15 15, 0, 1, 1, 170 60 A 15 15, 0, 1, 1, 170 30" stroke="currentColor" strokeWidth="1.5" fill="none" />
-    </svg>
+    <div className="w-full max-w-sm mx-auto">
+        <Image 
+            src="https://placehold.co/400x300.png"
+            alt="ChirpChat Branding Image"
+            width={400}
+            height={300}
+            className="rounded-lg object-cover shadow-lg"
+            data-ai-hint="abstract background"
+            priority
+        />
+    </div>
 );
 
 // Component for the password strength indicator
