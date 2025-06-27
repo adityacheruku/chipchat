@@ -135,6 +135,7 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
             image_url=message_create.image_url,
             document_url=message_create.document_url,
             document_name=message_create.document_name,
+            file_size_bytes=message_create.file_size_bytes
         )
         
         await ws_manager.mark_message_as_processed(client_temp_id)

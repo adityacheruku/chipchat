@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, Dot, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2 } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2 } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -25,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
-// ⚡️ Wrapped with React.memo to avoid re-renders when props don’t change
 import { useState, useEffect, useRef, memo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useLongPress } from '@/hooks/useLongPress';
@@ -70,28 +69,55 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
         if (isPlaying) {
             audioRef.current.pause();
         } else {
+            // Dispatch a global event to pause other players
             const playEvent = new CustomEvent('audio-play', { detail: { player: audioRef.current } });
             document.dispatchEvent(playEvent);
-            audioRef.current.play();
+            audioRef.current.play().catch(e => {
+                console.error("Audio play failed:", e);
+                setHasError(true);
+                toast({ variant: 'destructive', title: 'Playback Error' });
+            });
             if (!hasBeenPlayed) {
                 setHasBeenPlayed(true);
             }
         }
         setIsPlaying(!isPlaying);
     };
+    
+    const handleSeek = (value: number[]) => {
+      if (audioRef.current) {
+        audioRef.current.currentTime = value[0];
+        setCurrentTime(value[0]);
+      }
+    };
 
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
+
         const handleGlobalPlay = (event: Event) => {
-            if ((event as CustomEvent).detail.player !== audio) { audio.pause(); setIsPlaying(false); }
+            if ((event as CustomEvent).detail.player !== audio) {
+                audio.pause();
+                setIsPlaying(false);
+            }
         };
-        audio.addEventListener('timeupdate', () => setCurrentTime(audio.currentTime));
-        audio.addEventListener('loadedmetadata', () => setDuration(audio.duration));
-        audio.addEventListener('ended', () => setIsPlaying(false));
-        audio.addEventListener('error', () => { setHasError(true); toast({ variant: "destructive", title: "Playback Error" }); });
+
+        const updateTime = () => setCurrentTime(audio.currentTime);
+        const updateDuration = () => setDuration(audio.duration);
+        const handleEnd = () => setIsPlaying(false);
+        const handleError = () => { setHasError(true); toast({ variant: "destructive", title: "Playback Error" }); };
+
+        audio.addEventListener('timeupdate', updateTime);
+        audio.addEventListener('loadedmetadata', updateDuration);
+        audio.addEventListener('ended', handleEnd);
+        audio.addEventListener('error', handleError);
         document.addEventListener('audio-play', handleGlobalPlay);
+
         return () => {
+            audio.removeEventListener('timeupdate', updateTime);
+            audio.removeEventListener('loadedmetadata', updateDuration);
+            audio.removeEventListener('ended', handleEnd);
+            audio.removeEventListener('error', handleError);
             document.removeEventListener('audio-play', handleGlobalPlay);
         };
     }, [toast]);
@@ -99,14 +125,6 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
     const playerColorClass = isCurrentUser ? 'text-primary-foreground' : 'text-secondary-foreground';
     
     if (hasError) return <div className={cn("flex items-center gap-2", isCurrentUser ? "text-red-300" : "text-red-500")}><AlertTriangle size={18} /><span className="text-sm">Audio error</span></div>;
-
-    const SimulatedWaveform = () => (
-        <div className="flex items-center h-8 w-full">
-            {Array.from({ length: 30 }).map((_, i) => (
-                <div key={i} className={cn("w-0.5 rounded-full", playerColorClass)} style={{ height: `${Math.sin(i / 30 * Math.PI * 2 + currentTime) * 40 + 60}%`, backgroundColor: isPlaying && currentTime > (i / 30) * duration ? 'currentColor' : 'hsla(var(--muted-foreground), 0.5)' }}/>
-            ))}
-        </div>
-    );
 
     return (
         <div className={cn("flex items-center gap-3 w-full max-w-[250px]", playerColorClass)}>
@@ -118,7 +136,14 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
                  {!hasBeenPlayed && <span className="absolute -top-1 -right-1 block h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>}
             </div>
             <div className="flex-grow flex flex-col justify-center gap-1">
-                 <SimulatedWaveform />
+                 <Slider
+                    value={[currentTime]}
+                    max={duration || 1}
+                    step={0.1}
+                    onValueChange={handleSeek}
+                    className={cn(isCurrentUser && "[&>div>span]:bg-primary-foreground")}
+                    aria-label="Seek audio"
+                 />
                  <div className="text-xs opacity-80 text-right">
                      {formatDuration(isPlaying ? currentTime : duration)}
                  </div>
@@ -138,6 +163,16 @@ const MessageStatusIndicator = ({ status }: { status: Message['status'] }) => {
         default: return null;
     }
 };
+
+function formatFileSize(bytes?: number | null): string | null {
+  if (bytes === null || bytes === undefined) return null;
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 
 function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, allUsers, onRetrySend, wrapperId }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
@@ -209,7 +244,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             <FileText size={24} className="mr-2" />
             <div className="flex flex-col text-left">
                 <span className="font-semibold">{message.document_name || 'Document'}</span>
-                <span className="text-xs">Click to open</span>
+                <span className="text-xs opacity-80">{formatFileSize(message.file_size_bytes) || 'Click to open'}</span>
             </div>
         </a>
       ) : <p className="text-sm italic">Document unavailable</p>;

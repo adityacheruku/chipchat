@@ -109,6 +109,11 @@ async def upload_chat_document(
     logger.info(f"Route /uploads/chat_document called by user {current_user.id} for file {file.filename}")
     validate_document_upload(file)
     try:
+        # Get file size before uploading
+        file.file.seek(0, os.SEEK_END)
+        file_size = file.file.tell()
+        file.file.seek(0)
+        
         # Use resource_type 'raw' for documents, and use the original filename
         result = cloudinary.uploader.upload(
             file.file,
@@ -118,7 +123,11 @@ async def upload_chat_document(
             unique_filename=True # Set to true to avoid overwrites
         )
         logger.info(f"Chat document {file.filename} uploaded successfully for user {current_user.id}. URL: {result.get('secure_url')}")
-        return {"file_url": result.get("secure_url"), "file_name": file.filename}
+        return {
+            "file_url": result.get("secure_url"), 
+            "file_name": file.filename,
+            "file_size_bytes": file_size
+        }
     except Exception as e:
         logger.error(f"Cloudinary chat document upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat document upload failed: {str(e)}")

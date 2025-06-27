@@ -85,7 +85,7 @@ export interface Message {
   sticker_image_url?: string | null; // The actual image URL, joined from the backend
   client_temp_id: string; // Client-generated temporary ID - now mandatory
   status: MessageStatus; // Message status - now mandatory
-  // Voice message metadata
+  // Voice & Document message metadata
   duration_seconds?: number | null;
   file_size_bytes?: number | null;
   audio_format?: string | null;
@@ -140,6 +140,11 @@ export interface CompleteRegistrationRequest {
   email?: string;
 }
 
+export interface DocumentUploadResponse {
+    file_url: string;
+    file_name: string;
+    file_size_bytes: number;
+}
 
 export interface VoiceMessageUploadResponse {
     file_url: string;

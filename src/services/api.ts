@@ -16,6 +16,7 @@ import type {
   EventPayload,
   VerifyOtpResponse,
   CompleteRegistrationRequest,
+  DocumentUploadResponse,
 } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://d87c-49-43-230-78.ngrok-free.app';
@@ -305,7 +306,7 @@ export const api = {
     return uploadWithProgress(`${API_BASE_URL}/uploads/mood_clip`, formData, onProgress);
   },
 
-  uploadChatDocument: async (file: File, onProgress: (progress: number) => void): Promise<{ file_url: string, file_name: string }> => {
+  uploadChatDocument: async (file: File, onProgress: (progress: number) => void): Promise<DocumentUploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     return uploadWithProgress(`${API_BASE_URL}/uploads/chat_document`, formData, onProgress);
