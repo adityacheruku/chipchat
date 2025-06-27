@@ -1,13 +1,13 @@
 
 "use client";
 
-import type { Message, User, SupportedEmoji } from '@/types';
+import type { Message, User, SupportedEmoji, DeleteType } from '@/types';
 import { QUICK_REACTION_EMOJIS } from '@/types';
 import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2 } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -25,10 +25,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useLongPress } from '@/hooks/useLongPress';
 import UploadProgressIndicator from './UploadProgressIndicator';
+import { useDoubleTap } from '@/hooks/useDoubleTap';
+import DeleteMessageDialog from './DeleteMessageDialog';
 
 
 const EMOJI_ONLY_REGEX = /^(?:[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\udbff][\udc00-\udfff]|[\u0023-\u0039]\ufe0f?\u20e3|\u3299|\u3297|\u303d|\u3030|\u24c2|\ud83c[\udd70-\udd71]|\ud83c[\udd7e-\udd7f]|\ud83c\udd8e|\ud83c[\udd91-\udd9a]|\ud83c[\udde6-\uddff]|\ud83c[\ude01-\ude02]|\ud83c\ude1a|\ud83c\ude2f|\ud83c[\ude32-\ude3a]|\ud83c[\ude50-\ude51]|\u203c|\u2049|[\u25aa-\u25ab]|\u25b6|\u25c0|[\u25fb-\u25fe]|\u00a9|\u00ae|\u2122|\u2139|\ud83c\udc04|[\u2600-\u26FF]|\u2b05|\u2b06|\u2b07|\u2b1b|\u2b1c|\u2b50|\u2b55|\u231a|\u231b|\u2328|\u23cf|[\u23e9-\u23f3]|[\u23f8-\u23fa]|\ud83c\udccf|\u2934|\u2935|[\u2190-\u21ff])+$/;
@@ -44,6 +46,7 @@ interface MessageBubbleProps {
   onShowMedia: (url: string, type: 'image' | 'video') => void;
   allUsers: Record<string, User>;
   onRetrySend: (message: Message) => void;
+  onDelete: (messageId: string, deleteType: DeleteType) => void;
   wrapperId?: string;
 }
 
@@ -174,8 +177,13 @@ function formatFileSize(bytes?: number | null): string | null {
 }
 
 
-function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, allUsers, onRetrySend, wrapperId }: MessageBubbleProps) {
+function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, allUsers, onRetrySend, onDelete, wrapperId }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [translateX, setTranslateX] = useState(0);
+  const touchStartX = useRef(0);
+  const isDragging = useRef(false);
+  const { toast } = useToast();
 
   const handleCopy = () => {
     if (message.text) {
@@ -184,7 +192,13 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     }
   };
 
-  const { toast } = useToast();
+  const handleDoubleTap = useCallback(() => {
+    if (message.status !== 'failed' && message.status !== 'sending' && message.mode !== 'incognito') {
+      onToggleReaction(message.id, '❤️');
+    }
+  }, [message.id, message.status, message.mode, onToggleReaction]);
+  
+  const doubleTapEvents = useDoubleTap(handleDoubleTap, 300);
   
   const longPressEvents = useLongPress(() => {
     if(navigator.vibrate) navigator.vibrate(50);
@@ -201,11 +215,50 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     }
     return namesString;
   };
+  
+  const handleTouchStart = (e: React.TouchEvent) => {
+    isDragging.current = true;
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging.current) return;
+    const currentX = e.targetTouches[0].clientX;
+    const deltaX = currentX - touchStartX.current;
+    
+    // Constrain swipe
+    if (isCurrentUser) { // Swipe left
+        setTranslateX(Math.max(-80, Math.min(0, deltaX)));
+    } else { // Swipe right
+        setTranslateX(Math.min(80, Math.max(0, deltaX)));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+    // Snap logic
+    const threshold = 40;
+    if (Math.abs(translateX) > threshold) {
+        setTranslateX(isCurrentUser ? -64 : 64);
+    } else {
+        setTranslateX(0);
+    }
+  };
+  
+  const handleActionClick = (action: 'reply' | 'delete') => {
+    if (action === 'delete') {
+      setIsDeleteDialogOpen(true);
+    }
+    // Reset swipe
+    setTranslateX(0);
+  };
+  
+  const handleConfirmDelete = (deleteType: DeleteType) => {
+    onDelete(message.id, deleteType);
+    setIsDeleteDialogOpen(false);
+  }
 
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
-  const bubbleAlignment = isCurrentUser ? 'self-end' : 'self-start';
-  const tailPosition = isCurrentUser ? 'after:right-[-8px]' : 'after:left-[-8px]';
-  const tailColor = isCurrentUser ? 'after:border-l-primary' : 'after:border-r-secondary';
   
   const isStickerMessage = message.message_subtype === 'sticker';
   const isEmojiOnlyMessage = message.message_subtype === 'text' && message.text && EMOJI_ONLY_REGEX.test(message.text.trim()) && message.text.trim().length <= 5;
@@ -258,91 +311,107 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const reactionsDisabled = message.mode === 'incognito';
 
   return (
-    <div id={wrapperId} className={cn(
-        'flex flex-col group transition-opacity duration-500 animate-in fade-in-0 slide-in-from-bottom-2', 
-        bubbleAlignment, 
-        isCurrentUser ? 'pl-10' : 'pr-10',
-        message.mode === 'incognito' && 'opacity-70'
-    )}>
-      <DropdownMenu open={isActionMenuOpen} onOpenChange={setIsActionMenuOpen}>
-        <DropdownMenuTrigger asChild>
-           <div {...longPressEvents} className={cn(
-              'relative rounded-xl shadow-md max-w-md transition-all',
-              isMediaBubble ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
-              !isMediaBubble && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
-              !isMediaBubble && tailPosition,
-              !isMediaBubble && tailColor,
-              message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80'
-            )}>
-              {renderMessageContent()}
-            </div>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger disabled={reactionsDisabled}>
-                <SmilePlus className="mr-2 h-4 w-4" />
-                <span>React</span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuPortal>
-                <DropdownMenuSubContent>
-                  <div className="flex p-1">
-                    {QUICK_REACTION_EMOJIS.map((emoji) => (
-                      <DropdownMenuItem
-                        key={emoji}
-                        className="flex-1 justify-center rounded-md p-0 focus:bg-accent/50"
-                        onSelect={() => onToggleReaction(message.id, emoji)}
-                      >
-                        <span className="text-xl p-1.5">{emoji}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </div>
-                </DropdownMenuSubContent>
-              </DropdownMenuPortal>
-            </DropdownMenuSub>
-            <DropdownMenuItem onSelect={() => handleCopy()} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
-            <DropdownMenuItem disabled><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
-            <DropdownMenuItem disabled><Forward className="mr-2 h-4 w-4" /> Forward</DropdownMenuItem>
-            <DropdownMenuItem disabled className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <div className="relative" id={wrapperId} {...doubleTapEvents}>
+      <div className={cn("absolute inset-y-0 flex items-center", isCurrentUser ? 'right-full pr-2' : 'left-full pl-2')}>
+          {translateX < 0 && isCurrentUser && <Button size="icon" variant="destructive" className="rounded-full w-10 h-10 animate-reveal-icon" onClick={() => handleActionClick('delete')}><Trash2 size={20}/></Button>}
+          {translateX > 0 && !isCurrentUser && <Button size="icon" variant="default" className="rounded-full w-10 h-10 animate-reveal-icon" onClick={() => handleActionClick('reply')}><Reply size={20}/></Button>}
+      </div>
 
-      <div className={cn('pt-1', isCurrentUser ? 'pr-2' : 'pl-2')}>
-        {!reactionsDisabled && message.reactions && Object.keys(message.reactions).length > 0 && (
-            <div className={cn("flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
-            {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
-                const reactors = message.reactions?.[emoji];
-                if (!reactors || reactors.length === 0) return null;
-                const currentUserReacted = reactors.includes(currentUserId);
-                return (
-                <TooltipProvider key={emoji} delayDuration={100}>
-                    <Tooltip>
-                    <TooltipTrigger asChild>
-                        <button onClick={() => onShowReactions(message, allUsers)} className={cn("text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-all", currentUserReacted ? "bg-accent text-accent-foreground border-accent/80" : "bg-card/50 border-border hover:bg-muted")}>
-                        <span>{emoji}</span>
-                        <span className="font-medium">{reactors.length}</span>
-                        </button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>{getReactorNames(reactors)}</p></TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-                );
-            })}
-            </div>
+      <div
+        className={cn('flex flex-col group transition-opacity duration-500 animate-in fade-in-0 slide-in-from-bottom-2', 
+          isCurrentUser ? 'self-end pl-10' : 'self-start pr-10',
+          message.mode === 'incognito' && 'opacity-70'
         )}
+        style={{ transform: `translateX(${translateX}px)` }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <DropdownMenu open={isActionMenuOpen} onOpenChange={setIsActionMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <div {...longPressEvents} className={cn(
+                'relative rounded-xl shadow-md max-w-md transition-all',
+                isMediaBubble ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
+                !isMediaBubble && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
+                !isMediaBubble && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
+                message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80'
+              )}>
+                {renderMessageContent()}
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={reactionsDisabled}>
+                  <SmilePlus className="mr-2 h-4 w-4" />
+                  <span>React</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent>
+                    <div className="flex p-1">
+                      {QUICK_REACTION_EMOJIS.map((emoji) => (
+                        <DropdownMenuItem
+                          key={emoji}
+                          className="flex-1 justify-center rounded-md p-0 focus:bg-accent/50"
+                          onSelect={() => onToggleReaction(message.id, emoji)}
+                        >
+                          <span className="text-xl p-1.5">{emoji}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+              <DropdownMenuItem onSelect={() => handleCopy()} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
+              <DropdownMenuItem disabled><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
+              <DropdownMenuItem disabled><Forward className="mr-2 h-4 w-4" /> Forward</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <div className={cn('text-xs text-muted-foreground mt-0.5 cursor-default flex items-center', isCurrentUser ? 'justify-end' : 'justify-start')}>
-            {showRetry && (
-                <div className="text-destructive flex items-center mr-2">
-                    <span>Failed to send.</span>
-                    <Button variant="link" size="sm" onClick={() => onRetrySend(message)} className="h-auto p-1 text-destructive hover:underline">
-                        <RefreshCw className="mr-1 h-3 w-3" />
-                        Retry
-                    </Button>
-                </div>
-            )}
-            <span>{formattedTime}</span>
-            {isCurrentUser && <MessageStatusIndicator status={message.status} />}
+        <div className={cn('pt-1', isCurrentUser ? 'pr-2 text-right' : 'pl-2 text-left')}>
+          {!reactionsDisabled && message.reactions && Object.keys(message.reactions).length > 0 && (
+              <div className={cn("flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
+              {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
+                  const reactors = message.reactions?.[emoji];
+                  if (!reactors || reactors.length === 0) return null;
+                  const currentUserReacted = reactors.includes(currentUserId);
+                  return (
+                  <TooltipProvider key={emoji} delayDuration={100}>
+                      <Tooltip>
+                      <TooltipTrigger asChild>
+                          <button onClick={() => onShowReactions(message, allUsers)} className={cn("text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-all", currentUserReacted ? "bg-accent text-accent-foreground border-accent/80" : "bg-card/50 border-border hover:bg-muted")}>
+                          <span>{emoji}</span>
+                          <span className="font-medium">{reactors.length}</span>
+                          </button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>{getReactorNames(reactors)}</p></TooltipContent>
+                      </Tooltip>
+                  </TooltipProvider>
+                  );
+              })}
+              </div>
+          )}
+
+          <div className={cn('text-xs text-muted-foreground mt-0.5 cursor-default flex items-center', isCurrentUser ? 'justify-end' : 'justify-start')}>
+              {showRetry && (
+                  <div className="text-destructive flex items-center mr-2">
+                      <span>Failed to send.</span>
+                      <Button variant="link" size="sm" onClick={() => onRetrySend(message)} className="h-auto p-1 text-destructive hover:underline">
+                          <RefreshCw className="mr-1 h-3 w-3" />
+                          Retry
+                      </Button>
+                  </div>
+              )}
+              <span>{formattedTime}</span>
+              {isCurrentUser && <MessageStatusIndicator status={message.status} />}
+          </div>
         </div>
+        <DeleteMessageDialog 
+          isOpen={isDeleteDialogOpen}
+          onClose={() => setIsDeleteDialogOpen(false)}
+          onConfirm={handleConfirmDelete}
+          isCurrentUser={isCurrentUser}
+        />
       </div>
     </div>
   );

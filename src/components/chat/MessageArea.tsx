@@ -1,7 +1,7 @@
 
 // ⚡️ Wrapped with React.memo to avoid re-renders when props don’t change
 import { memo, type RefObject } from 'react';
-import type { Message, User, SupportedEmoji } from '@/types';
+import type { Message, User, SupportedEmoji, DeleteType } from '@/types';
 import MessageBubble from './MessageBubble';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRef } from 'react';
@@ -21,6 +21,7 @@ interface MessageAreaProps {
   hasMore: boolean;
   isLoadingMore: boolean;
   onRetrySend: (message: Message) => void;
+  onDeleteMessage: (messageId: string, deleteType: DeleteType) => void;
 }
 
 function MessageArea({ 
@@ -35,6 +36,7 @@ function MessageArea({
   hasMore,
   isLoadingMore,
   onRetrySend,
+  onDeleteMessage,
 }: MessageAreaProps) {
   const lastMessageId = messages[messages.length - 1]?.id;
   useAutoScroll(viewportRef, [lastMessageId]);
@@ -71,6 +73,7 @@ function MessageArea({
               onShowMedia={onShowMedia}
               allUsers={allUsers}
               onRetrySend={onRetrySend}
+              onDelete={onDeleteMessage}
             />
           );
         })}

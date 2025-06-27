@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayo
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import dynamic from 'next/dynamic';
-import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType } from '@/types';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -152,7 +152,28 @@ export default function ChatPage() {
       });
     }
   }, [otherUser, toast]);
-  
+
+  const handleDeleteMessage = useCallback(async (messageId: string, deleteType: DeleteType) => {
+    if (!activeChat) return;
+
+    // Optimistically remove the message from the UI
+    setMessages(prev => prev.filter(msg => msg.id !== messageId));
+
+    try {
+      if (deleteType === 'me') {
+        // This is a client-side only action for now.
+        // In a real app, you might sync this with the server so it doesn't reappear on reload.
+        console.log(`Locally deleting message ${messageId} for current user.`);
+      } else {
+        await api.deleteMessageForEveryone(messageId, activeChat.id);
+      }
+      toast({ title: "Message Deleted", duration: 2000 });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Delete Failed', description: error.message });
+      // Here you might want to add the message back to the list if the API call fails
+    }
+  }, [activeChat, toast]);
+
   // 5. Custom Hooks that depend on callbacks
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     onMessageReceived: handleNewMessage,
@@ -489,7 +510,7 @@ export default function ChatPage() {
             <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
               <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
               <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
-              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} />
+              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} onDeleteMessage={handleDeleteMessage} />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
             </div>
           </ErrorBoundary>

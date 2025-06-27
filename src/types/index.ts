@@ -63,6 +63,7 @@ export type MessageClipType = 'audio' | 'video';
 export type MessageStatus = "uploading" | "sending" | "sent" | "delivered" | "read" | "failed";
 export type MessageSubtype = 'text' | 'sticker' | 'clip' | 'image' | 'document' | 'voice_message' | 'emoji_only';
 export type MessageMode = 'normal' | 'fight' | 'incognito';
+export type DeleteType = 'me' | 'everyone';
 
 export interface Message {
   id: string; 

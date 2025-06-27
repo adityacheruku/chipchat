@@ -291,6 +291,29 @@ export const api = {
     });
     return handleResponse<Message>(response);
   },
+  
+  deleteMessageForMe: async (messageId: string): Promise<void> => {
+    // This would be a real endpoint in a full implementation
+    console.log(`API: Deleting message ${messageId} for current user only.`);
+    // const response = await fetch(`${API_BASE_URL}/messages/${messageId}/self`, {
+    //   method: 'DELETE',
+    //   headers: getApiHeaders(),
+    // });
+    // return handleResponse<void>(response);
+    return Promise.resolve();
+  },
+
+  deleteMessageForEveryone: async (messageId: string, chatId: string): Promise<void> => {
+     // This would be a real endpoint in a full implementation that sends a 'delete_message' event
+    console.log(`API: Deleting message ${messageId} for everyone in chat ${chatId}.`);
+    // const response = await fetch(`${API_BASE_URL}/messages/${messageId}`, {
+    //   method: 'DELETE',
+    //   headers: getApiHeaders(),
+    //   body: JSON.stringify({ chat_id: chatId })
+    // });
+    // return handleResponse<void>(response);
+    return Promise.resolve();
+  },
 
   // UPLOADS
   uploadChatImage: async (file: File, onProgress: (progress: number) => void): Promise<{ image_url: string; image_thumbnail_url: string; }> => {
