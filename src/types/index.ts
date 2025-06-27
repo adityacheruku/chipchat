@@ -275,7 +275,10 @@ export interface UserStickerPack {
 export interface PushSubscriptionJSON {
     endpoint: string;
     expirationTime?: number | null;
-    keys: PushSubscriptionKeys;
+    keys: {
+        p256dh: string;
+        auth: string;
+    };
 }
 
 export interface NotificationSettings {
