@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Loader2 } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -243,18 +243,46 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   } catch(e) { console.warn("Could not parse message timestamp:", message.created_at) }
 
   const renderMessageContent = () => {
-    if (message.status === 'uploading') return <UploadProgressIndicator fileName={message.file?.name || 'File'} progress={message.uploadProgress || 0} previewUrl={message.image_url || message.clip_url} fileType={message.file?.type || ''} />;
+    // This now only handles non-image uploads. Image uploads are handled in the 'image' case.
+    if (message.status === 'uploading' && message.message_subtype !== 'image') return <UploadProgressIndicator fileName={message.file?.name || 'File'} progress={message.uploadProgress || 0} />;
     
     switch (message.message_subtype) {
       case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized /> : null;
       case 'voice_message': return message.clip_url ? <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
-      case 'image': return message.image_url ? (
-        <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted">
-            <Image src={message.image_thumbnail_url || message.image_url} alt="Chat image" layout="fill" className="object-cover" data-ai-hint="chat photo"/>
-            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center">
+      case 'image':
+        if (message.status === 'uploading') {
+          return (
+            <div className="w-[120px] h-[120px] rounded-md overflow-hidden bg-muted relative flex items-center justify-center">
+              {message.image_url && (
+                <Image
+                  src={message.image_url} // This is the local blob URL
+                  alt="Uploading preview"
+                  layout="fill"
+                  className="object-cover blur-sm scale-110"
+                />
+              )}
+              <div className="absolute inset-0 bg-black/20" />
+              <Loader2 className="animate-spin h-8 w-8 text-white/90 relative z-10" />
             </div>
-        </button>
-      ) : <p className="text-sm italic">Image unavailable</p>;
+          );
+        }
+        if (message.status === 'failed') {
+          return (
+             <div className="w-[120px] h-[120px] rounded-md border-2 border-dashed border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center p-2 text-center text-destructive">
+                <ImageOff size={28} className="mb-2" />
+                <p className="text-xs font-semibold mb-2">Upload Failed</p>
+                <Button variant="destructive" size="sm" onClick={() => onRetrySend(message)} className="h-auto px-2 py-1 text-xs">
+                  <RefreshCw size={12} className="mr-1" />
+                  Retry
+                </Button>
+              </div>
+          );
+        }
+        return message.image_url ? (
+          <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95">
+              <Image src={message.image_thumbnail_url || message.image_url} alt="Chat image" layout="fill" className="object-cover" data-ai-hint="chat photo"/>
+          </button>
+        ) : <p className="text-sm italic">Image unavailable</p>;
       case 'clip': return message.clip_url ? (
          <button onClick={() => onShowMedia(message.clip_url!, 'video')} className="flex items-center gap-2 group/media">
               <PlayCircle size={32} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80", "group-hover/media:scale-110 transition-transform")} />
@@ -276,7 +304,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     }
   };
 
-  const showRetry = message.status === 'failed' && onRetrySend;
+  const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image';
   const reactionsDisabled = message.mode === 'incognito';
   const swipeDisabled = isCurrentUser || isMediaBubble;
 
