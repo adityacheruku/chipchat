@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, type FormEvent, useCallback } from 'react';
@@ -17,12 +16,12 @@ import { api } from '@/services/api';
 const Logo = () => (
     <div className="w-full max-w-sm mx-auto">
         <Image 
-            src="https://placehold.co/400x300.png"
-            alt="ChirpChat Branding Image"
+            src="/icon/icon-512.png"
+            alt="ChirpChat App Logo"
             width={400}
             height={300}
             className="rounded-lg object-cover shadow-lg"
-            data-ai-hint="abstract background"
+            data-ai-hint="app logo"
             priority
         />
     </div>
