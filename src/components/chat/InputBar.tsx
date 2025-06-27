@@ -40,7 +40,7 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
   return (
     <div className="relative w-16 h-16 rounded-md overflow-hidden border bg-muted flex-shrink-0">
       {file.type.startsWith('image/') ? (
-        <Image src={fileUrl} alt={file.name} layout="fill" objectFit="cover" />
+        <Image src={fileUrl} alt={file.name} fill objectFit="cover" />
       ) : file.type.startsWith('audio/') ? (
          <div className="flex flex-col items-center justify-center h-full p-1 text-center bg-primary/20">
           <Mic className="w-6 h-6 text-primary" />
@@ -394,9 +394,11 @@ function InputBar({
             </ToolsPickerComponent>
         </div>
         
-        <Button type="submit" size="icon" className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-full w-11 h-11 flex-shrink-0" disabled={!showSendButton || isSending || disabled} aria-label="Send message">
-          {isSending ? <Loader2 size={22} className="animate-spin" /> : <Send size={22} />}
-        </Button>
+        {showSendButton && (
+          <Button type="submit" size="icon" className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-full w-11 h-11 flex-shrink-0 animate-pop" disabled={isSending || disabled} aria-label="Send message">
+            {isSending ? <Loader2 size={22} className="animate-spin" /> : <Send size={22} />}
+          </Button>
+        )}
       </form>
       
       <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture className="hidden" onChange={handleFileSelect} />

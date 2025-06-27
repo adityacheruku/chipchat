@@ -2,7 +2,7 @@
 "use client";
 
 import type { Message, User, SupportedEmoji } from '@/types';
-import { ALL_SUPPORTED_EMOJIS } from '@/types';
+import { QUICK_REACTION_EMOJIS } from '@/types';
 import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuPortal,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
@@ -220,7 +224,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 
   return (
     <div id={wrapperId} className={cn(
-        'flex flex-col group transition-opacity duration-500', 
+        'flex flex-col group transition-opacity duration-500 animate-in fade-in-0 slide-in-from-bottom-2', 
         bubbleAlignment, 
         isCurrentUser ? 'pl-10' : 'pr-10',
         message.mode === 'incognito' && 'opacity-70'
@@ -239,7 +243,27 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
-            <DropdownMenuItem onSelect={() => onToggleReaction(message.id, '❤️')} disabled={reactionsDisabled}><SmilePlus className="mr-2 h-4 w-4" /> React</DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger disabled={reactionsDisabled}>
+                <SmilePlus className="mr-2 h-4 w-4" />
+                <span>React</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent>
+                  <div className="flex p-1">
+                    {QUICK_REACTION_EMOJIS.map((emoji) => (
+                      <DropdownMenuItem
+                        key={emoji}
+                        className="flex-1 justify-center rounded-md p-0 focus:bg-accent/50"
+                        onSelect={() => onToggleReaction(message.id, emoji)}
+                      >
+                        <span className="text-xl p-1.5">{emoji}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
             <DropdownMenuItem onSelect={() => handleCopy()} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
             <DropdownMenuItem disabled><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
             <DropdownMenuItem disabled><Forward className="mr-2 h-4 w-4" /> Forward</DropdownMenuItem>
