@@ -148,7 +148,6 @@ export const api = {
     return handleResponse<AuthResponse>(response);
   },
 
-  // 🔒 Security: New API client functions for the OTP registration flow.
   sendOtp: async (phone: string): Promise<{message: string}> => {
     const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
       method: 'POST',
