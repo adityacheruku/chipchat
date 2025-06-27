@@ -280,7 +280,7 @@ export default function StickerPicker({ onStickerSelect }: StickerPickerProps) {
             placeholder="Search stickers..."
             value={searchQuery}
             onChange={handleQueryChange}
-            className="pl-9 bg-muted border-none focus-visible:ring-ring"
+            className="pl-9 bg-input border-none focus-visible:ring-ring"
           />
       </div>
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">

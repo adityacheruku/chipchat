@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, type FormEvent, useCallback } from 'react';
@@ -11,6 +12,7 @@ import { Loader2, Phone, User as UserIcon, Lock, Mail, MessageSquareText } from 
 import type { CompleteRegistrationRequest } from '@/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { api } from '@/services/api';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 // Component for the logo
 const Logo = () => (
@@ -60,12 +62,14 @@ const BrandSection = () => (
 // ⚡️ Moved form components outside of the main component to prevent re-rendering on every keystroke
 const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: any) => (
     <form onSubmit={handleSendOtp} className="space-y-4 w-full">
-       <h2 className="text-2xl font-bold text-center mb-1 text-foreground">Create your account</h2>
-       <p className="text-center text-sm text-muted-foreground mb-6">Enter your phone number to begin.</p>
+        <CardHeader className="p-0 mb-6">
+            <CardTitle>Create your account</CardTitle>
+            <CardDescription>Enter your phone number to begin.</CardDescription>
+        </CardHeader>
        <div className="space-y-1">
            <Label htmlFor="regPhone">Phone Number</Label>
            <div className="relative">
-               <Input id="regPhone" type="tel" placeholder="+12223334444" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required className="pl-4 pr-10" disabled={loading} autoComplete="tel" />
+               <Input id="regPhone" type="tel" placeholder="+12223334444" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="tel" />
                <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
@@ -77,12 +81,14 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
 
  const RegisterOtpStep = ({ handleVerifyOtp, regOtp, setRegOtp, loading, regPhone, setRegisterStep }: any) => (
     <form onSubmit={handleVerifyOtp} className="space-y-4 w-full">
-       <h2 className="text-2xl font-bold text-center mb-1 text-foreground">Verify your phone</h2>
-       <p className="text-center text-sm text-muted-foreground mb-6">We sent a 6-digit code to {regPhone}.</p>
+        <CardHeader className="p-0 mb-6">
+            <CardTitle>Verify your phone</CardTitle>
+            <CardDescription>We sent a 6-digit code to {regPhone}.</CardDescription>
+        </CardHeader>
        <div className="space-y-1">
            <Label htmlFor="regOtp">Verification Code</Label>
            <div className="relative">
-               <Input id="regOtp" type="text" placeholder="######" value={regOtp} onChange={(e) => setRegOtp(e.target.value)} required className="pl-4 pr-10 tracking-[1em] text-center" disabled={loading} maxLength={6} autoComplete="one-time-code" />
+               <Input id="regOtp" type="text" placeholder="######" value={regOtp} onChange={(e) => setRegOtp(e.target.value)} required className="pl-4 pr-10 tracking-[1em] text-center bg-input" disabled={loading} maxLength={6} autoComplete="one-time-code" />
                <MessageSquareText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
@@ -97,19 +103,21 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
 
  const RegisterDetailsStep = ({ handleCompleteRegistration, regDisplayName, setRegDisplayName, regPassword, setRegPassword, checkPasswordStrength, passwordStrength, regOptionalEmail, setRegOptionalEmail, agreeToTerms, setAgreeToTerms, loading }: any) => (
     <form onSubmit={handleCompleteRegistration} className="space-y-4 w-full">
-       <h2 className="text-2xl font-bold text-center mb-1 text-foreground">Just a few more details</h2>
-       <p className="text-center text-sm text-muted-foreground mb-6">Your phone number is verified!</p>
+       <CardHeader className="p-0 mb-6">
+            <CardTitle>Just a few more details</CardTitle>
+            <CardDescription>Your phone number is verified!</CardDescription>
+        </CardHeader>
         <div className="space-y-1">
            <Label htmlFor="displayName">Display Name</Label>
             <div className="relative">
-               <Input id="displayName" type="text" placeholder="Choose a unique name" value={regDisplayName} onChange={(e) => setRegDisplayName(e.target.value)} required className="pl-4 pr-10" disabled={loading} autoComplete="name" />
+               <Input id="displayName" type="text" placeholder="Choose a unique name" value={regDisplayName} onChange={(e) => setRegDisplayName(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="name" />
                <UserIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
        <div className="space-y-1">
            <Label htmlFor="regPassword">Password</Label>
            <div className="relative">
-               <Input id="regPassword" type="password" placeholder="Create a strong password" value={regPassword} onChange={(e) => {setRegPassword(e.target.value); checkPasswordStrength(e.target.value);}} required className="pl-4 pr-10" disabled={loading} minLength={8} autoComplete="new-password" />
+               <Input id="regPassword" type="password" placeholder="Create a strong password" value={regPassword} onChange={(e) => {setRegPassword(e.target.value); checkPasswordStrength(e.target.value);}} required className="pl-4 pr-10 bg-input" disabled={loading} minLength={8} autoComplete="new-password" />
                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
             <PasswordStrengthIndicator strength={passwordStrength} />
@@ -117,7 +125,7 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
         <div className="space-y-1">
            <Label htmlFor="regOptionalEmail">Email (Optional)</Label>
            <div className="relative">
-               <Input id="regOptionalEmail" type="email" placeholder="your@example.com" value={regOptionalEmail} onChange={(e) => setRegOptionalEmail(e.target.value)} className="pl-4 pr-10" disabled={loading} autoComplete="email" />
+               <Input id="regOptionalEmail" type="email" placeholder="your@example.com" value={regOptionalEmail} onChange={(e) => setRegOptionalEmail(e.target.value)} className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="email" />
                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
@@ -138,14 +146,14 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
      <div className="space-y-1">
          <Label htmlFor="loginPhone">Phone Number</Label>
          <div className="relative">
-             <Input id="loginPhone" type="tel" placeholder="+12223334444" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)} required className="pl-4 pr-10" disabled={loading} autoComplete="tel" />
+             <Input id="loginPhone" type="tel" placeholder="+12223334444" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="tel" />
               <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
          </div>
      </div>
      <div className="space-y-1">
          <Label htmlFor="loginPassword">Password</Label>
          <div className="relative">
-             <Input id="loginPassword" type="password" placeholder="Enter your password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="pl-4 pr-10" disabled={loading} autoComplete="current-password" />
+             <Input id="loginPassword" type="password" placeholder="Enter your password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="current-password" />
               <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
          </div>
      </div>
@@ -302,7 +310,9 @@ export default function AuthPage() {
             </>
           ) : (
             <>
-              <h2 className="text-3xl font-bold text-center mb-6 text-foreground">Welcome Back</h2>
+               <CardHeader className="p-0 mb-6">
+                    <CardTitle>Welcome Back</CardTitle>
+                </CardHeader>
               <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
               <p className="text-center text-sm mt-6">
                 Don't have an account?{' '}

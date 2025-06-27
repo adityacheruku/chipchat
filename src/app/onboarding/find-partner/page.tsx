@@ -145,9 +145,9 @@ export default function FindPartnerPage() {
                 Logout
             </Button>
             <Card className="w-full max-w-lg md:max-w-2xl shadow-xl mt-16 sm:mt-0">
-                <CardHeader className="text-center">
-                    <CardTitle className="text-3xl font-headline text-primary">Choose Your Partner</CardTitle>
-                    <CardDescription className="text-muted-foreground max-w-sm mx-auto">
+                <CardHeader>
+                    <CardTitle>Choose Your Partner</CardTitle>
+                    <CardDescription>
                         This is a space for just the two of you. Pick one person you'd love to stay emotionally connected with.
                     </CardDescription>
                 </CardHeader>
@@ -232,7 +232,7 @@ export default function FindPartnerPage() {
 
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
-                                                <Button size="sm" variant="outline" disabled={isSubmitting}>
+                                                <Button size="sm" variant="default" disabled={isSubmitting}>
                                                     <Mail className="mr-2 h-4 w-4"/>
                                                     Request
                                                 </Button>
