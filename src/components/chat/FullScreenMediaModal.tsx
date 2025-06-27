@@ -6,10 +6,11 @@ import {
   DialogContent,
   DialogClose,
 } from "@/components/ui/dialog";
-import Image from 'next/image';
 import { X, Download } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useZoomAndPan } from "@/hooks/useZoomAndPan";
+import { cn } from "@/lib/utils";
 
 interface FullScreenMediaModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export default function FullScreenMediaModal({
   mediaType
 }: FullScreenMediaModalProps) {
   const { toast } = useToast();
+  const { imageRef, containerHandlers, style } = useZoomAndPan();
 
   if (!isOpen) {
     return null;
@@ -56,15 +58,27 @@ export default function FullScreenMediaModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="p-0 bg-black/80 border-none shadow-2xl h-screen w-screen max-w-full rounded-none flex items-center justify-center">
+      <DialogContent 
+        className={cn(
+            "p-0 bg-black/80 border-none shadow-2xl h-[100svh] w-screen max-w-full rounded-none flex items-center justify-center",
+            "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+        )}
+      >
         {mediaType === 'image' ? (
-          <Image
-            src={mediaUrl}
-            alt="Full screen media"
-            fill
-            objectFit="contain"
-            className="p-4"
-          />
+           <div
+            className="w-full h-full touch-none overflow-hidden flex items-center justify-center"
+            {...containerHandlers}
+          >
+            <img
+              ref={imageRef}
+              src={mediaUrl}
+              alt="Full screen media"
+              className="max-w-full max-h-full transition-transform duration-200 ease-out"
+              style={style}
+              draggable="false"
+            />
+          </div>
         ) : (
           <video
             src={mediaUrl}

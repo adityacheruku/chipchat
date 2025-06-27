@@ -249,10 +249,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized /> : null;
       case 'voice_message': return message.clip_url ? <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
       case 'image': return message.image_url ? (
-        <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block max-w-xs relative group/media">
-            <Image src={message.image_thumbnail_url || message.image_url} alt="Chat image" width={200} height={150} className="rounded-md object-cover" data-ai-hint="chat photo"/>
+        <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted">
+            <Image src={message.image_thumbnail_url || message.image_url} alt="Chat image" layout="fill" className="object-cover" data-ai-hint="chat photo"/>
             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center">
-                <PlayCircle size={40} className="text-white"/>
             </div>
         </button>
       ) : <p className="text-sm italic">Image unavailable</p>;
