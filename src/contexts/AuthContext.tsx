@@ -81,10 +81,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       handleAuthSuccess(data);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Login Failed', description: error.message || 'Please check your credentials.' });
-      setIsLoading(false); // Ensure loading is stopped on error
       throw error;
-    } 
-    // isLoading will be set to false by the useEffect that handles routing
+    } finally {
+      setIsLoading(false);
+    }
   }, [handleAuthSuccess, toast]);
 
   // 🔒 Security: This function now handles the final step of the new OTP flow.
@@ -97,10 +97,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: any)
     {
       toast({ variant: 'destructive', title: 'Registration Failed', description: error.message || 'Please try again.' });
-      setIsLoading(false); // Ensure loading is stopped on error
       throw error;
+    } finally {
+      setIsLoading(false);
     }
-    // isLoading will be set to false by the useEffect that handles routing
   }, [handleAuthSuccess, toast]);
 
   const fetchAndUpdateUser = useCallback(async () => {
