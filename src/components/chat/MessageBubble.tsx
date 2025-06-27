@@ -180,9 +180,6 @@ function formatFileSize(bytes?: number | null): string | null {
 function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, allUsers, onRetrySend, onDelete, wrapperId }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [translateX, setTranslateX] = useState(0);
-  const touchStartX = useRef(0);
-  const isDragging = useRef(false);
   const { toast } = useToast();
 
   const handleCopy = () => {
@@ -214,43 +211,6 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       namesString += ` and ${reactors.length - MAX_NAMES} more`;
     }
     return namesString;
-  };
-  
-  const handleTouchStart = (e: React.TouchEvent) => {
-    isDragging.current = true;
-    touchStartX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging.current) return;
-    const currentX = e.targetTouches[0].clientX;
-    const deltaX = currentX - touchStartX.current;
-    
-    // Constrain swipe
-    if (isCurrentUser) { // Swipe left
-        setTranslateX(Math.max(-80, Math.min(0, deltaX)));
-    } else { // Swipe right
-        setTranslateX(Math.min(80, Math.max(0, deltaX)));
-    }
-  };
-
-  const handleTouchEnd = () => {
-    isDragging.current = false;
-    // Snap logic
-    const threshold = 40;
-    if (Math.abs(translateX) > threshold) {
-        setTranslateX(isCurrentUser ? -64 : 64);
-    } else {
-        setTranslateX(0);
-    }
-  };
-  
-  const handleActionClick = (action: 'reply' | 'delete') => {
-    if (action === 'delete') {
-      setIsDeleteDialogOpen(true);
-    }
-    // Reset swipe
-    setTranslateX(0);
   };
   
   const handleConfirmDelete = (deleteType: DeleteType) => {
@@ -311,31 +271,33 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const reactionsDisabled = message.mode === 'incognito';
 
   return (
-    <div className="relative" id={wrapperId} {...doubleTapEvents}>
-      <div className={cn("absolute inset-y-0 flex items-center", isCurrentUser ? 'right-full pr-2' : 'left-full pl-2')}>
-          {translateX < 0 && isCurrentUser && <Button size="icon" variant="destructive" className="rounded-full w-10 h-10 animate-reveal-icon" onClick={() => handleActionClick('delete')}><Trash2 size={20}/></Button>}
-          {translateX > 0 && !isCurrentUser && <Button size="icon" variant="default" className="rounded-full w-10 h-10 animate-reveal-icon" onClick={() => handleActionClick('reply')}><Reply size={20}/></Button>}
-      </div>
-
+    <div
+      id={wrapperId}
+      className={cn(
+        'flex w-full group animate-in fade-in-0 slide-in-from-bottom-2',
+        isCurrentUser ? 'justify-end' : 'justify-start'
+      )}
+    >
       <div
-        className={cn('flex flex-col group transition-opacity duration-500 animate-in fade-in-0 slide-in-from-bottom-2', 
-          isCurrentUser ? 'self-end pl-10' : 'self-start pr-10',
-          message.mode === 'incognito' && 'opacity-70'
+        className={cn(
+          'flex flex-col',
+          isCurrentUser ? 'items-end' : 'items-start'
         )}
-        style={{ transform: `translateX(${translateX}px)` }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
         <DropdownMenu open={isActionMenuOpen} onOpenChange={setIsActionMenuOpen}>
           <DropdownMenuTrigger asChild>
-            <div {...longPressEvents} className={cn(
-                'relative rounded-xl shadow-md max-w-md transition-all',
+            <div
+              {...longPressEvents}
+              {...doubleTapEvents}
+              className={cn(
+                'relative rounded-xl shadow-md transition-all',
+                'max-w-[85vw] sm:max-w-md',
                 isMediaBubble ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
                 !isMediaBubble && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
                 !isMediaBubble && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
                 message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80'
-              )}>
+              )}
+            >
                 {renderMessageContent()}
             </div>
           </DropdownMenuTrigger>
@@ -368,7 +330,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className={cn('pt-1', isCurrentUser ? 'pr-2 text-right' : 'pl-2 text-left')}>
+        <div className={cn('pt-1', isCurrentUser ? 'pr-2' : 'pl-2')}>
           {!reactionsDisabled && message.reactions && Object.keys(message.reactions).length > 0 && (
               <div className={cn("flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
               {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
