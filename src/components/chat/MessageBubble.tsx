@@ -133,7 +133,7 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
         <div className={cn("flex items-center gap-3 w-full max-w-[250px]", playerColorClass)}>
             <audio ref={audioRef} src={src} preload="metadata" />
             <div className="relative">
-                <Button variant="ghost" size="icon" onClick={handlePlayPause} className={cn("w-11 h-11 rounded-full", isCurrentUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-secondary-foreground/20')}>
+                <Button variant="ghost" size="icon" onClick={handlePlayPause} className={cn("w-11 h-11 rounded-full", isCurrentUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-secondary-foreground/20')} aria-label={isPlaying ? "Pause voice message" : "Play voice message"}>
                     {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </Button>
                  {!hasBeenPlayed && <span className="absolute -top-1 -right-1 block h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>}
@@ -180,6 +180,7 @@ function formatFileSize(bytes?: number | null): string | null {
 function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, onShowDocumentPreview, allUsers, onRetrySend, onDelete, wrapperId }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
   const { toast } = useToast();
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const wasLongPressRef = useRef(false);
@@ -229,9 +230,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
         return;
     }
     // Handle single tap actions
-    if (message.message_subtype === 'image' && message.image_url) {
+    if (message.message_subtype === 'image' && message.image_url && message.status !== 'failed') {
         onShowMedia(message.image_url, 'image');
-    } else if (message.message_subtype === 'document' && message.document_url) {
+    } else if (message.message_subtype === 'document' && message.document_url && message.status !== 'failed') {
         onShowDocumentPreview(message);
     }
   }, [message, onShowMedia, onShowDocumentPreview]);
@@ -251,6 +252,12 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     onDelete(message.id, deleteType);
     setIsDeleteDialogOpen(false);
   }
+  
+  const handleRetry = (message: Message) => {
+      setIsShaking(true);
+      onRetrySend(message);
+      setTimeout(() => setIsShaking(false), 600); // Animation duration
+  };
 
   const bubbleColorClass = isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground';
   
@@ -270,9 +277,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     if (message.status === 'uploading') {
       if (message.message_subtype === 'document') {
         return (
-          <div className="w-48 flex items-center gap-2">
+          <div className="w-48 flex items-center gap-2 opacity-50">
             <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin text-muted-foreground" />
-            <span className="opacity-50 truncate">{message.file?.name || 'Uploading...'}</span>
+            <span className="truncate">{message.file?.name || 'Uploading...'}</span>
           </div>
         );
       }
@@ -285,6 +292,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                 alt="Uploading preview"
                 fill
                 className="object-cover"
+                loading="lazy"
               />
             )}
             <div className="absolute inset-0 bg-black/20" />
@@ -294,14 +302,14 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       }
       return (
         <div className="w-48 flex items-center gap-2">
-          <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin text-muted-foreground" />
+          <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin text-muted-foreground opacity-50" />
           <p className="text-xs font-semibold truncate opacity-50">{message.file?.name || 'File'}</p>
         </div>
       );
     }
     
     switch (message.message_subtype) {
-      case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized /> : null;
+      case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized loading="lazy" /> : null;
       case 'voice_message': return message.clip_url ? <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
       case 'image':
         if (message.status === 'failed') {
@@ -309,7 +317,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
              <div className="w-[120px] h-[120px] rounded-md border-2 border-dashed border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center p-2 text-center text-destructive">
                 <ImageOff size={28} className="mb-2" />
                 <p className="text-xs font-semibold mb-2">Upload Failed</p>
-                <Button variant="destructive" size="sm" onClick={() => onRetrySend(message)} className="h-auto px-2 py-1 text-xs">
+                <Button variant="destructive" size="sm" onClick={() => handleRetry(message)} className="h-auto px-2 py-1 text-xs">
                   <RefreshCw size={12} className="mr-1" />
                   Retry
                 </Button>
@@ -317,8 +325,8 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           );
         }
         return message.image_url ? (
-          <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-all duration-200 active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg">
-              <Image src={message.image_thumbnail_url || message.image_url} alt="Chat image" layout="fill" className="object-cover" data-ai-hint="chat photo"/>
+          <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
+              <Image src={message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
           </button>
         ) : <p className="text-sm italic">Image unavailable</p>;
       case 'clip': return message.clip_url ? (
@@ -330,27 +338,25 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       case 'document':
         if (message.status === 'failed') {
           return (
-            <div className={cn(buttonVariants({ variant: 'destructive' }), 'h-auto py-2 w-full max-w-[250px] bg-destructive/20 text-destructive')}>
+            <button className={cn(buttonVariants({ variant: 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-destructive/20 text-destructive border-destructive/50 hover:bg-destructive/30')} onClick={() => handleRetry(message)}>
               <AlertTriangle size={24} className="mr-3 flex-shrink-0" />
               <div className="flex flex-col text-left min-w-0">
                   <span className="font-medium text-sm">Upload Failed</span>
-                  <Button variant="link" size="sm" onClick={() => onRetrySend(message)} className="h-auto p-0 text-destructive hover:underline justify-start">
-                    Retry
-                  </Button>
+                  <span className="text-xs">Click to retry</span>
               </div>
-            </div>
+            </button>
           );
         }
         return message.document_url ? (
-        <div className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')}>
+          <button className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')} aria-label={`Preview document: ${message.document_name}`}>
             <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
             <div className="flex flex-col text-left min-w-0">
                 <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
                 <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to preview'}</span>
             </div>
-        </div>
+        </button>
       ) : (
-          <div className="flex items-center p-3 text-red-500">
+          <div className="flex items-center p-3 text-destructive">
             <AlertTriangle className="w-6 h-6 mr-2" />
             <span className="text-sm">Cannot load document</span>
           </div>
@@ -361,7 +367,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     }
   };
 
-  const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image';
+  const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image' && message.message_subtype !== 'document';
   const reactionsDisabled = message.mode === 'incognito';
   const swipeDisabled = isCurrentUser || isMediaBubble;
 
@@ -370,7 +376,8 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       id={wrapperId}
       className={cn(
         'flex w-full group animate-in fade-in-0 slide-in-from-bottom-2',
-        isCurrentUser ? 'justify-end' : 'justify-start'
+        isCurrentUser ? 'justify-end' : 'justify-start',
+        isShaking && 'animate-shake'
       )}
     >
       <div className={cn('flex flex-col max-w-[85vw] sm:max-w-md', isCurrentUser ? 'items-end' : 'items-start')}>
@@ -494,7 +501,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
               {showRetry && (
                   <div className="text-destructive flex items-center mr-2">
                       <span>Failed to send.</span>
-                      <Button variant="link" size="sm" onClick={() => onRetrySend(message)} className="h-auto p-1 text-destructive hover:underline">
+                      <Button variant="link" size="sm" onClick={() => handleRetry(message)} className="h-auto p-1 text-destructive hover:underline">
                           <RefreshCw className="mr-1 h-3 w-3" />
                           Retry
                       </Button>
