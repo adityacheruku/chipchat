@@ -45,6 +45,7 @@ const FullScreenAvatarModal = dynamic(() => import('@/components/chat/FullScreen
 const FullScreenMediaModal = dynamic(() => import('@/components/chat/FullScreenMediaModal'), { ssr: false, loading: () => <ModalLoader /> });
 const MoodEntryModal = dynamic(() => import('@/components/chat/MoodEntryModal'), { ssr: false, loading: () => <ModalLoader /> });
 const ReactionSummaryModal = dynamic(() => import('@/components/chat/ReactionSummaryModal'), { ssr: false, loading: () => <ModalLoader /> });
+const DocumentPreviewModal = dynamic(() => import('@/components/chat/DocumentPreviewModal'), { ssr: false, loading: () => <ModalLoader /> });
 
 
 export default function ChatPage() {
@@ -75,6 +76,7 @@ export default function ChatPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [topMessageId, setTopMessageId] = useState<string | null>(null);
+  const [documentPreview, setDocumentPreview] = useState<MessageType | null>(null);
 
   // 3. Ref Declarations
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -308,7 +310,7 @@ export default function ChatPage() {
         setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, status: 'sending', uploadProgress: 100 } : msg));
         let messagePayload: any = { event_type: "send_message", chat_id: activeChat.id, client_temp_id: clientTempId, message_subtype: subtype, mode: mode };
         if (subtype === 'image') { messagePayload.image_url = uploadResult.image_url; messagePayload.image_thumbnail_url = uploadResult.image_thumbnail_url; }
-        else if (subtype === 'document') { messagePayload.document_url = uploadResult.file_url; messagePayload.document_name = uploadResult.file_name; }
+        else if (subtype === 'document') { messagePayload.document_url = uploadResult.file_url; messagePayload.document_name = uploadResult.file_name; messagePayload.file_size_bytes = uploadResult.file_size_bytes;}
         else if (subtype === 'voice_message') { messagePayload.clip_url = uploadResult.file_url; messagePayload.duration_seconds = uploadResult.duration_seconds; messagePayload.file_size_bytes = uploadResult.file_size_bytes; messagePayload.audio_format = uploadResult.audio_format; }
         sendMessageWithTimeout(messagePayload);
         addAppEvent('messageSent', `${currentUser.display_name} sent a ${subtype}.`, currentUser.display_name, currentUser.id);
@@ -425,6 +427,7 @@ export default function ChatPage() {
   const handleEnableNotifications = useCallback(() => { subscribeToPush(); setShowNotificationPrompt(false); }, [subscribeToPush]);
   const handleDismissNotificationPrompt = useCallback(() => { setShowNotificationPrompt(false); sessionStorage.setItem('notificationPromptDismissed', 'true'); }, []);
   const handleShowMedia = useCallback((url: string, type: 'image' | 'video') => setMediaModalData({ url, type }), []);
+  const handleShowDocumentPreview = useCallback((message: MessageType) => setDocumentPreview(message), []);
   const handleSelectMode = useCallback((mode: MessageMode) => {
     if (!activeChat) return;
     setChatMode(mode);
@@ -510,7 +513,7 @@ export default function ChatPage() {
             <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
               <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
               <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
-              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} onDeleteMessage={handleDeleteMessage} />
+              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} onDeleteMessage={handleDeleteMessage} onShowDocumentPreview={handleShowDocumentPreview} />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
             </div>
           </ErrorBoundary>
@@ -521,6 +524,7 @@ export default function ChatPage() {
         {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={() => setIsMoodModalOpen(false)} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}
         <ReasoningDialog />
         {reactionModalData && <ReactionSummaryModal isOpen={!!reactionModalData} onClose={() => setReactionModalData(null)} reactions={reactionModalData.reactions} allUsers={reactionModalData.allUsers}/>}
+        {documentPreview && <DocumentPreviewModal isOpen={!!documentPreview} onClose={() => setDocumentPreview(null)} message={documentPreview} />}
       </div>
     </div>
   );

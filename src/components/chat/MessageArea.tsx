@@ -17,6 +17,7 @@ interface MessageAreaProps {
   onToggleReaction: (messageId: string, emoji: SupportedEmoji) => void;
   onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
   onShowMedia: (url: string, type: 'image' | 'video') => void;
+  onShowDocumentPreview: (message: Message) => void;
   onLoadMore: () => void;
   hasMore: boolean;
   isLoadingMore: boolean;
@@ -31,6 +32,7 @@ function MessageArea({
   onToggleReaction, 
   onShowReactions, 
   onShowMedia,
+  onShowDocumentPreview,
   viewportRef,
   onLoadMore,
   hasMore,
@@ -71,6 +73,7 @@ function MessageArea({
               onToggleReaction={onToggleReaction}
               onShowReactions={(message) => onShowReactions(message, allUsers)}
               onShowMedia={onShowMedia}
+              onShowDocumentPreview={onShowDocumentPreview}
               allUsers={allUsers}
               onRetrySend={onRetrySend}
               onDelete={onDeleteMessage}

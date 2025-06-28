@@ -28,7 +28,6 @@ import { Slider } from "@/components/ui/slider";
 import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useLongPress } from '@/hooks/useLongPress';
-import UploadProgressIndicator from './UploadProgressIndicator';
 import { useDoubleTap } from '@/hooks/useDoubleTap';
 import DeleteMessageDialog from './DeleteMessageDialog';
 import { useSwipe } from '@/hooks/useSwipe';
@@ -45,6 +44,7 @@ interface MessageBubbleProps {
   onToggleReaction: (messageId: string, emoji: SupportedEmoji) => void;
   onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
   onShowMedia: (url: string, type: 'image' | 'video') => void;
+  onShowDocumentPreview: (message: Message) => void;
   allUsers: Record<string, User>;
   onRetrySend: (message: Message) => void;
   onDelete: (messageId: string, deleteType: DeleteType) => void;
@@ -178,7 +178,7 @@ function formatFileSize(bytes?: number | null): string | null {
 }
 
 
-function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, allUsers, onRetrySend, onDelete, wrapperId }: MessageBubbleProps) {
+function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, onShowDocumentPreview, allUsers, onRetrySend, onDelete, wrapperId }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
@@ -243,7 +243,16 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   } catch(e) { console.warn("Could not parse message timestamp:", message.created_at) }
 
   const renderMessageContent = () => {
-    if (message.status === 'uploading' && message.message_subtype !== 'image') return <UploadProgressIndicator fileName={message.file?.name || 'File'} progress={message.uploadProgress || 0} />;
+    if (message.status === 'uploading' && message.message_subtype !== 'image') {
+      return (
+        <div className="w-48 flex items-center gap-2 bg-muted/50 rounded-lg p-2 overflow-hidden text-secondary-foreground">
+          <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin" />
+          <div className="flex-grow min-w-0">
+            <p className="text-xs font-semibold truncate">{message.file?.name || 'File'}</p>
+          </div>
+        </div>
+      );
+    }
     
     switch (message.message_subtype) {
       case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized /> : null;
@@ -278,7 +287,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           );
         }
         return message.image_url ? (
-          <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95">
+          <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-all duration-200 hover:scale-105 active:scale-95">
               <Image src={message.image_thumbnail_url || message.image_url} alt="Chat image" layout="fill" className="object-cover" data-ai-hint="chat photo"/>
           </button>
         ) : <p className="text-sm italic">Image unavailable</p>;
@@ -289,13 +298,13 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
          </button>
       ) : <p className="text-sm italic">Clip unavailable</p>;
       case 'document': return message.document_url ? (
-        <a href={message.document_url} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')}>
+        <button onClick={() => onShowDocumentPreview(message)} className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')}>
             <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
             <div className="flex flex-col text-left min-w-0">
                 <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
-                <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to open'}</span>
+                <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to preview'}</span>
             </div>
-        </a>
+        </button>
       ) : <p className="text-sm italic">Document unavailable</p>;
       case 'text':
       case 'emoji_only':
