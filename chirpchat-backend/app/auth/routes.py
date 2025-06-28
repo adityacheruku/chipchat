@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 import random
 
-from app.auth.schemas import UserCreate, UserLogin, UserUpdate, UserPublic, Token, PhoneSchema, VerifyOtpRequest, VerifyOtpResponse, CompleteRegistrationRequest
+from app.auth.schemas import UserCreate, UserLogin, UserUpdate, UserPublic, Token, PhoneSchema, VerifyOtpRequest, VerifyOtpResponse, CompleteRegistrationRequest, PasswordChangeRequest
 # 🔒 Security: Import the new dependency for the /refresh endpoint.
 from app.auth.dependencies import get_current_user, get_current_active_user, get_user_from_refresh_token
 # 🔒 Security: Import refresh and registration token creation utilities.
@@ -243,7 +243,7 @@ async def read_users_me(current_user: UserPublic = Depends(get_current_active_us
 @user_router.get("/{user_id}", response_model=UserPublic)
 async def get_user(user_id: UUID, current_user_dep: UserPublic = Depends(get_current_user)):
     user_response_obj = await db_manager.get_table("users").select(
-        "id, display_name, avatar_url, mood, phone, email, is_online, last_seen"
+        "id, display_name, avatar_url, mood, phone, email, is_online, last_seen, partner_id"
     ).eq("id", str(user_id)).maybe_single().execute()
     
     if not user_response_obj or not user_response_obj.data:
@@ -292,6 +292,24 @@ async def update_profile(
 
     return UserPublic.model_validate(refreshed_user_data)
 
+
+@user_router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    password_data: PasswordChangeRequest,
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    # Fetch user with hashed_password
+    user_response_obj = await db_manager.get_table("users").select("hashed_password").eq("id", str(current_user.id)).single().execute()
+    user_in_db = user_response_obj.data
+    
+    if not verify_password(password_data.current_password, user_in_db["hashed_password"]):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password.")
+
+    new_hashed_password = get_password_hash(password_data.new_password)
+    await db_manager.get_table("users").update({"hashed_password": new_hashed_password, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(current_user.id)).execute()
+    
+    logger.info(f"User {current_user.id} successfully changed their password.")
+    return None
 
 @user_router.post("/me/avatar", response_model=UserPublic)
 async def upload_avatar_route(

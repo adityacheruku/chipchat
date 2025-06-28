@@ -17,6 +17,7 @@ import type {
   VerifyOtpResponse,
   CompleteRegistrationRequest,
   DocumentUploadResponse,
+  PasswordChangeRequest,
 } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://d87c-49-43-230-78.ngrok-free.app';
@@ -206,6 +207,15 @@ export const api = {
     return uploadWithProgress(`${API_BASE_URL}/users/me/avatar`, formData, onProgress);
   },
 
+  changePassword: async (passwordData: PasswordChangeRequest): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/users/me/password`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify(passwordData),
+    });
+    return handleResponse<void>(response);
+  },
+
   // PARTNERS
   getPartnerSuggestions: async (): Promise<{users: User[]}> => {
     const response = await fetch(`${API_BASE_URL}/partners/suggestions`, {
@@ -242,6 +252,14 @@ export const api = {
       method: 'POST',
       headers: getApiHeaders(),
       body: JSON.stringify({ action }),
+    });
+    return handleResponse<void>(response);
+  },
+
+  disconnectPartner: async (): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/partners/me`, {
+        method: 'DELETE',
+        headers: getApiHeaders(),
     });
     return handleResponse<void>(response);
   },
@@ -440,3 +458,5 @@ export const api = {
     return handleResponse<EventPayload[]>(response);
   },
 };
+
+    

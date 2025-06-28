@@ -160,3 +160,26 @@ async def respond_to_partner_request(
             raise HTTPException(status_code=500, detail="Could not reject request.")
     
     return None # Returns 204 No Content on success
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_partner(
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    if not current_user.partner_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="You do not have a partner to disconnect from.")
+
+    partner_id = current_user.partner_id
+    logger.info(f"User {current_user.id} initiating disconnect from partner {partner_id}.")
+
+    try:
+        # This is not atomic, but it's the best we can do without adding a new RPC
+        await db_manager.admin_client.table("users").update({"partner_id": None}).eq("id", str(current_user.id)).execute()
+        await db_manager.admin_client.table("users").update({"partner_id": None}).eq("id", str(partner_id)).execute()
+        
+        logger.info(f"Successfully disconnected user {current_user.id} from {partner_id}.")
+        return None
+    except Exception as e:
+        logger.error(f"Error disconnecting partner for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not disconnect from partner.")
+
+    

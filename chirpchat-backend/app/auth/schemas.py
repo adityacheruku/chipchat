@@ -32,6 +32,9 @@ class CompleteRegistrationRequest(BaseModel):
     password: str = Field(min_length=8)
     email: Optional[EmailStr] = None
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
 
 class UserBase(BaseModel):
     id: UUID
@@ -86,3 +89,5 @@ class TokenData(BaseModel):
     phone: Optional[str] = None
     user_id: Optional[UUID] = None
     token_type: Optional[str] = None
+
+    

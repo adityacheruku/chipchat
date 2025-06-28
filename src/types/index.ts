@@ -142,6 +142,11 @@ export interface CompleteRegistrationRequest {
   email?: string;
 }
 
+export interface PasswordChangeRequest {
+    current_password: string;
+    new_password: string;
+}
+
 export interface DocumentUploadResponse {
     file_url: string;
     file_name: string;
@@ -313,3 +318,5 @@ export interface PartnerRequest {
     status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
     created_at: string;
 }
+
+    
