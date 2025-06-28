@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayo
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import dynamic from 'next/dynamic';
-import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData, ChatHistoryClearedEventData } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
@@ -21,6 +21,8 @@ import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import NotificationPrompt from '@/components/chat/NotificationPrompt';
+import DeleteMessageDialog from '@/components/chat/DeleteMessageDialog';
+
 
 const MemoizedMessageArea = memo(MessageArea);
 const MemoizedChatHeader = memo(ChatHeader);
@@ -35,6 +37,7 @@ const FullScreenMediaModal = dynamic(() => import('@/components/chat/FullScreenM
 const MoodEntryModal = dynamic(() => import('@/components/chat/MoodEntryModal'), { ssr: false, loading: () => <ModalLoader /> });
 const ReactionSummaryModal = dynamic(() => import('@/components/chat/ReactionSummaryModal'), { ssr: false, loading: () => <ModalLoader /> });
 const DocumentPreviewModal = dynamic(() => import('@/components/chat/DocumentPreviewModal'), { ssr: false, loading: () => <ModalLoader /> });
+
 
 export default function ChatPage() {
   const router = useRouter();
@@ -62,6 +65,10 @@ export default function ChatPage() {
   const [topMessageId, setTopMessageId] = useState<string | null>(null);
   const [documentPreview, setDocumentPreview] = useState<MessageType | null>(null);
   const [replyingTo, setReplyingTo] = useState<MessageType | null>(null);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState(new Set<string>());
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -100,14 +107,6 @@ export default function ChatPage() {
     setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
   }, []);
   
-  const handleChatHistoryCleared = useCallback((data: ChatHistoryClearedEventData) => {
-    if (activeChat?.id === data.chat_id) {
-        setMessages([]);
-        toast({ title: "Chat History Cleared", description: "All messages in this chat have been deleted." });
-    }
-  }, [activeChat, toast]);
-
-  const handleReactionUpdate = useCallback((data: MessageReactionUpdateEventData) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), []);
   const handlePresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : prev), []);
   const handleProfileUpdate = useCallback((data: UserProfileUpdateEventData) => setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, ...data } : prev), []);
   const handleTypingUpdate = useCallback((data: TypingIndicatorEventData) => { if (activeChat?.id === data.chat_id) setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }))}, [activeChat]);
@@ -115,10 +114,9 @@ export default function ChatPage() {
   const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => { if (otherUser?.id === data.sender_id) toast({ title: "❤️ Thinking of You!", description: `${otherUser.display_name} is thinking of you.` })}, [otherUser, toast]);
 
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
-    onMessageReceived: handleNewMessage, onReactionUpdate: handleReactionUpdate, onPresenceUpdate: handlePresenceUpdate,
+    onMessageReceived: handleNewMessage, onReactionUpdate: (data) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), onPresenceUpdate: handlePresenceUpdate,
     onTypingUpdate: handleTypingUpdate, onThinkingOfYouReceived: handleThinkingOfYou, onUserProfileUpdate: handleProfileUpdate,
     onMessageAck: handleMessageAck, onChatModeChanged: handleChatModeChanged, onMessageDeleted: handleMessageDeleted,
-    onChatHistoryCleared: handleChatHistoryCleared
   });
 
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast });
@@ -158,6 +156,29 @@ export default function ChatPage() {
     } catch (error: any) { toast({ variant: 'destructive', title: 'Error', description: 'Could not load older messages.' })
     } finally { setIsLoadingMore(false); }
   }, [isLoadingMore, hasMoreMessages, activeChat, messages, toast]);
+  
+  const handleEnterSelectionMode = useCallback((messageId: string) => {
+    setIsSelectionMode(true);
+    setSelectedMessageIds(new Set([messageId]));
+  }, []);
+
+  const handleExitSelectionMode = useCallback(() => {
+    setIsSelectionMode(false);
+    setSelectedMessageIds(new Set());
+  }, []);
+
+  const handleToggleMessageSelection = useCallback((messageId: string) => {
+    setSelectedMessageIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      if (newSet.size === 0) setIsSelectionMode(false);
+      return newSet;
+    });
+  }, []);
 
   const handleTyping = useCallback((isTyping: boolean) => {
     if (!activeChat) return;
@@ -204,7 +225,74 @@ export default function ChatPage() {
   }, [currentUser, activeChat, sendMessageWithTimeout, toast]);
   
   const handleRetrySend = useCallback((message: MessageType) => setMessages(prev => prev.map(m => m.client_temp_id === message.client_temp_id ? { ...m, status: 'sending' } : m)), []);
-  const handleDeleteMessage = useCallback(async (messageId: string, deleteType: DeleteType) => { if (!activeChat) return; try { if (deleteType === 'everyone') { await api.deleteMessageForEveryone(messageId, activeChat.id); } setMessages(prev => prev.filter(msg => msg.id !== messageId)); toast({ title: "Message Deleted" }); } catch (error: any) { toast({ variant: 'destructive', title: 'Delete Failed', description: error.message }); }}, [activeChat, toast]);
+  
+  const handleDeleteMessage = useCallback(async (messageId: string, deleteType: DeleteType) => { 
+    if (!activeChat) return; 
+    try { 
+        if (deleteType === 'everyone') { 
+            await api.deleteMessageForEveryone(messageId, activeChat.id); 
+        } 
+        setMessages(prev => prev.filter(msg => msg.id !== messageId)); 
+        toast({ title: "Message Deleted" }); 
+    } catch (error: any) { 
+        toast({ variant: 'destructive', title: 'Delete Failed', description: error.message }); 
+    }
+  }, [activeChat, toast]);
+
+  const handleCopySelected = useCallback(() => {
+    const selectedText = messages
+      .filter(m => selectedMessageIds.has(m.id))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .map(m => `[${new Date(m.created_at).toLocaleTimeString()}] ${allUsersForMessageArea[m.user_id]?.display_name}: ${m.text || 'Attachment'}`)
+      .join('\n');
+    
+    navigator.clipboard.writeText(selectedText);
+    toast({ title: "Copied!", description: `${selectedMessageIds.size} messages copied to clipboard.` });
+    handleExitSelectionMode();
+  }, [messages, selectedMessageIds, toast, handleExitSelectionMode, allUsersForMessageArea]);
+  
+  const handleShareSelected = useCallback(async () => {
+    const selectedText = messages
+      .filter(m => selectedMessageIds.has(m.id))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .map(m => `${allUsersForMessageArea[m.user_id]?.display_name}: ${m.text || 'Attachment'}`)
+      .join('\n');
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'ChirpChat Conversation', text: selectedText });
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') console.error('Share failed:', error);
+      }
+    } else {
+      toast({ variant: 'destructive', title: "Not Supported", description: "Your browser does not support sharing." });
+    }
+    handleExitSelectionMode();
+  }, [messages, selectedMessageIds, toast, handleExitSelectionMode, allUsersForMessageArea]);
+
+  const handleDeleteSelected = useCallback(async (deleteType: DeleteType) => {
+    if (!activeChat) return;
+    
+    const idsToDelete = Array.from(selectedMessageIds);
+    
+    // Optimistically remove from UI
+    setMessages(prev => prev.filter(m => !idsToDelete.includes(m.id)));
+    
+    if (deleteType === 'everyone') {
+      try {
+        await Promise.all(idsToDelete.map(id => api.deleteMessageForEveryone(id, activeChat.id)));
+        toast({ title: "Messages Deleted", description: `${idsToDelete.length} messages deleted for everyone.` });
+      } catch (error: any) {
+        toast({ variant: 'destructive', title: 'Delete Failed', description: 'Some messages could not be deleted.' });
+        // Potentially add back messages that failed, or refetch
+        performLoadChatData();
+      }
+    } else {
+        toast({ title: "Messages Deleted", description: `${idsToDelete.length} messages removed from your view.` });
+    }
+    handleExitSelectionMode();
+    setIsDeleteDialogOpen(false);
+  }, [activeChat, selectedMessageIds, handleExitSelectionMode, toast, performLoadChatData]);
 
   const handleSendImage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'image', mode, api.uploadChatImage), [handleFileUpload]);
   const handleSendDocument = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'document', mode, api.uploadChatDocument), [handleFileUpload]);
@@ -244,7 +332,15 @@ export default function ChatPage() {
 
   const allUsersForMessageArea = useMemo(() => (currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {}), [currentUser, otherUser]);
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
-  const isInputDisabled = protocol === 'disconnected';
+  const isInputDisabled = protocol === 'disconnected' || isSelectionMode;
+
+  const canDeleteForEveryone = useMemo(() => {
+    if (!currentUser) return false;
+    return Array.from(selectedMessageIds).every(id => {
+      const msg = messages.find(m => m.id === id);
+      return msg?.user_id === currentUser.id;
+    });
+  }, [selectedMessageIds, messages, currentUser]);
 
   const ConnectionStatusBanner = () => {
     if (protocol === 'disconnected' && !isBrowserOnline) return <div className="fixed top-0 left-0 right-0 bg-destructive text-destructive-foreground p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><WifiOff size={16} />You are offline. Features may be limited.</div>;
@@ -264,8 +360,41 @@ export default function ChatPage() {
           <ErrorBoundary fallbackMessage="The chat couldn't be displayed.">
             <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
               <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name}` : 'Get notified.'}/>
-              <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!(otherUser && typingUsers[otherUser.id]?.isTyping)}/>
-              <MemoizedMessageArea viewportRef={viewportRef} messages={messages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(m, u) => handleShowReactions(m, u)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} onDeleteMessage={handleDeleteMessage} onShowDocumentPreview={handleShowDocumentPreview} onSetReplyingTo={handleSetReplyingTo} />
+              <MemoizedChatHeader 
+                currentUser={currentUser} 
+                otherUser={otherUser} 
+                onProfileClick={onProfileClick} 
+                onSendThinkingOfYou={handleSendThoughtRef.current} 
+                isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} 
+                onOtherUserAvatarClick={handleOtherUserAvatarClick} 
+                isOtherUserTyping={!!(otherUser && typingUsers[otherUser.id]?.isTyping)}
+                isSelectionMode={isSelectionMode}
+                selectedMessageCount={selectedMessageIds.size}
+                onExitSelectionMode={handleExitSelectionMode}
+                onCopySelected={handleCopySelected}
+                onDeleteSelected={() => setIsDeleteDialogOpen(true)}
+                onShareSelected={handleShareSelected}
+              />
+              <MemoizedMessageArea 
+                viewportRef={viewportRef} 
+                messages={messages} 
+                currentUser={currentUser} 
+                allUsers={allUsersForMessageArea} 
+                onToggleReaction={handleToggleReaction} 
+                onShowReactions={(m, u) => handleShowReactions(m, u)} 
+                onShowMedia={handleShowMedia} 
+                onLoadMore={loadMoreMessages} 
+                hasMore={hasMoreMessages} 
+                isLoadingMore={isLoadingMore} 
+                onRetrySend={handleRetrySend} 
+                onDeleteMessage={handleDeleteMessage} 
+                onShowDocumentPreview={handleShowDocumentPreview} 
+                onSetReplyingTo={handleSetReplyingTo}
+                isSelectionMode={isSelectionMode}
+                selectedMessageIds={selectedMessageIds}
+                onEnterSelectionMode={handleEnterSelectionMode}
+                onToggleMessageSelection={handleToggleMessageSelection}
+              />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} replyingTo={replyingTo} onCancelReply={handleCancelReply} allUsers={allUsersForMessageArea} />
             </div>
           </ErrorBoundary>
@@ -276,7 +405,124 @@ export default function ChatPage() {
         <ReasoningDialog />
         {reactionModalData && <ReactionSummaryModal isOpen={!!reactionModalData} onClose={() => setReactionModalData(null)} reactions={reactionModalData.reactions} allUsers={reactionModalData.allUsers}/>}
         {documentPreview && <DocumentPreviewModal isOpen={!!documentPreview} onClose={() => setDocumentPreview(null)} message={documentPreview} />}
+        <DeleteMessageDialog
+          isOpen={isDeleteDialogOpen}
+          onClose={() => setIsDeleteDialogOpen(false)}
+          onConfirm={handleDeleteSelected}
+          isCurrentUser={canDeleteForEveryone}
+          messageCount={selectedMessageIds.size}
+        />
       </div>
     </div>
   );
 }
+
+```
+  </change>
+  <change>
+    <file>/src/app/settings/privacy/page.tsx</file>
+    <content><![CDATA[
+"use client";
+
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Input } from '@/components/ui/input';
+import { Loader2, ChevronRight, Trash2, FileText } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import SettingsHeader from '@/components/settings/SettingsHeader';
+import { api } from '@/services/api';
+
+const SettingsItemButton = ({ children, onClick, destructive=false, ...props }: { children: React.ReactNode, onClick?: () => void, destructive?: boolean, disabled?: boolean }) => {
+    return (
+         <button onClick={onClick} className={`flex items-center justify-between py-3 w-full text-left hover:bg-muted/50 -mx-4 px-4 rounded-lg ${destructive ? 'text-destructive hover:bg-destructive/10' : ''} disabled:opacity-50 disabled:cursor-not-allowed`} {...props}>
+            {children}
+        </button>
+    );
+};
+const SettingsItem = ({ children }: { children: React.ReactNode }) => {
+    return <div className="flex items-center justify-between py-4">{children}</div>;
+};
+
+export default function PrivacySettingsPage() {
+    const { currentUser, isLoading: isAuthLoading, logout } = useAuth();
+    const { toast } = useToast();
+
+    const [readReceipts, setReadReceipts] = useState(true);
+    const [aiSuggestions, setAiSuggestions] = useState(true);
+    
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+    const [reAuthPassword, setReAuthPassword] = useState('');
+    const [isReAuthModalOpen, setIsReAuthModalOpen] = useState(false);
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    
+    const handleFinalDeleteAccount = () => {
+        console.log("Final account deletion initiated. Password:", reAuthPassword);
+        toast({title: "Account Deletion Initiated", description: "This is a mock action. No data was deleted."});
+        setIsReAuthModalOpen(false);
+        setReAuthPassword('');
+        logout();
+    };
+
+    if (isAuthLoading || !currentUser) {
+        return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+    }
+
+    return (
+        <div className="min-h-screen bg-muted/40 pb-16">
+            <SettingsHeader title="Privacy & Data" />
+            <main className="max-w-3xl mx-auto space-y-6 p-4">
+                 <Card>
+                    <CardContent className="divide-y p-4">
+                         <SettingsItem>
+                            <Label htmlFor="read-receipts-toggle">Read Receipts</Label>
+                            <Switch id="read-receipts-toggle" checked={readReceipts} onCheckedChange={setReadReceipts}/>
+                        </SettingsItem>
+                        <SettingsItem>
+                            <Label htmlFor="ai-suggestions-toggle">AI Mood Suggestions</Label>
+                            <Switch id="ai-suggestions-toggle" checked={aiSuggestions} onCheckedChange={setAiSuggestions} />
+                        </SettingsItem>
+                         <SettingsItemButton onClick={() => toast({title: "Coming Soon!", description: "Conversation export will be available in a future update."})}>
+                            <div className="font-medium flex items-center gap-2"><FileText/> Export Conversation</div>
+                            <ChevronRight className="text-muted-foreground" />
+                        </SettingsItemButton>
+                         
+                         <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+                            <AlertDialogTrigger asChild>
+                               <SettingsItemButton destructive>
+                                    <div className="font-medium flex items-center gap-2"><Trash2/> Delete Account</div>
+                                    <ChevronRight/>
+                                </SettingsItemButton>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete your account, messages, and all data. To confirm, type "DELETE" below.</AlertDialogDescription></AlertDialogHeader>
+                                <Input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="DELETE" />
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => { setIsDeleteConfirmOpen(false); setIsReAuthModalOpen(true); }} disabled={deleteConfirmText !== 'DELETE'}>Continue</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </CardContent>
+                </Card>
+            </main>
+            
+            <AlertDialog open={isReAuthModalOpen} onOpenChange={setIsReAuthModalOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader><AlertDialogTitle>Final Step: Re-authenticate to Delete</AlertDialogTitle><AlertDialogDescription>For your security, please enter your password to permanently delete your account.</AlertDialogDescription></AlertDialogHeader>
+                    <Input type="password" placeholder="Enter your password" value={reAuthPassword} onChange={e => setReAuthPassword(e.target.value)} />
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setReAuthPassword('')}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleFinalDeleteAccount} disabled={!reAuthPassword}>Delete My Account Forever</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </div>
+    );
+}
+
+    

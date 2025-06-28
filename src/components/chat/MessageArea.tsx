@@ -24,6 +24,10 @@ interface MessageAreaProps {
   onRetrySend: (message: Message) => void;
   onDeleteMessage: (messageId: string, deleteType: DeleteType) => void;
   onSetReplyingTo: (message: Message | null) => void;
+  isSelectionMode: boolean;
+  selectedMessageIds: Set<string>;
+  onEnterSelectionMode: (messageId: string) => void;
+  onToggleMessageSelection: (messageId: string) => void;
 }
 
 function MessageArea({ 
@@ -41,6 +45,10 @@ function MessageArea({
   onRetrySend,
   onDeleteMessage,
   onSetReplyingTo,
+  isSelectionMode,
+  selectedMessageIds,
+  onEnterSelectionMode,
+  onToggleMessageSelection,
 }: MessageAreaProps) {
   const lastMessageId = messages[messages.length - 1]?.id;
   useAutoScroll(viewportRef, [lastMessageId]);
@@ -80,6 +88,10 @@ function MessageArea({
               onRetrySend={onRetrySend}
               onDelete={onDeleteMessage}
               onSetReplyingTo={onSetReplyingTo}
+              isSelectionMode={isSelectionMode}
+              isSelected={selectedMessageIds.has(msg.id)}
+              onEnterSelectionMode={onEnterSelectionMode}
+              onToggleSelection={onToggleMessageSelection}
             />
           );
         })}
@@ -89,3 +101,5 @@ function MessageArea({
 }
 
 export default memo(MessageArea);
+
+    

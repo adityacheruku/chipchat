@@ -116,7 +116,7 @@ export const api = {
   },
   changePassword: async (passwordData: PasswordChangeRequest): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/users/me/password`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(passwordData) });
-    return handleResponse<void>(response);
+    await handleResponse<void>(response);
   },
   getPartnerSuggestions: async (): Promise<{users: User[]}> => {
     const response = await fetch(`${API_BASE_URL}/partners/suggestions`, { headers: getApiHeaders() });
@@ -136,11 +136,11 @@ export const api = {
   },
   respondToPartnerRequest: async (requestId: string, action: 'accept'|'reject'): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/partners/requests/${requestId}/respond`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ action }) });
-    return handleResponse<void>(response);
+    await handleResponse<void>(response);
   },
   disconnectPartner: async (): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/partners/me`, { method: 'DELETE', headers: getApiHeaders() });
-    return handleResponse<void>(response);
+    await handleResponse<void>(response);
   },
   createOrGetChat: async (recipientId: string): Promise<Chat> => {
     const response = await fetch(`${API_BASE_URL}/chats/`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ recipient_id: recipientId }) });
@@ -164,11 +164,7 @@ export const api = {
   },
   deleteMessageForEveryone: async (messageId: string, chatId: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/chats/messages/${messageId}?chat_id=${chatId}`, { method: 'DELETE', headers: getApiHeaders() });
-    return handleResponse<void>(response);
-  },
-  clearChatHistory: async (chatId: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, { method: 'DELETE', headers: getApiHeaders() });
-    return handleResponse<void>(response);
+    await handleResponse<void>(response);
   },
   uploadChatImage: async (file: File, onProgress: (p: number) => void): Promise<{ image_url: string; image_thumbnail_url: string | null; }> => {
     const fd = new FormData();
@@ -221,11 +217,11 @@ export const api = {
   },
   sendPushSubscriptionToServer: async (sub: PushSubscriptionJSON): Promise<any> => {
     const response = await fetch(`${API_BASE_URL}/notifications/subscribe`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(sub) });
-    return handleResponse(response);
+    return await handleResponse(response);
   },
   removePushSubscriptionFromServer: async (endpoint: string): Promise<any> => {
     const response = await fetch(`${API_BASE_URL}/notifications/unsubscribe`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ endpoint }) });
-    return handleResponse(response);
+    return await handleResponse(response);
   },
   getNotificationSettings: async (): Promise<NotificationSettings> => {
     const response = await fetch(`${API_BASE_URL}/notifications/settings`, { headers: getApiHeaders() });
@@ -240,3 +236,5 @@ export const api = {
     return handleResponse<EventPayload[]>(response);
   },
 };
+
+    

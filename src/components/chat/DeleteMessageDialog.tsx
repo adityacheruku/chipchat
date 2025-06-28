@@ -17,6 +17,7 @@ interface DeleteMessageDialogProps {
   onClose: () => void;
   onConfirm: (deleteType: DeleteType) => void;
   isCurrentUser: boolean;
+  messageCount?: number;
 }
 
 export default function DeleteMessageDialog({
@@ -24,14 +25,17 @@ export default function DeleteMessageDialog({
   onClose,
   onConfirm,
   isCurrentUser,
+  messageCount = 1,
 }: DeleteMessageDialogProps) {
   if (!isOpen) return null;
+  
+  const title = `Delete ${messageCount > 1 ? `${messageCount} messages` : 'message'}?`;
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Message?</AlertDialogTitle>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>
             This action cannot be undone.
           </AlertDialogDescription>
@@ -65,3 +69,5 @@ export default function DeleteMessageDialog({
     </AlertDialog>
   );
 }
+
+    

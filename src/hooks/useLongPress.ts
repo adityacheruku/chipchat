@@ -9,16 +9,16 @@ interface LongPressOptions {
 
 export const useLongPress = (
   callback: (event: React.MouseEvent | React.TouchEvent) => void,
-  { threshold = 300 }: LongPressOptions = {}
+  { threshold = 400 }: LongPressOptions = {}
 ) => {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressTriggered = useRef(false);
 
   const start = useCallback(
     (event: React.MouseEvent | React.TouchEvent) => {
-      // Prevent context menu on long touch
-      if (event.nativeEvent.type === 'touchstart') {
-          event.nativeEvent.preventDefault();
+      // Prevent context menu on long touch on mobile
+      if ('touches' in event.nativeEvent) {
+          event.preventDefault();
       }
       isLongPressTriggered.current = false;
       timeoutRef.current = setTimeout(() => {
@@ -44,6 +44,13 @@ export const useLongPress = (
     onMouseUp: (e: React.MouseEvent) => clear(e),
     onMouseLeave: (e: React.MouseEvent) => clear(e),
     onTouchEnd: (e: React.TouchEvent) => clear(e),
+    onContextMenu: (e: React.MouseEvent) => {
+      if (isLongPressTriggered.current) {
+        e.preventDefault();
+      }
+    },
     isLongPressing: () => isLongPressTriggered.current,
   };
 };
+
+    

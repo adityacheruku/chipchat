@@ -87,11 +87,10 @@ export type UserProfileUpdateEventData = { event_type: "user_profile_update"; us
 export type HeartbeatClientEvent = { event_type: "HEARTBEAT"; };
 export type MessageAckEventData = { event_type: "message_ack"; client_temp_id: string; server_assigned_id: string; status: MessageStatus; timestamp: string; };
 export type ChatModeChangedEventData = { event_type: "chat_mode_changed"; chat_id: string; mode: MessageMode; };
-export type ChatHistoryClearedEventData = { event_type: "chat_history_cleared"; chat_id: string; };
 
 export type EventPayload = { sequence?: number; } & (
   | NewMessageEventData | MessageDeletedEventData | MessageReactionUpdateEventData | UserPresenceUpdateEventData | TypingIndicatorEventData
-  | ThinkingOfYouReceivedEventData | UserProfileUpdateEventData | MessageAckEventData | ChatModeChangedEventData | ChatHistoryClearedEventData
+  | ThinkingOfYouReceivedEventData | UserProfileUpdateEventData | MessageAckEventData | ChatModeChangedEventData
   | { event_type: "error", detail: string }
 );
 
@@ -102,3 +101,5 @@ export interface StickerListResponse { stickers: Sticker[]; }
 export interface PushSubscriptionJSON { endpoint: string; expirationTime?: number | null; keys: { p256dh: string; auth: string; }; }
 export interface NotificationSettings { user_id: string; messages: boolean; mood_updates: boolean; thinking_of_you: boolean; voice_messages: boolean; media_sharing: boolean; quiet_hours_enabled: boolean; quiet_hours_start: string | null; quiet_hours_end: string | null; quiet_hours_weekdays_only: boolean; timezone: string; }
 export interface PartnerRequest { id: string; sender: User; recipient: User; status: 'pending' | 'accepted' | 'rejected' | 'cancelled'; created_at: string; }
+
+    

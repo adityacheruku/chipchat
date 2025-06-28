@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -32,41 +31,11 @@ export default function PrivacySettingsPage() {
     const [readReceipts, setReadReceipts] = useState(true);
     const [aiSuggestions, setAiSuggestions] = useState(true);
     
-    const [isClearingChat, setIsClearingChat] = useState(false);
-    const [chatId, setChatId] = useState<string | null>(null);
-    
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [reAuthPassword, setReAuthPassword] = useState('');
     const [isReAuthModalOpen, setIsReAuthModalOpen] = useState(false);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     
-    useEffect(() => {
-        if (currentUser?.partner_id) {
-            api.createOrGetChat(currentUser.partner_id)
-                .then(chat => setChatId(chat.id))
-                .catch(err => {
-                    console.error("Failed to get chat for clearing history:", err);
-                    toast({ variant: 'destructive', title: 'Error', description: 'Could not load chat details.' });
-                });
-        }
-    }, [currentUser, toast]);
-
-    const handleClearHistory = async () => {
-        if (!chatId) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not find a chat to clear.' });
-            return;
-        }
-        setIsClearingChat(true);
-        try {
-            await api.clearChatHistory(chatId);
-            toast({ title: "Chat History Cleared", description: "Your messages have been permanently deleted." });
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Error', description: `Failed to clear history: ${error.message}` });
-        } finally {
-            setIsClearingChat(false);
-        }
-    };
-
     const handleFinalDeleteAccount = () => {
         console.log("Final account deletion initiated. Password:", reAuthPassword);
         toast({title: "Account Deletion Initiated", description: "This is a mock action. No data was deleted."});
@@ -93,21 +62,6 @@ export default function PrivacySettingsPage() {
                             <Label htmlFor="ai-suggestions-toggle">AI Mood Suggestions</Label>
                             <Switch id="ai-suggestions-toggle" checked={aiSuggestions} onCheckedChange={setAiSuggestions} />
                         </SettingsItem>
-                         <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                 <SettingsItemButton disabled={!chatId || isClearingChat}>
-                                    <div className="font-medium flex items-center gap-2">
-                                        {isClearingChat ? <Loader2 className="animate-spin h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-                                        Clear Chat History
-                                    </div>
-                                    <ChevronRight className="text-muted-foreground" />
-                                </SettingsItemButton>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader><AlertDialogTitle>Clear all messages?</AlertDialogTitle><AlertDialogDescription>This action is irreversible and will delete your entire chat history for you and your partner.</AlertDialogDescription></AlertDialogHeader>
-                                <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleClearHistory}>Clear History</AlertDialogAction></AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
                          <SettingsItemButton onClick={() => toast({title: "Coming Soon!", description: "Conversation export will be available in a future update."})}>
                             <div className="font-medium flex items-center gap-2"><FileText/> Export Conversation</div>
                             <ChevronRight className="text-muted-foreground" />
