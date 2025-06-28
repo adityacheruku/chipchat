@@ -69,16 +69,25 @@ async function handleResponse<T>(response: Response): Promise<T> {
     console.error('API Error:', errorMessage, 'Full Response:', errorData);
     throw new Error(errorMessage);
   }
-  const contentType = response.headers.get("content-type");
-  if (contentType && contentType.indexOf("application/json") !== -1) {
-    if (response.headers.get("content-length") === "0" && response.status === 200) {
-        return {} as T;
-    }
-    return response.json() as Promise<T>;
-  } else if (response.status === 204 || response.headers.get("content-length") === "0") {
+
+  // If the response is 204 No Content, there's no body to parse. Return a successful empty object.
+  if (response.status === 204) {
     return {} as T;
   }
-  return response.text().then(text => { throw new Error(`Unexpected response type: ${contentType}, content: ${text.substring(0,100)}`) }) as Promise<T>;
+
+  // For other successful responses, try to parse a body.
+  const text = await response.text();
+  if (text.length === 0) {
+    // Handle cases like 200 OK with an empty body
+    return {} as T;
+  }
+  
+  try {
+    return JSON.parse(text) as T;
+  } catch (e) {
+    console.error("API Error: Expected JSON but received non-JSON response.", text.substring(0, 100));
+    throw new Error("Received an invalid response from the server.");
+  }
 }
 
 async function uploadWithProgress<T>(
@@ -458,5 +467,3 @@ export const api = {
     return handleResponse<EventPayload[]>(response);
   },
 };
-
-    
