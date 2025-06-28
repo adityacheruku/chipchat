@@ -16,8 +16,13 @@ export const useSwipe = ({ onSwipeLeft, onSwipeRight }: UseSwipeProps) => {
     const [startX, setStartX] = useState(0);
     const [translateX, setTranslateX] = useState(0);
 
+    const isSwiping = useCallback(() => {
+        return translateX !== 0;
+    }, [translateX]);
+
     const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-        if (e.button !== 0) return; // Only main button
+        // Only trigger for primary button or touch
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
         setStartX(e.clientX);
         setIsDragging(true);
         if(ref.current) {
@@ -29,20 +34,15 @@ export const useSwipe = ({ onSwipeLeft, onSwipeRight }: UseSwipeProps) => {
         if (!isDragging) return;
         const currentX = e.clientX;
         let diff = currentX - startX;
-
-        // Prevent swiping in the wrong direction for each user
-        if (onSwipeRight && diff < 0) diff = 0; // Only allow right swipe
-        if (onSwipeLeft && diff > 0) diff = 0; // Only allow left swipe
-
         const newTranslateX = Math.max(-MAX_SWIPE, Math.min(MAX_SWIPE, diff));
         setTranslateX(newTranslateX);
-    }, [isDragging, startX, onSwipeLeft, onSwipeRight]);
+    }, [isDragging, startX]);
 
-    const handlePointerUpOrLeave = useCallback(() => {
+    const handlePointerUp = useCallback(() => {
         if (!isDragging) return;
 
         if (ref.current) {
-            ref.current.style.transition = 'transform 0.2s ease-out';
+            ref.current.style.transition = 'transform 0.3s ease-out';
         }
 
         if (translateX > SWIPE_THRESHOLD && onSwipeRight) {
@@ -51,7 +51,6 @@ export const useSwipe = ({ onSwipeLeft, onSwipeRight }: UseSwipeProps) => {
             onSwipeLeft();
         }
         
-        // Reset state after action or if swipe wasn't enough
         setIsDragging(false);
         setTranslateX(0);
 
@@ -59,24 +58,25 @@ export const useSwipe = ({ onSwipeLeft, onSwipeRight }: UseSwipeProps) => {
     
     // Cleanup event listeners
     useEffect(() => {
-        const element = ref.current;
-        if (element && isDragging) {
-            const handleGlobalPointerUp = () => handlePointerUpOrLeave();
-            window.addEventListener('pointerup', handleGlobalPointerUp);
-            return () => {
-                window.removeEventListener('pointerup', handleGlobalPointerUp);
-            };
-        }
-    }, [isDragging, handlePointerUpOrLeave]);
+        const handleGlobalPointerUp = () => {
+            if (isDragging) {
+               handlePointerUp();
+            }
+        };
+        window.addEventListener('pointerup', handleGlobalPointerUp);
+        window.addEventListener('pointercancel', handleGlobalPointerUp);
+        return () => {
+            window.removeEventListener('pointerup', handleGlobalPointerUp);
+            window.removeEventListener('pointercancel', handleGlobalPointerUp);
+        };
+    }, [isDragging, handlePointerUp]);
 
     return {
-        ref,
+        isSwiping,
         translateX,
-        handlers: {
+        events: {
             onPointerDown: handlePointerDown,
             onPointerMove: handlePointerMove,
-            onPointerUp: handlePointerUpOrLeave,
-            onPointerLeave: handlePointerUpOrLeave,
         },
     };
 };

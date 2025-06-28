@@ -18,11 +18,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuPortal,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
 import { useState, useEffect, useRef, memo, useCallback } from 'react';
@@ -30,10 +27,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useDoubleTap } from '@/hooks/useDoubleTap';
 import DeleteMessageDialog from './DeleteMessageDialog';
 import { useSwipe } from '@/hooks/useSwipe';
-
+import { useLongPress } from '@/hooks/useLongPress';
 
 const EMOJI_ONLY_REGEX = /^(?:[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\udbff][\udc00-\udfff]|[\u0023-\u0039]\ufe0f?\u20e3|\u3299|\u3297|\u303d|\u3030|\u24c2|\ud83c[\udd70-\udd71]|\ud83c[\udd7e-\udd7f]|\ud83c\udd8e|\ud83c[\udd91-\udd9a]|\ud83c[\udde6-\uddff]|\ud83c[\ude01-\ude02]|\ud83c\ude1a|\ud83c\ude2f|\ud83c[\ude32-\ude3a]|\ud83c[\ude50-\ude51]|\u203c|\u2049|[\u25aa-\u25ab]|\u25b6|\u25c0|[\u25fb-\u25fe]|\u00a9|\u00ae|\u2122|\u2139|\ud83c\udc04|[\u2600-\u26FF]|\u2b05|\u2b06|\u2b07|\u2b1b|\u2b1c|\u2b50|\u2b55|\u231a|\u231b|\u2328|\u23cf|[\u23e9-\u23f3]|[\u23f8-\u23fa]|\ud83c\udccf|\u2934|\u2935|[\u2190-\u21ff])+$/;
-
 
 interface MessageBubbleProps {
   message: Message;
@@ -47,6 +43,7 @@ interface MessageBubbleProps {
   allUsers: Record<string, User>;
   onRetrySend: (message: Message) => void;
   onDelete: (messageId: string, deleteType: DeleteType) => void;
+  onSetReplyingTo: (message: Message | null) => void;
   wrapperId?: string;
 }
 
@@ -177,21 +174,20 @@ function formatFileSize(bytes?: number | null): string | null {
 }
 
 
-function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, onShowDocumentPreview, allUsers, onRetrySend, onDelete, wrapperId }: MessageBubbleProps) {
+function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, onShowDocumentPreview, allUsers, onRetrySend, onDelete, onSetReplyingTo, wrapperId }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
   const { toast } = useToast();
-  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const wasLongPressRef = useRef(false);
 
-  const handleReply = () => {
-    toast({ title: 'Reply Coming Soon!', description: 'This feature is currently under development.' });
-  }
-
-  const { ref: swipeRef, translateX, handlers: swipeHandlers } = useSwipe({
-    onSwipeLeft: () => !isCurrentUser && setIsDeleteDialogOpen(true),
-    onSwipeRight: () => !isCurrentUser && handleReply(),
+  const swipeHandlers = useSwipe({
+    onSwipeRight: () => onSetReplyingTo(message),
+    onSwipeLeft: () => setIsDeleteDialogOpen(true),
+  });
+  
+  const longPressHandlers = useLongPress(() => {
+    if (navigator.vibrate) navigator.vibrate(50);
+    setIsActionMenuOpen(true);
   });
 
   const handleCopy = () => {
@@ -209,25 +205,11 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   
   const doubleTapEvents = useDoubleTap(handleDoubleTap, 300);
   
-  const handlePointerDown = useCallback(() => {
-    wasLongPressRef.current = false;
-    longPressTimeoutRef.current = setTimeout(() => {
-        if(navigator.vibrate) navigator.vibrate(50);
-        setIsActionMenuOpen(true);
-        wasLongPressRef.current = true;
-    }, 400); // 400ms threshold
-  }, []);
-
-  const handlePointerUp = useCallback(() => {
-    if (longPressTimeoutRef.current) {
-        clearTimeout(longPressTimeoutRef.current);
-    }
-  }, []);
-
-  const handleBubbleClick = useCallback((e: React.MouseEvent) => {
-    if (wasLongPressRef.current) {
-        e.preventDefault();
-        return;
+  const handleBubbleClick = (e: React.MouseEvent) => {
+    // If swipe or long press is happening, don't trigger click
+    if (swipeHandlers.isSwiping() || longPressHandlers.isLongPressing()) {
+      e.preventDefault();
+      return;
     }
     // Handle single tap actions
     if (message.message_subtype === 'image' && message.image_url && message.status !== 'failed') {
@@ -235,7 +217,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     } else if (message.message_subtype === 'document' && message.document_url && message.status !== 'failed') {
         onShowDocumentPreview(message);
     }
-  }, [message, onShowMedia, onShowDocumentPreview]);
+  };
 
   const getReactorNames = (reactors: string[] | undefined) => {
     if (!reactors || reactors.length === 0) return "No one";
@@ -348,7 +330,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           );
         }
         return message.document_url ? (
-          <button className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')} aria-label={`Preview document: ${message.document_name}`}>
+          <button onClick={() => onShowDocumentPreview(message)} className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')} aria-label={`Preview document: ${message.document_name}`}>
             <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
             <div className="flex flex-col text-left min-w-0">
                 <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
@@ -369,7 +351,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 
   const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image' && message.message_subtype !== 'document';
   const reactionsDisabled = message.mode === 'incognito';
-  const swipeDisabled = isCurrentUser || isMediaBubble;
+  const swipeDisabled = isMediaBubble;
 
   return (
     <div
@@ -381,92 +363,60 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       )}
     >
       <div className={cn('flex flex-col max-w-[85vw] sm:max-w-md', isCurrentUser ? 'items-end' : 'items-start')}>
-        <div className="relative overflow-hidden rounded-xl">
+        <div
+          className="relative overflow-hidden rounded-xl"
+          {...(!swipeDisabled ? swipeHandlers.events : {})}
+        >
           {!swipeDisabled && (
             <>
-              <div className="absolute inset-y-0 left-0 flex items-center bg-blue-500 px-4 text-white rounded-l-xl" style={{ opacity: Math.max(0, translateX / 50) }}>
+              <div className="absolute inset-y-0 left-0 flex items-center bg-blue-500 px-4 text-white rounded-l-xl transition-opacity" style={{ opacity: Math.max(0, swipeHandlers.translateX / 60) }}>
                   <Reply size={20} />
               </div>
-              <div className="absolute inset-y-0 right-0 flex items-center bg-destructive px-4 text-white rounded-r-xl" style={{ opacity: Math.max(0, -translateX / 50) }}>
+              <div className="absolute inset-y-0 right-0 flex items-center bg-destructive px-4 text-white rounded-r-xl transition-opacity" style={{ opacity: Math.max(0, -swipeHandlers.translateX / 60) }}>
                   <Trash2 size={20} />
               </div>
             </>
           )}
 
           <div
-            ref={swipeRef}
-            style={{ transform: `translateX(${translateX}px)` }}
-            className={!swipeDisabled ? "touch-pan-y" : ""}
-            {...(!swipeDisabled ? swipeHandlers : {})}
+            style={{ transform: `translateX(${swipeHandlers.translateX}px)` }}
+            className={cn("transition-transform duration-200 ease-out", !swipeDisabled ? "touch-pan-y" : "")}
           >
             <DropdownMenu open={isActionMenuOpen} onOpenChange={setIsActionMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <div
-                  onPointerDown={handlePointerDown}
-                  onPointerUp={handlePointerUp}
-                  onClick={handleBubbleClick}
-                  onContextMenu={(e) => e.preventDefault()}
+                  {...longPressHandlers}
                   {...doubleTapEvents}
+                  onClickCapture={handleBubbleClick}
+                  onContextMenu={(e) => e.preventDefault()}
                   className={cn(
-                    'relative rounded-xl shadow-md transition-transform',
+                    'relative rounded-xl shadow-md transition-transform active:scale-95',
                     isMediaBubble || message.message_subtype === 'document' ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
                     !isMediaBubble && message.message_subtype !== 'document' && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
                     !isMediaBubble && message.message_subtype !== 'document' && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
-                    message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80'
+                    message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80',
+                    (message.mode === 'incognito' && message.status !== 'sending') && 'border-2 border-dashed border-muted-foreground/50'
                   )}
                 >
-                    {renderMessageContent()}
+                  {renderMessageContent()}
+                  {message.mode === 'incognito' && <Eye className="absolute top-1 right-1 h-3 w-3 text-muted-foreground/80" />}
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
-                  {message.message_subtype === 'document' && message.document_url ? (
-                    <>
-                        <DropdownMenuItem onSelect={() => onShowDocumentPreview(message)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            <span>Preview</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => {
-                            navigator.clipboard.writeText(message.document_url!);
-                            toast({ title: "Link Copied" });
-                        }}>
-                            <Copy className="mr-2 h-4 w-4" />
-                            <span>Copy Link</span>
-                        </DropdownMenuItem>
-                    </>
-                  ) : (
-                    <>
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger disabled={reactionsDisabled}>
-                            <SmilePlus className="mr-2 h-4 w-4" />
-                            <span>React</span>
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuPortal>
-                            <DropdownMenuSubContent>
-                              <div className="flex p-1">
-                                {QUICK_REACTION_EMOJIS.map((emoji) => (
-                                  <DropdownMenuItem
-                                    key={emoji}
-                                    className="flex-1 justify-center rounded-md p-0 focus:bg-accent/50"
-                                    onSelect={() => onToggleReaction(message.id, emoji)}
-                                  >
-                                    <span className="text-xl p-1.5">{emoji}</span>
-                                  </DropdownMenuItem>
-                                ))}
-                              </div>
-                            </DropdownMenuSubContent>
-                          </DropdownMenuPortal>
-                        </DropdownMenuSub>
-                        <DropdownMenuItem onSelect={handleCopy} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
-                    </>
-                  )}
-                  <DropdownMenuItem onSelect={handleReply} disabled><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
-                  <DropdownMenuItem disabled><Forward className="mr-2 h-4 w-4" /> Forward</DropdownMenuItem>
-                  {message.message_subtype === 'document' && (
-                    <DropdownMenuItem onSelect={() => {}} disabled>
-                        <FileEdit className="mr-2 h-4 w-4" />
-                        <span>Rename</span>
-                    </DropdownMenuItem>
-                  )}
+                  <div className="flex justify-around p-1">
+                    {QUICK_REACTION_EMOJIS.map((emoji) => (
+                      <DropdownMenuItem
+                        key={emoji}
+                        className="flex-1 justify-center p-0 focus:bg-accent/50 rounded-md"
+                        onSelect={() => onToggleReaction(message.id, emoji)}
+                      >
+                        <span className="text-xl p-1.5">{emoji}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => onSetReplyingTo(message)}><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={handleCopy} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

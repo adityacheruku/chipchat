@@ -6,13 +6,13 @@ import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, u
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift, ShieldAlert, EyeOff, MessageCircle } from 'lucide-react';
+import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift, ShieldAlert, EyeOff, MessageCircle, Reply } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
-import { PICKER_EMOJIS, type MessageMode } from '@/types';
+import { PICKER_EMOJIS, type MessageMode, type Message, type User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
@@ -20,7 +20,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useLongPress } from '@/hooks/useLongPress';
 
 interface InputBarProps {
-  onSendMessage: (text: string, mode: MessageMode) => void;
+  onSendMessage: (text: string, mode: MessageMode, replyToId?: string) => void;
   onSendSticker: (stickerId: string, mode: MessageMode) => void;
   onSendVoiceMessage: (file: File, mode: MessageMode) => void;
   onSendImage: (file: File, mode: MessageMode) => void;
@@ -30,6 +30,9 @@ interface InputBarProps {
   disabled?: boolean;
   chatMode: MessageMode;
   onSelectMode: (mode: MessageMode) => void;
+  replyingTo: Message | null;
+  onCancelReply: () => void;
+  allUsers: Record<string, User>;
 }
 
 const MAX_RECORDING_SECONDS = 120;
@@ -60,10 +63,26 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
   );
 };
 
+const ReplyPreview = ({ message, onCancel, allUsers }: { message: Message, onCancel: () => void, allUsers: Record<string, User> }) => {
+    const sender = allUsers[message.user_id];
+    return (
+        <div className="relative flex items-center gap-3 p-2 pr-8 mb-2 border-l-2 border-primary bg-primary/10 rounded-r-md">
+            <div className="flex-grow min-w-0">
+                <p className="font-semibold text-primary text-sm">{sender?.display_name || "Unknown User"}</p>
+                <p className="text-sm text-foreground/80 truncate">{message.text || 'Attachment...'}</p>
+            </div>
+            <Button variant="ghost" size="icon" onClick={onCancel} className="absolute top-1/2 right-1 -translate-y-1/2 h-7 w-7 rounded-full text-muted-foreground hover:bg-black/10">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Cancel reply</span>
+            </Button>
+        </div>
+    );
+};
 
 function InputBar({
   onSendMessage, onSendSticker, onSendVoiceMessage, onSendImage, onSendDocument,
   isSending = false, onTyping, disabled = false, chatMode, onSelectMode,
+  replyingTo, onCancelReply, allUsers
 }: InputBarProps) {
   const [messageText, setMessageText] = useState('');
   const [isToolsOpen, setIsToolsOpen] = useState(false);
@@ -98,7 +117,7 @@ function InputBar({
         const scrollHeight = textarea.scrollHeight;
         textarea.style.height = `${scrollHeight}px`;
     }
-  }, [messageText]);
+  }, [messageText, replyingTo]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -214,14 +233,14 @@ function InputBar({
   const handleCompositeSend = useCallback((e: FormEvent) => {
     e.preventDefault();
     if (disabled || isSending) return;
-    if (messageText.trim()) onSendMessage(messageText.trim(), chatMode);
+    if (messageText.trim()) onSendMessage(messageText.trim(), chatMode, replyingTo?.id);
     stagedAttachments.forEach(file => {
       if (file.type.startsWith('image/')) onSendImage(file, chatMode);
       else if (file.type.startsWith('audio/')) onSendVoiceMessage(file, chatMode);
       else onSendDocument(file, chatMode);
     });
     setMessageText(''); setStagedAttachments([]); setEmojiSearch(''); onTyping(false);
-  }, [disabled, isSending, messageText, stagedAttachments, onSendMessage, onSendImage, onSendVoiceMessage, onSendDocument, onTyping, chatMode]);
+  }, [disabled, isSending, messageText, stagedAttachments, onSendMessage, onSendImage, onSendVoiceMessage, onSendDocument, onTyping, chatMode, replyingTo]);
   
   const showSendButton = useMemo(() => messageText.trim() !== '' || stagedAttachments.length > 0, [messageText, stagedAttachments]);
 
@@ -276,13 +295,13 @@ function InputBar({
       </TabsList>
       <TabsContent value="media" className="p-4">
         <div className="grid grid-cols-3 gap-4">
-            <Button variant="outline" size="lg" onClick={() => cameraInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
+            <Button variant="outline" size="lg" onClick={() => cameraInputRef.current?.click()} className="flex animate-pop-in flex-col h-auto py-4 items-center justify-center gap-2" style={{ animationDelay: '50ms' }}>
                 <Camera size={24} className="text-red-500"/><span className="text-sm font-normal">Camera</span>
             </Button>
-            <Button variant="outline" size="lg" onClick={() => imageInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
+            <Button variant="outline" size="lg" onClick={() => imageInputRef.current?.click()} className="flex animate-pop-in flex-col h-auto py-4 items-center justify-center gap-2" style={{ animationDelay: '100ms' }}>
                 <ImageIcon size={24} className="text-purple-500"/><span className="text-sm font-normal">Gallery</span>
             </Button>
-            <Button variant="outline" size="lg" onClick={() => documentInputRef.current?.click()} className="flex flex-col h-auto py-4 items-center justify-center gap-2">
+            <Button variant="outline" size="lg" onClick={() => documentInputRef.current?.click()} className="flex animate-pop-in flex-col h-auto py-4 items-center justify-center gap-2" style={{ animationDelay: '150ms' }}>
                 <FileText size={24} className="text-blue-500"/><span className="text-sm font-normal">Document</span>
             </Button>
         </div>
@@ -368,8 +387,11 @@ function InputBar({
   const ToolsPickerContent = isMobile ? SheetContent : PopoverContent;
 
   return (
-    <div className={cn("p-3 border-t border-border bg-card rounded-b-lg transition-colors duration-300", isDragging && "bg-primary/20 border-primary")}
+    <div className={cn("p-3 border-t border-border bg-card transition-colors duration-300", isDragging && "bg-primary/20 border-primary")}
         onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragEvents} onDrop={handleDrop}>
+      
+      {replyingTo && <ReplyPreview message={replyingTo} onCancel={onCancelReply} allUsers={allUsers} />}
+
       {stagedAttachments.length > 0 && (
           <div className="mb-2 p-2 border rounded-lg bg-muted/50">
               <ScrollArea className="h-24 whitespace-nowrap"><div className="flex items-center gap-2">{stagedAttachments.map((file, index) => (<AttachmentPreview key={index} file={file} onRemove={() => handleRemoveAttachment(index)} />))}</div></ScrollArea>
@@ -385,7 +407,7 @@ function InputBar({
         </AttachmentPickerComponent>
         
         <div className="flex-grow relative flex items-end">
-             <Textarea ref={textareaRef} placeholder="Type a message..." value={messageText} onChange={handleTypingChange} onBlur={handleBlur} className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[44px] max-h-[120px] pt-[11px]" autoComplete="off" disabled={isSending || disabled} rows={1} aria-label="Message input"/>
+             <Textarea ref={textareaRef} placeholder={replyingTo ? "Type your reply..." : "Type a message..."} value={messageText} onChange={handleTypingChange} onBlur={handleBlur} className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[44px] max-h-[120px] pt-[11px]" autoComplete="off" disabled={isSending || disabled} rows={1} aria-label="Message input"/>
              <ToolsPickerComponent open={isToolsOpen} onOpenChange={setIsToolsOpen}>
                 <ToolsPickerTrigger asChild>
                     <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}><Smile size={22} /></Button>

@@ -91,6 +91,7 @@ export interface Message {
   file_size_bytes?: number | null;
   audio_format?: string | null;
   transcription?: string | null;
+  reply_to_message_id?: string | null;
 
   // --- Client-side only properties for upload progress ---
   uploadProgress?: number; // A number from 0 to 100

@@ -77,6 +77,7 @@ export default function ChatPage() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [topMessageId, setTopMessageId] = useState<string | null>(null);
   const [documentPreview, setDocumentPreview] = useState<MessageType | null>(null);
+  const [replyingTo, setReplyingTo] = useState<MessageType | null>(null);
 
   // 3. Ref Declarations
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -176,6 +177,14 @@ export default function ChatPage() {
     }
   }, [activeChat, toast]);
 
+  const handleSetReplyingTo = useCallback((message: MessageType | null) => {
+    setReplyingTo(message);
+  }, []);
+
+  const handleCancelReply = useCallback(() => {
+    setReplyingTo(null);
+  }, []);
+
   // 5. Custom Hooks that depend on callbacks
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     onMessageReceived: handleNewMessage,
@@ -274,7 +283,7 @@ export default function ChatPage() {
   }, [sendMessage, setMessageAsFailed]);
 
 
-  const handleSendMessage = useCallback((text: string, mode: MessageMode) => {
+  const handleSendMessage = useCallback((text: string, mode: MessageMode, replyToId?: string) => {
     if (!currentUser || !activeChat) return;
     if (!text.trim()) return;
     handleTyping(false);
@@ -283,9 +292,10 @@ export default function ChatPage() {
       id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, text,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text", mode: mode,
+      reply_to_message_id: replyToId,
     };
     setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
-    sendMessageWithTimeout({ event_type: "send_message", chat_id: activeChat.id, text, mode, client_temp_id: clientTempId, message_subtype: "text" });
+    sendMessageWithTimeout({ event_type: "send_message", chat_id: activeChat.id, text, mode, client_temp_id: clientTempId, message_subtype: "text", reply_to_id: replyToId });
     addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0, 30)}"`, currentUser.id, currentUser.display_name);
     if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) { lastMessageTextRef.current = text; aiSuggestMood(text); }
     if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
@@ -294,7 +304,10 @@ export default function ChatPage() {
             setTimeout(() => setShowNotificationPrompt(true), 2000);
         }
     }
-  }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, addAppEvent, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
+    if (replyToId) {
+        handleCancelReply();
+    }
+  }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, addAppEvent, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus, handleCancelReply]);
   
   const handleFileUpload = useCallback(async (file: File, subtype: MessageType['message_subtype'], mode: MessageMode, uploadFunction: (file: File, onProgress: (progress: number) => void) => Promise<any>) => {
     if (!currentUser || !activeChat) return;
@@ -513,8 +526,8 @@ export default function ChatPage() {
             <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
               <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
               <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
-              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} onDeleteMessage={handleDeleteMessage} onShowDocumentPreview={handleShowDocumentPreview} />
-              <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} />
+              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} onDeleteMessage={handleDeleteMessage} onShowDocumentPreview={handleShowDocumentPreview} onSetReplyingTo={handleSetReplyingTo} />
+              <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} replyingTo={replyingTo} onCancelReply={handleCancelReply} allUsers={allUsersForMessageArea} />
             </div>
           </ErrorBoundary>
         </div>

@@ -23,6 +23,7 @@ interface MessageAreaProps {
   isLoadingMore: boolean;
   onRetrySend: (message: Message) => void;
   onDeleteMessage: (messageId: string, deleteType: DeleteType) => void;
+  onSetReplyingTo: (message: Message | null) => void;
 }
 
 function MessageArea({ 
@@ -39,6 +40,7 @@ function MessageArea({
   isLoadingMore,
   onRetrySend,
   onDeleteMessage,
+  onSetReplyingTo,
 }: MessageAreaProps) {
   const lastMessageId = messages[messages.length - 1]?.id;
   useAutoScroll(viewportRef, [lastMessageId]);
@@ -77,6 +79,7 @@ function MessageArea({
               allUsers={allUsers}
               onRetrySend={onRetrySend}
               onDelete={onDeleteMessage}
+              onSetReplyingTo={onSetReplyingTo}
             />
           );
         })}
