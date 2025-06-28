@@ -27,18 +27,41 @@ function getApiHeaders(options: { contentType?: string | null, includeAuth?: boo
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
-  if (response.status === 204) return {} as T;
-  const text = await response.text();
+  // Handle successful responses with no content first.
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  // Handle error responses (non-2xx).
   if (!response.ok) {
-    let errorData: ApiErrorResponse = {};
-    try { errorData = JSON.parse(text); } catch (e) {}
-    const errorMessage = typeof errorData.detail === 'string' ? errorData.detail :
-      Array.isArray(errorData.detail) && errorData.detail[0]?.msg ? errorData.detail[0].msg :
-      `HTTP error ${response.status}`;
+    let errorData: ApiErrorResponse = { detail: `HTTP error ${response.status}` };
+    try {
+      // Try to parse the error response as JSON, as this is the expected format.
+      errorData = await response.json();
+    } catch (e) {
+      // If parsing fails, it's not a JSON error. The status itself is the best info we have.
+      // The default errorData message is sufficient.
+    }
+    
+    // Extract a clean error message from the JSON detail if possible.
+    const errorMessage = typeof errorData.detail === 'string'
+      ? errorData.detail
+      : Array.isArray(errorData.detail) && errorData.detail[0]?.msg
+      ? errorData.detail[0].msg
+      : `HTTP error ${response.status}`;
+      
     throw new Error(errorMessage);
   }
-  if (text.length === 0) return {} as T;
-  try { return JSON.parse(text) as T; } catch (e) { throw new Error("Received an invalid response from the server."); }
+
+  // Handle successful (2xx) responses.
+  try {
+    // For successful responses, we expect JSON.
+    return await response.json() as T;
+  } catch (e) {
+    // This can happen if a 200 OK has an empty body, which is valid.
+    // Treat it like a 204 No Content.
+    return {} as T;
+  }
 }
 
 async function uploadWithProgress<T>(url: string, formData: FormData, onProgress: (progress: number) => void): Promise<T> {
