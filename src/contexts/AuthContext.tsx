@@ -12,7 +12,6 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (phone: string, password_plaintext: string) => Promise<void>;
-  // 🔒 Security: Renamed `register` to `completeRegistration` to reflect the new multi-step flow.
   completeRegistration: (userData: CompleteRegistrationRequest) => Promise<void>;
   logout: () => void;
   fetchAndUpdateUser: () => Promise<void>;
@@ -31,13 +30,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const isAuthenticated = !!token && !!currentUser;
 
-  // ⚡️ Memoized with useCallback to prevent re-renders in consumers
   const handleAuthSuccess = useCallback((data: AuthResponse) => {
     localStorage.setItem('chirpChatToken', data.access_token);
     api.setAuthToken(data.access_token);
     setCurrentUser(data.user);
     setToken(data.access_token);
-    // ⚡️ The routing logic is now handled by the central useEffect hook
   }, []);
 
   const logout = useCallback(() => {
@@ -51,7 +48,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: 'Logged Out', description: "You've been successfully logged out." });
   }, [router, toast, pathname]);
   
-  // ⚡️ This effect now exclusively handles loading the initial state from localStorage.
   useEffect(() => {
     const storedToken = localStorage.getItem('chirpChatToken');
     if (storedToken) {
@@ -63,7 +59,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setToken(tokenToLoad);
         } catch (error) {
           console.error("Failed to load user from token", error);
-          logout(); // This clears invalid tokens
+          logout(); 
         } finally {
           setIsLoading(false);
         }
@@ -87,7 +83,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [handleAuthSuccess, toast]);
 
-  // 🔒 Security: This function now handles the final step of the new OTP flow.
   const completeRegistration = useCallback(async (userData: CompleteRegistrationRequest) => {
     setIsLoading(true);
     try {
@@ -114,34 +109,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [token, logout]);
 
-  // ⚡️ This central useEffect now handles all routing logic based on auth state.
-  // This prevents race conditions and ensures a single source of truth for redirects.
   useEffect(() => {
-    if (isLoading) return; // Don't do anything while initial token/user is loading
+    if (isLoading) return; 
 
     const isAuthPage = pathname === '/';
-    const isOnboardingPage = pathname === '/onboarding/find-partner';
-    
+    const isOnboardingPage = pathname.startsWith('/onboarding');
+    const isProtectedPage = !isAuthPage && !isOnboardingPage;
+
     if (isAuthenticated && currentUser) {
-      // User is logged in
+      // --- User is AUTHENTICATED ---
       if (currentUser.partner_id) {
-        // User has a partner, should be on the chat page
-        if (pathname !== '/chat') {
+        // User has a partner. They should be sent to /chat if they land on auth or onboarding pages.
+        if (isAuthPage || isOnboardingPage) {
           router.push('/chat');
         }
+        // Otherwise, they are free to navigate between /chat, /settings, etc. No redirect needed here.
       } else {
-        // User has no partner, should be on the find-partner page
+        // User has NO partner. They should be on an onboarding page.
         if (!isOnboardingPage) {
           router.push('/onboarding/find-partner');
         }
       }
     } else {
-      // User is not logged in, should be on the auth page
-      if (!isAuthPage) {
+      // --- User is NOT AUTHENTICATED ---
+      // If they are trying to access a protected page, redirect them to the login page.
+      if (isProtectedPage) {
         router.push('/');
       }
+      // Otherwise, they are on a public page (like '/') and can stay there.
     }
   }, [isLoading, isAuthenticated, currentUser, pathname, router]);
+
 
   return (
     <AuthContext.Provider value={{ currentUser, token, isLoading, login, completeRegistration, logout, fetchAndUpdateUser, isAuthenticated }}>
