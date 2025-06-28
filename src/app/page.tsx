@@ -16,13 +16,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 // Component for the logo
 const Logo = () => (
-    <div className="w-full max-w-sm mx-auto">
+    <div className="w-24 h-24">
         <Image 
-            src="/icon/icon-512.png"
+            src="https://placehold.co/256x256.png"
             alt="ChirpChat App Logo"
-            width={400}
-            height={300}
-            className="rounded-lg object-cover shadow-lg"
+            width={256}
+            height={256}
+            className="rounded-2xl object-cover shadow-lg"
             data-ai-hint="app logo"
             priority
         />
@@ -52,10 +52,10 @@ const PasswordStrengthIndicator = ({ strength }: { strength: number }) => {
 };
 
 const BrandSection = () => (
-    <div className="max-w-md">
+    <div className="flex flex-col items-center text-center md:items-start md:text-left">
       <Logo />
-      <h1 className="text-2xl font-bold mt-8 text-foreground">"One soulmate, infinite moods"</h1>
-      <p className="text-muted-foreground mt-2">speak your heart in a single tap.</p>
+      <h1 className="text-3xl font-bold mt-6 text-foreground">One space for two souls.</h1>
+      <p className="text-muted-foreground mt-2 max-w-sm">ChirpChat is an intimate, emotionally-aware messenger designed exclusively for you and your partner.</p>
     </div>
 );
 
@@ -69,11 +69,11 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
        <div className="space-y-1">
            <Label htmlFor="regPhone">Phone Number</Label>
            <div className="relative">
-               <Input id="regPhone" type="tel" placeholder="+12223334444" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="tel" />
-               <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input id="regPhone" type="tel" placeholder="+12223334444" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required className="pl-10" disabled={loading} autoComplete="tel" />
+               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
-       <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
+       <Button type="submit" className="w-full" disabled={loading}>
            {loading ? <Loader2 className="animate-spin" /> : 'Continue'}
        </Button>
    </form>
@@ -88,11 +88,11 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
        <div className="space-y-1">
            <Label htmlFor="regOtp">Verification Code</Label>
            <div className="relative">
-               <Input id="regOtp" type="text" placeholder="######" value={regOtp} onChange={(e) => setRegOtp(e.target.value)} required className="pl-4 pr-10 tracking-[1em] text-center bg-input" disabled={loading} maxLength={6} autoComplete="one-time-code" />
+               <Input id="regOtp" type="text" placeholder="######" value={regOtp} onChange={(e) => setRegOtp(e.target.value)} required className="pl-4 pr-10 tracking-[1em] text-center" disabled={loading} maxLength={6} autoComplete="one-time-code" />
                <MessageSquareText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
-       <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
+       <Button type="submit" className="w-full" disabled={loading}>
            {loading ? <Loader2 className="animate-spin" /> : 'Verify'}
        </Button>
        <div className="text-center">
@@ -110,23 +110,23 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
         <div className="space-y-1">
            <Label htmlFor="displayName">Display Name</Label>
             <div className="relative">
-               <Input id="displayName" type="text" placeholder="Choose a unique name" value={regDisplayName} onChange={(e) => setRegDisplayName(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="name" />
-               <UserIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input id="displayName" type="text" placeholder="Choose a unique name" value={regDisplayName} onChange={(e) => setRegDisplayName(e.target.value)} required className="pl-10" disabled={loading} autoComplete="name" />
+               <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
        <div className="space-y-1">
            <Label htmlFor="regPassword">Password</Label>
            <div className="relative">
-               <Input id="regPassword" type="password" placeholder="Create a strong password" value={regPassword} onChange={(e) => {setRegPassword(e.target.value); checkPasswordStrength(e.target.value);}} required className="pl-4 pr-10 bg-input" disabled={loading} minLength={8} autoComplete="new-password" />
-               <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input id="regPassword" type="password" placeholder="Create a strong password" value={regPassword} onChange={(e) => {setRegPassword(e.target.value); checkPasswordStrength(e.target.value);}} required className="pl-10" disabled={loading} minLength={8} autoComplete="new-password" />
+               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
             <PasswordStrengthIndicator strength={passwordStrength} />
        </div>
         <div className="space-y-1">
            <Label htmlFor="regOptionalEmail">Email (Optional)</Label>
            <div className="relative">
-               <Input id="regOptionalEmail" type="email" placeholder="your@example.com" value={regOptionalEmail} onChange={(e) => setRegOptionalEmail(e.target.value)} className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="email" />
-               <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input id="regOptionalEmail" type="email" placeholder="your@example.com" value={regOptionalEmail} onChange={(e) => setRegOptionalEmail(e.target.value)} className="pl-10" disabled={loading} autoComplete="email" />
+               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
        <div className="flex items-center space-x-2">
@@ -135,7 +135,7 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
                I agree to the <a href="#" className="underline text-primary hover:text-primary/80">Terms of Service</a> and <a href="#" className="underline text-primary hover:text-primary/80">Privacy Policy</a>.
            </label>
        </div>
-       <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
+       <Button type="submit" className="w-full" disabled={loading}>
            {loading ? <Loader2 className="animate-spin" /> : 'Create Account'}
        </Button>
    </form>
@@ -146,18 +146,18 @@ const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: an
      <div className="space-y-1">
          <Label htmlFor="loginPhone">Phone Number</Label>
          <div className="relative">
-             <Input id="loginPhone" type="tel" placeholder="+12223334444" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="tel" />
-              <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+             <Input id="loginPhone" type="tel" placeholder="+12223334444" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)} required className="pl-10" disabled={loading} autoComplete="tel" />
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
          </div>
      </div>
      <div className="space-y-1">
          <Label htmlFor="loginPassword">Password</Label>
          <div className="relative">
-             <Input id="loginPassword" type="password" placeholder="Enter your password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="current-password" />
-              <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+             <Input id="loginPassword" type="password" placeholder="Enter your password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="pl-10" disabled={loading} autoComplete="current-password" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
          </div>
      </div>
-      <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
+      <Button type="submit" className="w-full" disabled={loading}>
           {loading ? <Loader2 className="animate-spin" /> : 'Log In'}
      </Button>
    </form>
@@ -285,39 +285,43 @@ export default function AuthPage() {
 
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm mx-auto">
-        <div className="text-center mb-8">
-          <BrandSection />
-        </div>
+    <main className="flex min-h-screen w-full items-center justify-center bg-background p-4 md:p-6">
+        <div className="grid w-full max-w-4xl grid-cols-1 items-center gap-10 md:grid-cols-2 md:gap-16">
+            <div className="hidden md:flex">
+                <BrandSection />
+            </div>
 
-        {authMode === 'register' ? (
-          <>
-            {registerStep === 'phone' && <RegisterPhoneStep handleSendOtp={handleSendOtp} regPhone={regPhone} setRegPhone={setRegPhone} loading={loading} />}
-            {registerStep === 'otp' && <RegisterOtpStep handleVerifyOtp={handleVerifyOtp} regOtp={regOtp} setRegOtp={setRegOtp} loading={loading} regPhone={regPhone} setRegisterStep={setRegisterStep} />}
-            {registerStep === 'details' && <RegisterDetailsStep handleCompleteRegistration={handleCompleteRegistration} regDisplayName={regDisplayName} setRegDisplayName={setRegDisplayName} regPassword={regPassword} setRegPassword={setRegPassword} checkPasswordStrength={checkPasswordStrength} passwordStrength={passwordStrength} regOptionalEmail={regOptionalEmail} setRegOptionalEmail={setRegOptionalEmail} agreeToTerms={agreeToTerms} setAgreeToTerms={setAgreeToTerms} loading={loading} />}
-            <p className="text-center text-sm mt-6">
-              Already have an account?{' '}
-              <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
-                Log In
-              </button>
-            </p>
-          </>
-        ) : (
-          <>
-             <CardHeader className="p-0 mb-6">
-                  <CardTitle>Welcome Back</CardTitle>
-              </CardHeader>
-            <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
-            <p className="text-center text-sm mt-6">
-              Don't have an account?{' '}
-              <button type="button" onClick={() => { setAuthMode('register'); setRegisterStep('phone'); }} className="font-semibold text-primary hover:underline focus:outline-none">
-                Sign Up
-              </button>
-            </p>
-          </>
-        )}
-      </div>
+            <Card className="w-full max-w-sm">
+                <CardContent className="p-6">
+                    {authMode === 'register' ? (
+                    <>
+                        {registerStep === 'phone' && <RegisterPhoneStep handleSendOtp={handleSendOtp} regPhone={regPhone} setRegPhone={setRegPhone} loading={loading} />}
+                        {registerStep === 'otp' && <RegisterOtpStep handleVerifyOtp={handleVerifyOtp} regOtp={regOtp} setRegOtp={setRegOtp} loading={loading} regPhone={regPhone} setRegisterStep={setRegisterStep} />}
+                        {registerStep === 'details' && <RegisterDetailsStep handleCompleteRegistration={handleCompleteRegistration} regDisplayName={regDisplayName} setRegDisplayName={setRegDisplayName} regPassword={regPassword} setRegPassword={setRegPassword} checkPasswordStrength={checkPasswordStrength} passwordStrength={passwordStrength} regOptionalEmail={regOptionalEmail} setRegOptionalEmail={setRegOptionalEmail} agreeToTerms={agreeToTerms} setAgreeToTerms={setAgreeToTerms} loading={loading} />}
+                        <p className="text-center text-sm text-muted-foreground mt-6">
+                        Already have an account?{' '}
+                        <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
+                            Log In
+                        </button>
+                        </p>
+                    </>
+                    ) : (
+                    <>
+                        <CardHeader className="p-0 mb-6">
+                            <CardTitle>Welcome Back</CardTitle>
+                        </CardHeader>
+                        <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
+                        <p className="text-center text-sm text-muted-foreground mt-6">
+                        Don't have an account?{' '}
+                        <button type="button" onClick={() => { setAuthMode('register'); setRegisterStep('phone'); }} className="font-semibold text-primary hover:underline focus:outline-none">
+                            Sign Up
+                        </button>
+                        </p>
+                    </>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
     </main>
   );
 }

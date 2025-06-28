@@ -146,8 +146,8 @@ export default function FindPartnerPage() {
             </Button>
             <Card className="w-full max-w-lg shadow-xl mt-16 sm:mt-0">
                 <CardHeader>
-                    <CardTitle>Choose Your Partner</CardTitle>
-                    <CardDescription>
+                    <CardTitle className="text-center">Choose Your Partner</CardTitle>
+                    <CardDescription className="text-center">
                         This is a space for just the two of you. Pick one person you'd love to stay emotionally connected with.
                     </CardDescription>
                 </CardHeader>
@@ -209,7 +209,7 @@ export default function FindPartnerPage() {
                          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2"><UserPlus className="text-accent"/>Find a Partner</h3>
                          <div className="relative">
                             <Input
-                                placeholder="🔍 Search by name"
+                                placeholder="Search by name"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-8 bg-input"

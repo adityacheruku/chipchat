@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect } from 'react';
@@ -14,9 +15,9 @@ import { Separator } from '@/components/ui/separator';
 const SettingsLink = ({ href, icon, title, description }: { href: string; icon: React.ElementType; title: string; description: string }) => {
     const Icon = icon;
     return (
-        <Link href={href} className="flex items-center p-4 -mx-4 rounded-lg hover:bg-muted/50 transition-colors">
-            <div className="p-3 bg-muted rounded-lg mr-4">
-                <Icon className="h-5 w-5 text-muted-foreground" />
+        <Link href={href} className="flex items-center p-4 -mx-4 rounded-lg hover:bg-muted/50 transition-colors group">
+            <div className="p-3 bg-muted group-hover:bg-primary/10 rounded-lg mr-4 transition-colors">
+                <Icon className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
             </div>
             <div className="flex-grow">
                 <p className="font-semibold text-foreground">{title}</p>
@@ -51,7 +52,7 @@ export default function SettingsHubPage() {
                         <span className="sr-only">Back</span>
                     </Button>
                 </div>
-                <h1 className="text-lg font-semibold text-foreground absolute left-1/2 -translate-x-1/2">Account & Settings</h1>
+                <h1 className="text-lg font-semibold text-foreground absolute left-1/2 -translate-x-1/2">Settings</h1>
             </header>
             <main className="p-4 max-w-3xl mx-auto">
                 {/* Profile Section */}

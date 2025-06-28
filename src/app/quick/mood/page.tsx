@@ -82,7 +82,7 @@ export default function QuickMoodPage() {
       <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
         <Card className="w-full max-w-md shadow-xl text-center">
           <CardHeader>
-            <CardTitle className="text-2xl font-headline text-primary">Access Denied</CardTitle>
+            <CardTitle className="text-2xl font-headline text-primary text-center">Access Denied</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-red-600 py-4">Please log in via the main ChirpChat app to use this feature.</p>
@@ -103,8 +103,8 @@ export default function QuickMoodPage() {
           <div className="flex justify-center mb-4">
             <SmilePlus className="w-16 h-16 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-headline text-primary">Set Your Mood</CardTitle>
-          <CardDescription className="text-muted-foreground">
+          <CardTitle className="text-2xl font-headline text-primary text-center">Set Your Mood</CardTitle>
+          <CardDescription className="text-center">
             Hi {currentUser.display_name}, how are you feeling?
           </CardDescription>
         </CardHeader>
@@ -124,7 +124,7 @@ export default function QuickMoodPage() {
             </SelectContent>
           </Select>
 
-          <Button onClick={handleSetMood} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={!selectedMood || isSubmitting}>
+          <Button onClick={handleSetMood} className="w-full" disabled={!selectedMood || isSubmitting}>
             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Set Mood & Go to Chat"}
           </Button>
           <Button onClick={() => router.push('/chat')} className="w-full" variant="outline" disabled={isSubmitting}>

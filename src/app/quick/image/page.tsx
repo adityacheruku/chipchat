@@ -38,20 +38,21 @@ export default function QuickImagePage() {
     }
     if (isAuthenticated && currentUser) {
         setIsLoadingRecipient(true);
-        api.getDefaultChatPartner()
-            .then(partner => {
-                if (partner) {
-                    return api.createOrGetChat(partner.user_id);
-                }
-                throw new Error("Could not find a chat partner.");
-            })
-            .then(chatSession => {
-                setRecipientChat(chatSession);
-            })
-            .catch(err => {
-                toast({variant: 'destructive', title: 'Chat Error', description: err.message || "Could not establish chat session."});
-            })
-            .finally(() => setIsLoadingRecipient(false));
+        // This is a placeholder for getting the user's primary chat partner.
+        // In a real app, this might be a specific API call.
+        if (currentUser.partner_id) {
+            api.createOrGetChat(currentUser.partner_id)
+                .then(chatSession => {
+                    setRecipientChat(chatSession);
+                })
+                .catch(err => {
+                    toast({variant: 'destructive', title: 'Chat Error', description: err.message || "Could not establish chat session."});
+                })
+                .finally(() => setIsLoadingRecipient(false));
+        } else {
+             toast({variant: 'destructive', title: 'No Partner', description: "You don't have a partner to send an image to."});
+             setIsLoadingRecipient(false);
+        }
     }
 
   }, [isAuthLoading, isAuthenticated, currentUser, router, toast]);
@@ -88,9 +89,7 @@ export default function QuickImagePage() {
 
     setIsSubmitting(true);
     try {
-      const uploadRes = await api.uploadChatImage(selectedFile);
-      // After upload, send message via API (or ideally WebSocket if useWebSocket hook was available here)
-      // For simplicity, using HTTP POST. A WebSocket message would be better for real-time.
+      const uploadRes = await api.uploadChatImage(selectedFile, () => {});
       await api.sendMessageHttp(recipientChat.id, { 
         image_url: uploadRes.image_url,
         image_thumbnail_url: uploadRes.image_thumbnail_url,
@@ -125,7 +124,7 @@ export default function QuickImagePage() {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
         <Card className="w-full max-w-md shadow-xl text-center">
-           <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
+           <CardHeader><CardTitle className="text-center">Access Denied</CardTitle></CardHeader>
            <CardContent>
              <p className="text-red-600 py-4">Please log in via the main ChirpChat app.</p>
              <Button onClick={() => router.push('/')} className="w-full" variant="outline">Go to Login</Button>
@@ -143,8 +142,8 @@ export default function QuickImagePage() {
           <div className="flex justify-center mb-4">
             <ImageIcon className="w-16 h-16 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-headline text-primary">Send Mood Image</CardTitle>
-          <CardDescription className="text-muted-foreground">
+          <CardTitle className="text-2xl font-headline text-primary text-center">Send Image</CardTitle>
+          <CardDescription className="text-center">
             {recipientChat ? `Pick an image to share in your chat.` : "Loading chat information..."}
           </CardDescription>
         </CardHeader>
@@ -175,7 +174,7 @@ export default function QuickImagePage() {
             {selectedFile && <p className="text-sm text-muted-foreground">Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</p>}
           </div>
           
-          <Button onClick={handleSendImage} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={!selectedFile || isSubmitting || !recipientChat}>
+          <Button onClick={handleSendImage} className="w-full" disabled={!selectedFile || isSubmitting || !recipientChat}>
             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Send Image"}
           </Button>
           <Button onClick={() => router.push('/chat')} className="w-full" variant="outline" disabled={isSubmitting}>

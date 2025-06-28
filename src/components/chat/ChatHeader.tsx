@@ -68,7 +68,7 @@ function ChatHeader({
     : "Chat";
 
   return (
-    <header className="flex items-center justify-between p-3 sm:p-4 border-b border-border bg-card rounded-t-lg h-16">
+    <header className="flex items-center justify-between p-3 sm:p-4 border-b bg-card rounded-t-lg h-[72px]">
       {/* Left Section: Other User's Avatar */}
       <div className="flex-shrink-0">
         {otherUser ? (
@@ -80,8 +80,8 @@ function ChatHeader({
             <Image 
               src={otherUser.avatar_url || "https://placehold.co/100x100.png"} 
               alt={otherUser.display_name} 
-              width={40} 
-              height={40} 
+              width={44} 
+              height={44} 
               className="rounded-full object-cover"
               data-ai-hint={otherUser['data-ai-hint'] || "person portrait"}
               key={otherUser.avatar_url || otherUser.id} 
@@ -104,7 +104,7 @@ function ChatHeader({
             </TooltipProvider>
           </button>
         ) : (
-          <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
+          <div className="w-11 h-11 bg-muted rounded-full flex items-center justify-center">
             <UserCircle2 size={24} className="text-muted-foreground" />
           </div>
         )}
@@ -115,7 +115,7 @@ function ChatHeader({
       <div className="flex-grow min-w-0 text-center px-2">
         <div className="flex flex-col items-center justify-center">
           <div className="flex items-center space-x-2">
-            <h2 className="font-semibold text-base text-foreground font-headline truncate">{displayNameOrTyping}</h2>
+            <h2 className="font-semibold text-lg text-foreground font-headline truncate">{displayNameOrTyping}</h2>
             {otherUser && isTargetUserBeingThoughtOf && (
               <TooltipProvider>
                 <Tooltip>
@@ -144,7 +144,7 @@ function ChatHeader({
                   href={`tel:${otherUser.phone.replace(/\s|-/g, "")}`}
                   className={cn(
                     buttonVariants({ variant: "ghost", size: "icon" }),
-                    "text-muted-foreground hover:text-green-600 hover:bg-green-600/10 active:bg-green-600/20 rounded-full w-11 h-11"
+                    "text-muted-foreground hover:text-green-600 hover:bg-green-600/10 active:bg-green-600/20 rounded-full"
                   )}
                   aria-label={`Call ${otherUser.display_name}`}
                 >
@@ -165,7 +165,7 @@ function ChatHeader({
                   variant="ghost"
                   size="icon"
                   onClick={onSendThinkingOfYou}
-                  className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 active:bg-red-500/20 rounded-full w-11 h-11"
+                  className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 active:bg-red-500/20 rounded-full"
                   aria-label={`Send ${otherUser.display_name} a "Thinking of You"`}
                   disabled={!otherUser}
                 >
@@ -185,7 +185,7 @@ function ChatHeader({
                       variant="ghost" 
                       size="icon" 
                       onClick={onProfileClick} 
-                      className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full w-11 h-11"
+                      className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full"
                       aria-label="Open your profile and settings"
                     >
                       <UserCircle2 size={22} />
