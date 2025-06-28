@@ -14,15 +14,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { api } from '@/services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Component for the logo, now hidden on large screens where branding is separate
+// Component for the logo
 const Logo = () => (
-    <div className="flex justify-center mb-6 lg:hidden">
-        <Image
-            src="https://placehold.co/256x256.png"
+    <div className="w-full max-w-sm mx-auto">
+        <Image 
+            src="https://placehold.co/400x300.png"
             alt="ChirpChat App Logo"
-            width={80}
-            height={80}
-            className="rounded-2xl object-cover shadow-lg"
+            width={400}
+            height={300}
+            className="rounded-lg object-cover shadow-lg"
             data-ai-hint="app logo"
             priority
         />
@@ -51,22 +51,29 @@ const PasswordStrengthIndicator = ({ strength }: { strength: number }) => {
     );
 };
 
+const BrandSection = () => (
+    <div className="max-w-md">
+      <Logo />
+      <h1 className="text-2xl font-bold mt-8 text-foreground">"One soulmate, infinite moods"</h1>
+      <p className="text-muted-foreground mt-2">speak your heart in a single tap.</p>
+    </div>
+);
 
-// Form components are kept as they are for consistent logic
- const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: any) => (
+// ⚡️ Moved form components outside of the main component to prevent re-rendering on every keystroke
+const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: any) => (
     <form onSubmit={handleSendOtp} className="space-y-4 w-full">
-        <CardHeader className="p-0 mb-6 text-center">
+        <CardHeader className="p-0 mb-6">
             <CardTitle>Create your account</CardTitle>
             <CardDescription>Enter your phone number to begin.</CardDescription>
         </CardHeader>
        <div className="space-y-1">
-           <Label htmlFor="regPhone" className="sr-only">Phone Number</Label>
+           <Label htmlFor="regPhone">Phone Number</Label>
            <div className="relative">
-               <Input id="regPhone" type="tel" placeholder="+12223334444" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required className="pl-10" disabled={loading} autoComplete="tel" />
-               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input id="regPhone" type="tel" placeholder="+12223334444" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="tel" />
+               <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
-       <Button type="submit" className="w-full" disabled={loading}>
+       <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
            {loading ? <Loader2 className="animate-spin" /> : 'Continue'}
        </Button>
    </form>
@@ -74,18 +81,18 @@ const PasswordStrengthIndicator = ({ strength }: { strength: number }) => {
 
  const RegisterOtpStep = ({ handleVerifyOtp, regOtp, setRegOtp, loading, regPhone, setRegisterStep }: any) => (
     <form onSubmit={handleVerifyOtp} className="space-y-4 w-full">
-        <CardHeader className="p-0 mb-6 text-center">
+        <CardHeader className="p-0 mb-6">
             <CardTitle>Verify your phone</CardTitle>
             <CardDescription>We sent a 6-digit code to {regPhone}.</CardDescription>
         </CardHeader>
        <div className="space-y-1">
-           <Label htmlFor="regOtp" className="sr-only">Verification Code</Label>
+           <Label htmlFor="regOtp">Verification Code</Label>
            <div className="relative">
-               <Input id="regOtp" type="text" placeholder="######" value={regOtp} onChange={(e) => setRegOtp(e.target.value)} required className="pl-4 pr-10 tracking-[1em] text-center" disabled={loading} maxLength={6} autoComplete="one-time-code" />
+               <Input id="regOtp" type="text" placeholder="######" value={regOtp} onChange={(e) => setRegOtp(e.target.value)} required className="pl-4 pr-10 tracking-[1em] text-center bg-input" disabled={loading} maxLength={6} autoComplete="one-time-code" />
                <MessageSquareText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
-       <Button type="submit" className="w-full" disabled={loading}>
+       <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
            {loading ? <Loader2 className="animate-spin" /> : 'Verify'}
        </Button>
        <div className="text-center">
@@ -96,30 +103,30 @@ const PasswordStrengthIndicator = ({ strength }: { strength: number }) => {
 
  const RegisterDetailsStep = ({ handleCompleteRegistration, regDisplayName, setRegDisplayName, regPassword, setRegPassword, checkPasswordStrength, passwordStrength, regOptionalEmail, setRegOptionalEmail, agreeToTerms, setAgreeToTerms, loading }: any) => (
     <form onSubmit={handleCompleteRegistration} className="space-y-4 w-full">
-       <CardHeader className="p-0 mb-6 text-center">
+       <CardHeader className="p-0 mb-6">
             <CardTitle>Just a few more details</CardTitle>
             <CardDescription>Your phone number is verified!</CardDescription>
         </CardHeader>
         <div className="space-y-1">
-           <Label htmlFor="displayName" className="sr-only">Display Name</Label>
+           <Label htmlFor="displayName">Display Name</Label>
             <div className="relative">
-               <Input id="displayName" type="text" placeholder="Choose a unique name" value={regDisplayName} onChange={(e) => setRegDisplayName(e.target.value)} required className="pl-10" disabled={loading} autoComplete="name" />
-               <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input id="displayName" type="text" placeholder="Choose a unique name" value={regDisplayName} onChange={(e) => setRegDisplayName(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="name" />
+               <UserIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
        <div className="space-y-1">
-           <Label htmlFor="regPassword" className="sr-only">Password</Label>
+           <Label htmlFor="regPassword">Password</Label>
            <div className="relative">
-               <Input id="regPassword" type="password" placeholder="Create a strong password" value={regPassword} onChange={(e) => {setRegPassword(e.target.value); checkPasswordStrength(e.target.value);}} required className="pl-10" disabled={loading} minLength={8} autoComplete="new-password" />
-               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input id="regPassword" type="password" placeholder="Create a strong password" value={regPassword} onChange={(e) => {setRegPassword(e.target.value); checkPasswordStrength(e.target.value);}} required className="pl-4 pr-10 bg-input" disabled={loading} minLength={8} autoComplete="new-password" />
+               <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
             <PasswordStrengthIndicator strength={passwordStrength} />
        </div>
         <div className="space-y-1">
-           <Label htmlFor="regOptionalEmail" className="sr-only">Email (Optional)</Label>
+           <Label htmlFor="regOptionalEmail">Email (Optional)</Label>
            <div className="relative">
-               <Input id="regOptionalEmail" type="email" placeholder="your@example.com (optional)" value={regOptionalEmail} onChange={(e) => setRegOptionalEmail(e.target.value)} className="pl-10" disabled={loading} autoComplete="email" />
-               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input id="regOptionalEmail" type="email" placeholder="your@example.com" value={regOptionalEmail} onChange={(e) => setRegOptionalEmail(e.target.value)} className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="email" />
+               <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
            </div>
        </div>
        <div className="flex items-center space-x-2">
@@ -128,7 +135,7 @@ const PasswordStrengthIndicator = ({ strength }: { strength: number }) => {
                I agree to the <a href="#" className="underline text-primary hover:text-primary/80">Terms of Service</a> and <a href="#" className="underline text-primary hover:text-primary/80">Privacy Policy</a>.
            </label>
        </div>
-       <Button type="submit" className="w-full" disabled={loading || !agreeToTerms}>
+       <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
            {loading ? <Loader2 className="animate-spin" /> : 'Create Account'}
        </Button>
    </form>
@@ -137,20 +144,20 @@ const PasswordStrengthIndicator = ({ strength }: { strength: number }) => {
  const LoginForm = ({ handleLoginSubmit, loginPhone, setLoginPhone, loginPassword, setLoginPassword, loading }: any) => (
    <form onSubmit={handleLoginSubmit} className="space-y-6 w-full">
      <div className="space-y-1">
-         <Label htmlFor="loginPhone" className="sr-only">Phone Number</Label>
+         <Label htmlFor="loginPhone">Phone Number</Label>
          <div className="relative">
-             <Input id="loginPhone" type="tel" placeholder="+12223334444" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)} required className="pl-10" disabled={loading} autoComplete="tel" />
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+             <Input id="loginPhone" type="tel" placeholder="+12223334444" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="tel" />
+              <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
          </div>
      </div>
      <div className="space-y-1">
-         <Label htmlFor="loginPassword" className="sr-only">Password</Label>
+         <Label htmlFor="loginPassword">Password</Label>
          <div className="relative">
-             <Input id="loginPassword" type="password" placeholder="Enter your password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="pl-10" disabled={loading} autoComplete="current-password" />
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+             <Input id="loginPassword" type="password" placeholder="Enter your password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="pl-4 pr-10 bg-input" disabled={loading} autoComplete="current-password" />
+              <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
          </div>
      </div>
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-base rounded-lg" disabled={loading}>
           {loading ? <Loader2 className="animate-spin" /> : 'Log In'}
      </Button>
    </form>
@@ -164,11 +171,14 @@ export default function AuthPage() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [registerStep, setRegisterStep] = useState<'phone' | 'otp' | 'details'>('phone');
   
+  // Shared state
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Login State
   const [loginPhone, setLoginPhone] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
+  // Register State
   const [regPhone, setRegPhone] = useState('');
   const [regOtp, setRegOtp] = useState('');
   const [regPassword, setRegPassword] = useState('');
@@ -207,6 +217,7 @@ export default function AuthPage() {
     }
   }, [login, loginPhone, loginPassword, toast]);
 
+  // Step 1: Handle sending OTP
   const handleSendOtp = async (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       setIsSubmitting(true);
@@ -221,6 +232,7 @@ export default function AuthPage() {
       }
   };
 
+  // Step 2: Handle verifying OTP
   const handleVerifyOtp = async (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       setIsSubmitting(true);
@@ -236,6 +248,7 @@ export default function AuthPage() {
       }
   };
 
+  // Step 3: Handle final registration
   const handleCompleteRegistration = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!agreeToTerms) {
@@ -272,53 +285,44 @@ export default function AuthPage() {
 
 
   return (
-    <main className="min-h-screen w-full lg:grid lg:grid-cols-2">
-      <div className="hidden lg:flex lg:flex-col items-center justify-center bg-muted/50 p-8 text-center border-r">
-        <Image
-          src="https://placehold.co/400x400.png"
-          alt="ChirpChat App Feature Illustration"
-          width={300}
-          height={300}
-          className="rounded-2xl object-cover shadow-lg mb-8"
-          data-ai-hint="couple chatting"
-          priority
-        />
-        <h1 className="text-3xl font-bold text-foreground">Welcome to ChirpChat</h1>
-        <p className="text-muted-foreground mt-2 max-w-sm">An intimate space, designed for just the two of you to stay emotionally connected.</p>
+    <main className="flex min-h-screen bg-background">
+      <div className="hidden md:flex md:w-1/2 bg-slate-50 dark:bg-zinc-900 items-center justify-center p-12 text-center">
+        <BrandSection />
       </div>
 
-      <div className="flex items-center justify-center p-4">
-        <Card className="w-full max-w-sm border-none sm:border shadow-none sm:shadow-lg">
-            <CardContent className="p-6">
-                <Logo />
-                {authMode === 'register' ? (
-                    <>
-                    {registerStep === 'phone' && <RegisterPhoneStep handleSendOtp={handleSendOtp} regPhone={regPhone} setRegPhone={setRegPhone} loading={loading} />}
-                    {registerStep === 'otp' && <RegisterOtpStep handleVerifyOtp={handleVerifyOtp} regOtp={regOtp} setRegOtp={setRegOtp} loading={loading} regPhone={regPhone} setRegisterStep={setRegisterStep} />}
-                    {registerStep === 'details' && <RegisterDetailsStep handleCompleteRegistration={handleCompleteRegistration} regDisplayName={regDisplayName} setRegDisplayName={setRegDisplayName} regPassword={regPassword} setRegPassword={setRegPassword} checkPasswordStrength={checkPasswordStrength} passwordStrength={passwordStrength} regOptionalEmail={regOptionalEmail} setRegOptionalEmail={setRegOptionalEmail} agreeToTerms={agreeToTerms} setAgreeToTerms={setAgreeToTerms} loading={loading} />}
-                    <p className="text-center text-sm text-muted-foreground mt-6">
-                        Already have an account?{' '}
-                        <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
-                        Log In
-                        </button>
-                    </p>
-                    </>
-                ) : (
-                    <>
-                    <CardHeader className="p-0 mb-6 text-center">
-                        <CardTitle>Welcome Back</CardTitle>
-                    </CardHeader>
-                    <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
-                    <p className="text-center text-sm text-muted-foreground mt-6">
-                        Don't have an account?{' '}
-                        <button type="button" onClick={() => { setAuthMode('register'); setRegisterStep('phone'); }} className="font-semibold text-primary hover:underline focus:outline-none">
-                        Sign Up
-                        </button>
-                    </p>
-                    </>
-                )}
-            </CardContent>
-        </Card>
+      <div className="w-full md:w-1/2 flex items-center justify-center p-6 sm:p-12">
+        <div className="w-full max-w-sm mx-auto">
+          <div className="md:hidden text-center mb-8">
+            <BrandSection />
+          </div>
+
+          {authMode === 'register' ? (
+            <>
+              {registerStep === 'phone' && <RegisterPhoneStep handleSendOtp={handleSendOtp} regPhone={regPhone} setRegPhone={setRegPhone} loading={loading} />}
+              {registerStep === 'otp' && <RegisterOtpStep handleVerifyOtp={handleVerifyOtp} regOtp={regOtp} setRegOtp={setRegOtp} loading={loading} regPhone={regPhone} setRegisterStep={setRegisterStep} />}
+              {registerStep === 'details' && <RegisterDetailsStep handleCompleteRegistration={handleCompleteRegistration} regDisplayName={regDisplayName} setRegDisplayName={setRegDisplayName} regPassword={regPassword} setRegPassword={setRegPassword} checkPasswordStrength={checkPasswordStrength} passwordStrength={passwordStrength} regOptionalEmail={regOptionalEmail} setRegOptionalEmail={setRegOptionalEmail} agreeToTerms={agreeToTerms} setAgreeToTerms={setAgreeToTerms} loading={loading} />}
+              <p className="text-center text-sm mt-6">
+                Already have an account?{' '}
+                <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
+                  Log In
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+               <CardHeader className="p-0 mb-6">
+                    <CardTitle>Welcome Back</CardTitle>
+                </CardHeader>
+              <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
+              <p className="text-center text-sm mt-6">
+                Don't have an account?{' '}
+                <button type="button" onClick={() => { setAuthMode('register'); setRegisterStep('phone'); }} className="font-semibold text-primary hover:underline focus:outline-none">
+                  Sign Up
+                </button>
+              </p>
+            </>
+          )}
+        </div>
       </div>
     </main>
   );
