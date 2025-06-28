@@ -166,6 +166,10 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/chats/messages/${messageId}?chat_id=${chatId}`, { method: 'DELETE', headers: getApiHeaders() });
     await handleResponse<void>(response);
   },
+  clearChatHistory: async (chatId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/chats/${chatId}/clear`, { method: 'POST', headers: getApiHeaders() });
+    await handleResponse<void>(response);
+  },
   uploadChatImage: async (file: File, onProgress: (p: number) => void): Promise<{ image_url: string; image_thumbnail_url: string | null; }> => {
     const fd = new FormData();
     fd.append('file', file);
@@ -236,5 +240,3 @@ export const api = {
     return handleResponse<EventPayload[]>(response);
   },
 };
-
-    

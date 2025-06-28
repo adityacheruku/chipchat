@@ -4,7 +4,7 @@ import { memo } from 'react';
 import type { User } from '@/types';
 import MoodIndicator from './MoodIndicator';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { UserCircle2, Heart, Phone, X, Copy, Share2, Trash2 } from 'lucide-react';
+import { UserCircle2, Heart, Phone, X, Copy, Share2, Trash2, MoreHorizontal } from 'lucide-react';
 import Image from 'next/image';
 import {
   Tooltip,
@@ -12,6 +12,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { cn } from '@/lib/utils';
 import { differenceInDays, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
@@ -29,6 +36,7 @@ interface ChatHeaderProps {
   onCopySelected: () => void;
   onDeleteSelected: () => void;
   onShareSelected: () => void;
+  onClearChat: () => void;
 }
 
 const SelectionActionBar = ({
@@ -80,7 +88,8 @@ function ChatHeader({
   onExitSelectionMode,
   onCopySelected,
   onDeleteSelected,
-  onShareSelected
+  onShareSelected,
+  onClearChat,
 }: ChatHeaderProps) {
     
   let presenceStatusText = otherUser ? `${otherUser.display_name} is offline.` : "";
@@ -194,66 +203,39 @@ function ChatHeader({
 
         {/* Right Section: Action Icons */}
         <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 justify-end">
-          {otherUser && otherUser.phone && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <a
-                    href={`tel:${otherUser.phone.replace(/\s|-/g, "")}`}
-                    className={cn(
-                      buttonVariants({ variant: "ghost", size: "icon" }),
-                      "text-muted-foreground hover:text-green-600 hover:bg-green-600/10 active:bg-green-600/20 rounded-full"
-                    )}
-                    aria-label={`Call ${otherUser.display_name}`}
-                  >
-                    <Phone size={22} />
-                  </a>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Call {otherUser.display_name} ({otherUser.phone})</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          {otherUser && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={onSendThinkingOfYou}
-                    className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 active:bg-red-500/20 rounded-full"
-                    aria-label={`Send ${otherUser.display_name} a "Thinking of You"`}
-                    disabled={!otherUser}
-                  >
-                    <Heart size={22} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Let {otherUser.display_name} know you're thinking of them</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          <TooltipProvider>
-              <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={onProfileClick} 
-                        className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full"
-                        aria-label="Open your profile and settings"
-                      >
-                        <UserCircle2 size={22} />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                      <p>Your Account & Settings</p>
-                  </TooltipContent>
-              </Tooltip>
-          </TooltipProvider>
+           <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                 <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-primary hover:bg-primary/10 active:bg-primary/20 rounded-full"
+                  aria-label="More options"
+                >
+                  <MoreHorizontal size={22} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={onProfileClick}>
+                    <UserCircle2 className="mr-2 h-4 w-4" />
+                    <span>Your Account</span>
+                </DropdownMenuItem>
+                {otherUser?.phone && 
+                    <DropdownMenuItem onSelect={() => window.location.href = `tel:${otherUser.phone?.replace(/\s|-/g, "")}` }>
+                        <Phone className="mr-2 h-4 w-4"/>
+                        <span>Call {otherUser.display_name}</span>
+                    </DropdownMenuItem>
+                }
+                 <DropdownMenuItem onSelect={onSendThinkingOfYou}>
+                    <Heart className="mr-2 h-4 w-4" />
+                    <span>Send "Thinking of You"</span>
+                </DropdownMenuItem>
+                 <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={onClearChat} className="text-destructive focus:text-destructive">
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    <span>Clear Chat For Me</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
         </div>
       </>
       )}
@@ -262,5 +244,3 @@ function ChatHeader({
 }
 
 export default memo(ChatHeader);
-
-    

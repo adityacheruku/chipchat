@@ -295,6 +295,10 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     }
   } catch(e) { console.warn("Could not parse message timestamp:", message.created_at) }
 
+  if (message.message_subtype === 'history_cleared_marker') {
+      return null;
+  }
+
   const renderMessageContent = () => {
     if (message.status === 'uploading') {
       if (message.message_subtype === 'document') {
@@ -529,5 +533,3 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
 }
 
 export default memo(MessageBubble);
-
-    

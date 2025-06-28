@@ -77,32 +77,37 @@ async def delete_message(
     
     return None
 
-@router.delete("/{chat_id}/messages", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_chat_history(
+@router.post("/{chat_id}/clear", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_chat_for_user(
     chat_id: UUID,
     current_user: UserPublic = Depends(get_current_active_user)
 ):
     """
-    Deletes all messages in a given chat. The user must be a participant.
+    Clears the chat history for the current user only by creating a marker message.
     """
-    logger.info(f"User {current_user.id} attempting to clear history for chat {chat_id}")
-
-    # 1. Verify user is a participant of the chat
+    logger.info(f"User {current_user.id} clearing history for chat {chat_id} for themselves.")
+    
+    # Verify user is a participant
     participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
     if not participant_check_resp.data:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant of this chat and cannot clear its history.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant of this chat.")
 
-    # 2. Delete all messages for the chat
-    await db_manager.get_table("messages").delete().eq("chat_id", str(chat_id)).execute()
-    
-    # 3. Update the chat's `updated_at` timestamp (last_message will become null automatically on next fetch)
-    await db_manager.get_table("chats").update({"updated_at": "now()"}).eq("id", str(chat_id)).execute()
+    # Insert a marker message
+    marker_message = {
+        "id": str(uuid.uuid4()),
+        "chat_id": str(chat_id),
+        "user_id": str(current_user.id),
+        "message_subtype": "history_cleared_marker",
+        "text": None,
+        "created_at": "now()",
+        "updated_at": "now()",
+        "reactions": {}
+    }
+    await db_manager.get_table("messages").insert(marker_message).execute()
 
-    # 4. Broadcast an event to all participants to clear their UI
-    await ws_manager.broadcast_chat_history_cleared(str(chat_id))
-    
-    logger.info(f"Successfully cleared history for chat {chat_id} by user {current_user.id}")
+    logger.info(f"History clear marker set for user {current_user.id} in chat {chat_id}.")
     return None
+
 
 @router.post("/", response_model=ChatResponse)
 async def create_chat(chat_create: ChatCreate, current_user: UserPublic = Depends(get_current_active_user)):
@@ -143,10 +148,17 @@ async def get_messages(chat_id: UUID, limit: int = 50, before_timestamp: Optiona
     if not is_participant_resp.data:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant of this chat")
     
+    # Find the last clear marker for the current user in this chat
+    marker_resp = await db_manager.get_table("messages").select("created_at").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).eq("message_subtype", "history_cleared_marker").order("created_at", desc=True).limit(1).maybe_single().execute()
+    
+    marker_timestamp = marker_resp.data['created_at'] if marker_resp.data else None
+
     query = db_manager.get_table("messages").select("*, stickers(image_url)").eq("chat_id", str(chat_id)).order("created_at", desc=True).limit(limit)
     if before_timestamp:
         query = query.lt("created_at", before_timestamp.isoformat())
-    
+    if marker_timestamp:
+        query = query.gt("created_at", marker_timestamp)
+
     messages_resp = await query.execute()
     
     messages_data_list = messages_resp.data or []
@@ -236,5 +248,3 @@ async def react_to_message(message_id: UUID, reaction_toggle: ReactionToggle, cu
 
     await ws_manager.broadcast_reaction_update(chat_id_str, message_for_response)
     return message_for_response
-
-    

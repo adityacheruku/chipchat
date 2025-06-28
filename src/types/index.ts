@@ -28,7 +28,7 @@ export interface UserInToken extends User {}
 
 export type MessageClipType = 'audio' | 'video';
 export type MessageStatus = "uploading" | "sending" | "sent" | "delivered" | "read" | "failed";
-export type MessageSubtype = 'text' | 'sticker' | 'clip' | 'image' | 'document' | 'voice_message' | 'emoji_only';
+export type MessageSubtype = 'text' | 'sticker' | 'clip' | 'image' | 'document' | 'voice_message' | 'emoji_only' | 'history_cleared_marker';
 export type MessageMode = 'normal' | 'fight' | 'incognito';
 export type DeleteType = 'me' | 'everyone';
 
@@ -101,5 +101,3 @@ export interface StickerListResponse { stickers: Sticker[]; }
 export interface PushSubscriptionJSON { endpoint: string; expirationTime?: number | null; keys: { p256dh: string; auth: string; }; }
 export interface NotificationSettings { user_id: string; messages: boolean; mood_updates: boolean; thinking_of_you: boolean; voice_messages: boolean; media_sharing: boolean; quiet_hours_enabled: boolean; quiet_hours_start: string | null; quiet_hours_end: string | null; quiet_hours_weekdays_only: boolean; timezone: string; }
 export interface PartnerRequest { id: string; sender: User; recipient: User; status: 'pending' | 'accepted' | 'rejected' | 'cancelled'; created_at: string; }
-
-    
