@@ -10,6 +10,7 @@ from app.middleware.logging import LoggingMiddleware
 from app.websocket import manager as ws_manager
 from app.utils.logging import logger
 from app.redis_client import redis_manager
+from app.config import settings
 
 from app.auth.routes import auth_router, user_router
 from app.chat.routes import router as chat_router
@@ -29,10 +30,23 @@ app = FastAPI(
 
 Instrumentator(excluded_handlers=["/metrics", "/health"]).instrument(app).expose(app)
 
-origins = [
-    "http://localhost:3000", "http://localhost:9002", "capacitor://localhost", "http://localhost",
-    "https://d87c-49-43-230-78.ngrok-free.app", "https://chipchat.vercel.app",
-]
+# Conditionally configure CORS based on the environment
+if settings.ENVIRONMENT == "development":
+    logger.info("Running in development mode, allowing all origins for CORS.")
+    origins_config = {"allow_origins": ["*"]}
+else:
+    # Use a strict list for production
+    origins_config = {
+        "allow_origins": [
+            "http://localhost:3000",
+            "http://localhost:9002",
+            "capacitor://localhost",
+            "http://localhost",
+            "https://chipchat.vercel.app", # Example production domain
+        ],
+        "allow_origin_regex": r"https?:\/\/.*\.vercel\.app"
+    }
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -41,8 +55,7 @@ async def startup_event():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_origin_regex=r"https?:\/\/.*\.vercel\.app",
+    **origins_config,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
