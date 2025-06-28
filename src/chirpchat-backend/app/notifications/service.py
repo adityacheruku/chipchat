@@ -3,7 +3,7 @@ import json
 from uuid import UUID
 from pywebpush import webpush, WebPushException
 from typing import List, Optional
-from datetime import datetime, time
+from datetime import datetime
 import pytz
 
 from app.config import settings
@@ -23,7 +23,7 @@ class NotificationService:
     async def _get_active_subscriptions(self, user_id: UUID) -> List[dict]:
         try:
             resp = await db_manager.admin_client.table("push_subscriptions").select("*").eq("user_id", str(user_id)).eq("is_active", True).execute()
-            return resp.data if resp.data else []
+            return resp.data or []
         except Exception as e:
             logger.error(f"Error fetching subscriptions for user {user_id}: {e}")
             return []
@@ -37,91 +37,54 @@ class NotificationService:
             return None
 
     def _is_in_quiet_hours(self, settings_data: dict) -> bool:
-        if not settings_data.get("quiet_hours_enabled"):
-            return False
-
+        if not settings_data.get("quiet_hours_enabled"): return False
         tz_str = settings_data.get("timezone", "UTC")
         try:
             user_tz = pytz.timezone(tz_str)
         except pytz.UnknownTimeZoneError:
-            logger.warning(f"Unknown timezone '{tz_str}', defaulting to UTC.")
             user_tz = pytz.utc
         
         now_user_time = datetime.now(user_tz)
-        
         q_start_str = settings_data.get("quiet_hours_start")
         q_end_str = settings_data.get("quiet_hours_end")
-
-        if not q_start_str or not q_end_str:
-            return False
+        if not q_start_str or not q_end_str: return False
         
         q_start = datetime.strptime(q_start_str, '%H:%M:%S').time()
         q_end = datetime.strptime(q_end_str, '%H:%M:%S').time()
 
-        if settings_data.get("quiet_hours_weekdays_only") and now_user_time.weekday() >= 5: # 5=Sat, 6=Sun
-            return False
-
+        if settings_data.get("quiet_hours_weekdays_only") and now_user_time.weekday() >= 5: return False
         current_time = now_user_time.time()
-
-        if q_start <= q_end:
-            return q_start <= current_time <= q_end
-        else: # Overnight case (e.g., 22:00 to 08:00)
-            return current_time >= q_start or current_time <= q_end
+        if q_start <= q_end: return q_start <= current_time <= q_end
+        else: return current_time >= q_start or current_time <= q_end
 
     def _send_web_push(self, subscription_info: dict, payload: str):
-        sub_info_for_webpush = {
-            "endpoint": subscription_info["endpoint"],
-            "keys": {
-                "p256dh": subscription_info["p256dh_key"],
-                "auth": subscription_info["auth_key"],
-            },
-        }
+        sub_info_for_webpush = {"endpoint": subscription_info["endpoint"], "keys": {"p256dh": subscription_info["p256dh_key"], "auth": subscription_info["auth_key"]}}
         try:
-            webpush(
-                subscription_info=sub_info_for_webpush,
-                data=payload,
-                vapid_private_key=self.vapid_private_key,
-                vapid_claims={"sub": self.vapid_admin_email},
-            )
-            logger.info(f"Successfully sent push notification to endpoint: {subscription_info['endpoint']}")
+            webpush(subscription_info=sub_info_for_webpush, data=payload, vapid_private_key=self.vapid_private_key, vapid_claims={"sub": self.vapid_admin_email})
         except WebPushException as ex:
             logger.error(f"WebPushException for endpoint {subscription_info['endpoint']}: {ex}")
-            # Handle different exceptions, e.g., if subscription is expired (410), mark as inactive in DB.
             if ex.response and ex.response.status_code == 410:
                 logger.info(f"Subscription expired for endpoint {subscription_info['endpoint']}. Deactivating.")
-                # You might want to create a task to mark it as inactive
-                # await db_manager.admin_client.table("push_subscriptions").update({"is_active": False}).eq("endpoint", subscription_info["endpoint"]).execute()
         except Exception as e:
             logger.error(f"Generic error sending push to {subscription_info['endpoint']}: {e}")
 
     async def _send_notification_to_user(self, user_id: UUID, notification_type: str, payload_data: dict):
-        if not self.is_configured():
-            logger.warning("VAPID keys not configured. Skipping push notification.")
-            return
-
+        if not self.is_configured(): return
         settings = await self._get_user_notification_settings(user_id)
-        if not settings or not settings.get(notification_type, False):
-            logger.info(f"Notification type '{notification_type}' disabled for user {user_id}. Skipping.")
-            return
-
-        if self._is_in_quiet_hours(settings):
-            logger.info(f"User {user_id} is in quiet hours. Skipping notification.")
-            return
+        if not settings or not settings.get(notification_type, False): return
+        if self._is_in_quiet_hours(settings): return
         
         subscriptions = await self._get_active_subscriptions(user_id)
-        if not subscriptions:
-            logger.info(f"No active push subscriptions found for user {user_id}.")
-            return
+        if not subscriptions: return
             
         payload_json = json.dumps(payload_data)
-        
         for sub in subscriptions:
             self._send_web_push(sub, payload_json)
     
     async def _get_recipients_for_chat(self, chat_id: UUID, exclude_user_id: UUID) -> List[UUID]:
         try:
-            resp = db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).neq("user_id", str(exclude_user_id)).execute()
-            return [UUID(row['user_id']) for row in resp.data] if resp.data else []
+            resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).neq("user_id", str(exclude_user_id)).execute()
+            return [UUID(row['user_id']) for row in resp.data]
         except Exception as e:
             logger.error(f"Error fetching recipients for chat {chat_id}: {e}")
             return []
@@ -133,58 +96,25 @@ class NotificationService:
         if subtype == "document": return f"{sender_name} sent a document: {message.document_name or 'file'}."
         if subtype == "voice_message": return f"{sender_name} sent you a voice message."
         if subtype == "clip": return f"{sender_name} sent you a {message.clip_type} clip."
-        if message.text: return message.text[:100] # Truncate text
+        if message.text: return message.text[:100]
         return "You have a new message."
 
     async def send_new_message_notification(self, sender: UserPublic, chat_id: UUID, message: MessageInDB):
         recipients = await self._get_recipients_for_chat(chat_id, sender.id)
-        
         notification_body = self._get_message_notification_text(sender.display_name, message)
-        
-        payload = {
-            "type": "message",
-            "title": f"New message from {sender.display_name}",
-            "options": {
-                "body": notification_body,
-                "icon": sender.avatar_url or "/icons/icon-192x192.png",
-                "badge": "/icons/badge-96x96.png",
-                "tag": f"conversation-{chat_id}",
-                "data": {"conversationId": str(chat_id)}
-            }
-        }
-        
+        payload = {"type": "message", "title": f"New message from {sender.display_name}", "options": {"body": notification_body, "icon": sender.avatar_url or "/icons/icon-192x192.png", "badge": "/icons/badge-96x96.png", "tag": f"conversation-{chat_id}", "data": {"conversationId": str(chat_id)}}}
         for recipient_id in recipients:
             await self._send_notification_to_user(recipient_id, "messages", payload)
 
     async def send_mood_change_notification(self, user: UserPublic, new_mood: str):
-        recipients = await self._get_recipients_for_chat(None, user.id) # This needs a way to find all partners
-        
-        payload = {
-            "type": "mood_update",
-            "title": f"{user.display_name} has updated their mood!",
-            "options": {
-                "body": f"They are now feeling: {new_mood}",
-                "icon": user.avatar_url,
-                "tag": f"mood-{user.id}"
-            }
-        }
-        # In a real app, you'd fetch all chat partners of the user. For now, this is a placeholder.
-        # for recipient_id in recipients:
-        #     await self._send_notification_to_user(recipient_id, "mood_updates", payload)
+        if not user.partner_id: return
+        payload = {"type": "mood_update", "title": f"{user.display_name} has updated their mood!", "options": {"body": f"They are now feeling: {new_mood}", "icon": user.avatar_url, "tag": f"mood-{user.id}"}}
+        await self._send_notification_to_user(user.partner_id, "mood_updates", payload)
 
     async def send_thinking_of_you_notification(self, sender: UserPublic, recipient_id: UUID):
-         payload = {
-            "type": "thinking_of_you",
-            "title": f"{sender.display_name} is thinking of you!",
-            "options": {
-                "body": "Send a thought back from the app.",
-                "icon": sender.avatar_url,
-                "badge": "/icons/badge-96x96.png",
-                "tag": f"ping-{sender.id}-{recipient_id}",
-                 "data": {"senderId": str(sender.id)}
-            }
-        }
+         payload = {"type": "thinking_of_you", "title": f"{sender.display_name} is thinking of you!", "options": {"body": "Send a thought back from the app.", "icon": sender.avatar_url, "badge": "/icons/badge-96x96.png", "tag": f"ping-{sender.id}-{recipient_id}", "data": {"senderId": str(sender.id)}}}
          await self._send_notification_to_user(recipient_id, "thinking_of_you", payload)
 
-# Singleton instance
 notification_service = NotificationService()
+
+    
