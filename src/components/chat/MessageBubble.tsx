@@ -7,7 +7,8 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Loader2, Eye, FileEdit } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Loader2, Eye, FileEdit, Mic } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Tooltip,
   TooltipContent,
@@ -54,10 +55,10 @@ function formatDuration(seconds: number | null | undefined): string {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
-const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string; initialDuration: number | null | undefined, isCurrentUser: boolean }) => {
+const AudioPlayer = memo(({ message, sender, isCurrentUser }: { message: Message; sender: User; isCurrentUser: boolean; }) => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [duration, setDuration] = useState(initialDuration || 0);
+    const [duration, setDuration] = useState(message.duration_seconds || 0);
     const [currentTime, setCurrentTime] = useState(0);
     const [hasBeenPlayed, setHasBeenPlayed] = useState(false);
     const [hasError, setHasError] = useState(false);
@@ -69,7 +70,6 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
         if (isPlaying) {
             audioRef.current.pause();
         } else {
-            // Dispatch a global event to pause other players
             const playEvent = new CustomEvent('audio-play', { detail: { player: audioRef.current } });
             document.dispatchEvent(playEvent);
             audioRef.current.play().catch(e => {
@@ -103,7 +103,11 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
         };
 
         const updateTime = () => setCurrentTime(audio.currentTime);
-        const updateDuration = () => setDuration(audio.duration);
+        const updateDuration = () => {
+            if (!isNaN(audio.duration) && isFinite(audio.duration)) {
+                setDuration(audio.duration);
+            }
+        }
         const handleEnd = () => setIsPlaying(false);
         const handleError = () => { setHasError(true); toast({ variant: "destructive", title: "Playback Error" }); };
 
@@ -121,32 +125,62 @@ const AudioPlayer = memo(({ src, initialDuration, isCurrentUser }: { src: string
             document.removeEventListener('audio-play', handleGlobalPlay);
         };
     }, [toast]);
+    
+    let formattedTime = "sending...";
+    try {
+        if (message.created_at && message.status !== 'sending' && message.status !== 'uploading') {
+            formattedTime = format(parseISO(message.created_at), 'p');
+        }
+    } catch(e) { console.warn("Could not parse message timestamp:", message.created_at) }
 
     const playerColorClass = isCurrentUser ? 'text-primary-foreground' : 'text-secondary-foreground';
+    const sliderThumbClass = isCurrentUser ? '[&>span]:bg-primary-foreground' : '[&>span]:bg-primary';
+    const sliderTrackClass = isCurrentUser ? 'bg-primary-foreground/30' : 'bg-secondary-foreground/30';
+    const sliderRangeClass = isCurrentUser ? 'bg-primary-foreground' : 'bg-secondary-foreground';
+    const micIndicatorBg = isCurrentUser ? 'bg-background' : 'bg-green-500';
+    const micIndicatorIcon = isCurrentUser ? 'text-primary' : 'text-white';
     
-    if (hasError) return <div className={cn("flex items-center gap-2", isCurrentUser ? "text-red-300" : "text-red-500")}><AlertTriangle size={18} /><span className="text-sm">Audio error</span></div>;
+    if (hasError) return <div className={cn("flex items-center gap-2 p-2", isCurrentUser ? "text-red-300" : "text-red-500")}><AlertTriangle size={18} /><span className="text-sm">Audio error</span></div>;
 
     return (
-        <div className={cn("flex items-center gap-3 w-full max-w-[250px]", playerColorClass)}>
-            <audio ref={audioRef} src={src} preload="metadata" />
-            <div className="relative">
-                <Button variant="ghost" size="icon" onClick={handlePlayPause} className={cn("w-11 h-11 rounded-full", isCurrentUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-secondary-foreground/20')} aria-label={isPlaying ? "Pause voice message" : "Play voice message"}>
-                    {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-                </Button>
-                 {!hasBeenPlayed && <span className="absolute -top-1 -right-1 block h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>}
+        <div className={cn("flex items-center gap-2 p-2 w-full max-w-[250px] sm:max-w-xs", playerColorClass)}>
+            <audio ref={audioRef} src={message.clip_url!} preload="metadata" />
+            <div className="relative flex-shrink-0">
+                <Avatar className="w-10 h-10">
+                    <AvatarImage src={sender.avatar_url || undefined} alt={sender.display_name} />
+                    <AvatarFallback>{sender.display_name.charAt(0)}</AvatarFallback>
+                </Avatar>
+                {!hasBeenPlayed && !isCurrentUser && (
+                  <div className={cn("absolute bottom-[-2px] right-[-2px] w-4 h-4 rounded-full flex items-center justify-center border-2", isCurrentUser ? "border-primary" : "border-secondary", micIndicatorBg)}>
+                    <Mic size={10} className={micIndicatorIcon} />
+                  </div>
+                )}
             </div>
-            <div className="flex-grow flex flex-col justify-center gap-1">
+
+            <Button variant="ghost" size="icon" onClick={handlePlayPause} className={cn("w-10 h-10 rounded-full flex-shrink-0", isCurrentUser ? 'hover:bg-white/20' : 'hover:bg-black/10')} aria-label={isPlaying ? "Pause voice message" : "Play voice message"}>
+                {isPlaying ? <Pause size={20} className={playerColorClass} /> : <Play size={20} className={cn("ml-0.5", playerColorClass)} />}
+            </Button>
+            
+            <div className="flex-grow flex flex-col justify-center gap-1.5 w-full">
                  <Slider
                     value={[currentTime]}
                     max={duration || 1}
                     step={0.1}
                     onValueChange={handleSeek}
-                    className={cn(isCurrentUser && "[&>div>span]:bg-primary-foreground")}
+                    className="w-full h-1"
+                    classNames={{
+                      track: cn('h-1', sliderTrackClass),
+                      range: cn('h-1', sliderRangeClass),
+                      thumb: cn('h-3 w-3', sliderThumbClass)
+                    }}
                     aria-label="Seek audio"
                  />
-                 <div className="text-xs opacity-80 text-right">
-                     {formatDuration(isPlaying ? currentTime : duration)}
-                 </div>
+                 <span className="text-xs opacity-70">{formatDuration(duration)}</span>
+            </div>
+
+            <div className="self-end text-xs opacity-70 whitespace-nowrap pl-2 flex items-center">
+                <span>{formattedTime}</span>
+                {isCurrentUser && <MessageStatusIndicator status={message.status} />}
             </div>
         </div>
     );
@@ -206,12 +240,10 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const doubleTapEvents = useDoubleTap(handleDoubleTap, 300);
   
   const handleBubbleClick = (e: React.MouseEvent) => {
-    // If swipe or long press is happening, don't trigger click
     if (swipeHandlers.isSwiping() || longPressHandlers.isLongPressing()) {
       e.preventDefault();
       return;
     }
-    // Handle single tap actions
     if (message.message_subtype === 'image' && message.image_url && message.status !== 'failed') {
         onShowMedia(message.image_url, 'image');
     } else if (message.message_subtype === 'document' && message.document_url && message.status !== 'failed') {
@@ -292,7 +324,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
     
     switch (message.message_subtype) {
       case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized loading="lazy" /> : null;
-      case 'voice_message': return message.clip_url ? <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
+      case 'voice_message': return message.clip_url ? <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
       case 'image':
         if (message.status === 'failed') {
           return (
@@ -352,6 +384,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image' && message.message_subtype !== 'document';
   const reactionsDisabled = message.mode === 'incognito';
   const swipeDisabled = isMediaBubble;
+  const isVoiceMessage = message.message_subtype === 'voice_message';
 
   return (
     <div
@@ -392,6 +425,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                   className={cn(
                     'relative rounded-xl shadow-md transition-transform active:scale-95',
                     isMediaBubble || message.message_subtype === 'document' ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
+                    isVoiceMessage && cn(bubbleColorClass, 'p-0'),
                     !isMediaBubble && message.message_subtype !== 'document' && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
                     !isMediaBubble && message.message_subtype !== 'document' && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
                     message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80',
@@ -422,45 +456,47 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             </DropdownMenu>
           </div>
         </div>
+        
+        {!isVoiceMessage && (
+            <div className={cn('pt-1', isCurrentUser ? 'pr-2' : 'pl-2')}>
+            {!reactionsDisabled && message.reactions && Object.keys(message.reactions).length > 0 && (
+                <div className={cn("flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
+                {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
+                    const reactors = message.reactions?.[emoji];
+                    if (!reactors || reactors.length === 0) return null;
+                    const currentUserReacted = reactors.includes(currentUserId);
+                    return (
+                    <TooltipProvider key={emoji} delayDuration={100}>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button onClick={() => onShowReactions(message, allUsers)} className={cn("text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-all", currentUserReacted ? "bg-accent text-accent-foreground border-accent/80" : "bg-card/50 border-border hover:bg-muted")}>
+                            <span>{emoji}</span>
+                            <span className="font-medium">{reactors.length}</span>
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>{getReactorNames(reactors)}</p></TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    );
+                })}
+                </div>
+            )}
 
-        <div className={cn('pt-1', isCurrentUser ? 'pr-2' : 'pl-2')}>
-          {!reactionsDisabled && message.reactions && Object.keys(message.reactions).length > 0 && (
-              <div className={cn("flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
-              {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
-                  const reactors = message.reactions?.[emoji];
-                  if (!reactors || reactors.length === 0) return null;
-                  const currentUserReacted = reactors.includes(currentUserId);
-                  return (
-                  <TooltipProvider key={emoji} delayDuration={100}>
-                      <Tooltip>
-                      <TooltipTrigger asChild>
-                          <button onClick={() => onShowReactions(message, allUsers)} className={cn("text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-all", currentUserReacted ? "bg-accent text-accent-foreground border-accent/80" : "bg-card/50 border-border hover:bg-muted")}>
-                          <span>{emoji}</span>
-                          <span className="font-medium">{reactors.length}</span>
-                          </button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>{getReactorNames(reactors)}</p></TooltipContent>
-                      </Tooltip>
-                  </TooltipProvider>
-                  );
-              })}
-              </div>
-          )}
-
-          <div className={cn('text-xs text-muted-foreground mt-0.5 cursor-default flex items-center', isCurrentUser ? 'justify-end' : 'justify-start')}>
-              {showRetry && (
-                  <div className="text-destructive flex items-center mr-2">
-                      <span>Failed to send.</span>
-                      <Button variant="link" size="sm" onClick={() => handleRetry(message)} className="h-auto p-1 text-destructive hover:underline">
-                          <RefreshCw className="mr-1 h-3 w-3" />
-                          Retry
-                      </Button>
-                  </div>
-              )}
-              <span>{formattedTime}</span>
-              {isCurrentUser && <MessageStatusIndicator status={message.status} />}
-          </div>
-        </div>
+            <div className={cn('text-xs text-muted-foreground mt-0.5 cursor-default flex items-center', isCurrentUser ? 'justify-end' : 'justify-start')}>
+                {showRetry && (
+                    <div className="text-destructive flex items-center mr-2">
+                        <span>Failed to send.</span>
+                        <Button variant="link" size="sm" onClick={() => handleRetry(message)} className="h-auto p-1 text-destructive hover:underline">
+                            <RefreshCw className="mr-1 h-3 w-3" />
+                            Retry
+                        </Button>
+                    </div>
+                )}
+                <span>{formattedTime}</span>
+                {isCurrentUser && <MessageStatusIndicator status={message.status} />}
+            </div>
+            </div>
+        )}
         <DeleteMessageDialog 
           isOpen={isDeleteDialogOpen}
           onClose={() => setIsDeleteDialogOpen(false)}
