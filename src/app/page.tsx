@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, type FormEvent, useCallback } from 'react';
@@ -13,9 +14,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { api } from '@/services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Component for the logo
+// Component for the logo, now hidden on large screens where branding is separate
 const Logo = () => (
-    <div className="flex justify-center mb-6">
+    <div className="flex justify-center mb-6 lg:hidden">
         <Image
             src="https://placehold.co/256x256.png"
             alt="ChirpChat App Logo"
@@ -51,7 +52,7 @@ const PasswordStrengthIndicator = ({ strength }: { strength: number }) => {
 };
 
 
-// Moved form components outside of the main component to prevent re-rendering on every keystroke
+// Form components are kept as they are for consistent logic
  const RegisterPhoneStep = ({ handleSendOtp, regPhone, setRegPhone, loading }: any) => (
     <form onSubmit={handleSendOtp} className="space-y-4 w-full">
         <CardHeader className="p-0 mb-6 text-center">
@@ -163,14 +164,11 @@ export default function AuthPage() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [registerStep, setRegisterStep] = useState<'phone' | 'otp' | 'details'>('phone');
   
-  // Shared state
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Login State
   const [loginPhone, setLoginPhone] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Register State
   const [regPhone, setRegPhone] = useState('');
   const [regOtp, setRegOtp] = useState('');
   const [regPassword, setRegPassword] = useState('');
@@ -209,7 +207,6 @@ export default function AuthPage() {
     }
   }, [login, loginPhone, loginPassword, toast]);
 
-  // Step 1: Handle sending OTP
   const handleSendOtp = async (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       setIsSubmitting(true);
@@ -224,7 +221,6 @@ export default function AuthPage() {
       }
   };
 
-  // Step 2: Handle verifying OTP
   const handleVerifyOtp = async (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       setIsSubmitting(true);
@@ -240,7 +236,6 @@ export default function AuthPage() {
       }
   };
 
-  // Step 3: Handle final registration
   const handleCompleteRegistration = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!agreeToTerms) {
@@ -277,38 +272,55 @@ export default function AuthPage() {
 
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
-      <Card className="w-full max-w-sm">
-        <CardContent className="p-6">
-          <Logo />
-          {authMode === 'register' ? (
-            <>
-              {registerStep === 'phone' && <RegisterPhoneStep handleSendOtp={handleSendOtp} regPhone={regPhone} setRegPhone={setRegPhone} loading={loading} />}
-              {registerStep === 'otp' && <RegisterOtpStep handleVerifyOtp={handleVerifyOtp} regOtp={regOtp} setRegOtp={setRegOtp} loading={loading} regPhone={regPhone} setRegisterStep={setRegisterStep} />}
-              {registerStep === 'details' && <RegisterDetailsStep handleCompleteRegistration={handleCompleteRegistration} regDisplayName={regDisplayName} setRegDisplayName={setRegDisplayName} regPassword={regPassword} setRegPassword={setRegPassword} checkPasswordStrength={checkPasswordStrength} passwordStrength={passwordStrength} regOptionalEmail={regOptionalEmail} setRegOptionalEmail={setRegOptionalEmail} agreeToTerms={agreeToTerms} setAgreeToTerms={setAgreeToTerms} loading={loading} />}
-              <p className="text-center text-sm text-muted-foreground mt-6">
-                Already have an account?{' '}
-                <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
-                  Log In
-                </button>
-              </p>
-            </>
-          ) : (
-            <>
-              <CardHeader className="p-0 mb-6 text-center">
-                  <CardTitle>Welcome Back</CardTitle>
-              </CardHeader>
-              <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
-              <p className="text-center text-sm text-muted-foreground mt-6">
-                Don't have an account?{' '}
-                <button type="button" onClick={() => { setAuthMode('register'); setRegisterStep('phone'); }} className="font-semibold text-primary hover:underline focus:outline-none">
-                  Sign Up
-                </button>
-              </p>
-            </>
-          )}
-        </CardContent>
-      </Card>
+    <main className="min-h-screen w-full lg:grid lg:grid-cols-2">
+      <div className="hidden lg:flex lg:flex-col items-center justify-center bg-muted/50 p-8 text-center border-r">
+        <Image
+          src="https://placehold.co/400x400.png"
+          alt="ChirpChat App Feature Illustration"
+          width={300}
+          height={300}
+          className="rounded-2xl object-cover shadow-lg mb-8"
+          data-ai-hint="couple chatting"
+          priority
+        />
+        <h1 className="text-3xl font-bold text-foreground">Welcome to ChirpChat</h1>
+        <p className="text-muted-foreground mt-2 max-w-sm">An intimate space, designed for just the two of you to stay emotionally connected.</p>
+      </div>
+
+      <div className="flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm border-none sm:border shadow-none sm:shadow-lg">
+            <CardContent className="p-6">
+                <Logo />
+                {authMode === 'register' ? (
+                    <>
+                    {registerStep === 'phone' && <RegisterPhoneStep handleSendOtp={handleSendOtp} regPhone={regPhone} setRegPhone={setRegPhone} loading={loading} />}
+                    {registerStep === 'otp' && <RegisterOtpStep handleVerifyOtp={handleVerifyOtp} regOtp={regOtp} setRegOtp={setRegOtp} loading={loading} regPhone={regPhone} setRegisterStep={setRegisterStep} />}
+                    {registerStep === 'details' && <RegisterDetailsStep handleCompleteRegistration={handleCompleteRegistration} regDisplayName={regDisplayName} setRegDisplayName={setRegDisplayName} regPassword={regPassword} setRegPassword={setRegPassword} checkPasswordStrength={checkPasswordStrength} passwordStrength={passwordStrength} regOptionalEmail={regOptionalEmail} setRegOptionalEmail={setRegOptionalEmail} agreeToTerms={agreeToTerms} setAgreeToTerms={setAgreeToTerms} loading={loading} />}
+                    <p className="text-center text-sm text-muted-foreground mt-6">
+                        Already have an account?{' '}
+                        <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
+                        Log In
+                        </button>
+                    </p>
+                    </>
+                ) : (
+                    <>
+                    <CardHeader className="p-0 mb-6 text-center">
+                        <CardTitle>Welcome Back</CardTitle>
+                    </CardHeader>
+                    <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
+                    <p className="text-center text-sm text-muted-foreground mt-6">
+                        Don't have an account?{' '}
+                        <button type="button" onClick={() => { setAuthMode('register'); setRegisterStep('phone'); }} className="font-semibold text-primary hover:underline focus:outline-none">
+                        Sign Up
+                        </button>
+                    </p>
+                    </>
+                )}
+            </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }
+
