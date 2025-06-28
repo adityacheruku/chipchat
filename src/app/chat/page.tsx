@@ -5,10 +5,10 @@ import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayo
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import dynamic from 'next/dynamic';
-import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData, ChatHistoryClearedEventData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
-import { useMoodSuggestion } from '@/hooks/useMoodSuggestion';
+import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { THINKING_OF_YOU_DURATION, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
@@ -99,6 +99,13 @@ export default function ChatPage() {
   const handleMessageDeleted = useCallback((data: MessageDeletedEventData) => {
     setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
   }, []);
+  
+  const handleChatHistoryCleared = useCallback((data: ChatHistoryClearedEventData) => {
+    if (activeChat?.id === data.chat_id) {
+        setMessages([]);
+        toast({ title: "Chat History Cleared", description: "All messages in this chat have been deleted." });
+    }
+  }, [activeChat, toast]);
 
   const handleReactionUpdate = useCallback((data: MessageReactionUpdateEventData) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), []);
   const handlePresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : prev), []);
@@ -110,7 +117,8 @@ export default function ChatPage() {
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     onMessageReceived: handleNewMessage, onReactionUpdate: handleReactionUpdate, onPresenceUpdate: handlePresenceUpdate,
     onTypingUpdate: handleTypingUpdate, onThinkingOfYouReceived: handleThinkingOfYou, onUserProfileUpdate: handleProfileUpdate,
-    onMessageAck: handleMessageAck, onChatModeChanged: handleChatModeChanged, onMessageDeleted: handleMessageDeleted
+    onMessageAck: handleMessageAck, onChatModeChanged: handleChatModeChanged, onMessageDeleted: handleMessageDeleted,
+    onChatHistoryCleared: handleChatHistoryCleared
   });
 
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast });

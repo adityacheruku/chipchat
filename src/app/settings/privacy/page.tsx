@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,10 +12,11 @@ import { Input } from '@/components/ui/input';
 import { Loader2, ChevronRight, Trash2, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import SettingsHeader from '@/components/settings/SettingsHeader';
+import { api } from '@/services/api';
 
-const SettingsItemButton = ({ children, onClick, destructive=false }: { children: React.ReactNode, onClick?: () => void, destructive?: boolean }) => {
+const SettingsItemButton = ({ children, onClick, destructive=false, ...props }: { children: React.ReactNode, onClick?: () => void, destructive?: boolean, disabled?: boolean }) => {
     return (
-         <button onClick={onClick} className={`flex items-center justify-between py-3 w-full text-left hover:bg-muted/50 -mx-4 px-4 rounded-lg ${destructive ? 'text-destructive hover:bg-destructive/10' : ''}`}>
+         <button onClick={onClick} className={`flex items-center justify-between py-3 w-full text-left hover:bg-muted/50 -mx-4 px-4 rounded-lg ${destructive ? 'text-destructive hover:bg-destructive/10' : ''} disabled:opacity-50 disabled:cursor-not-allowed`} {...props}>
             {children}
         </button>
     );
@@ -30,10 +32,40 @@ export default function PrivacySettingsPage() {
     const [readReceipts, setReadReceipts] = useState(true);
     const [aiSuggestions, setAiSuggestions] = useState(true);
     
+    const [isClearingChat, setIsClearingChat] = useState(false);
+    const [chatId, setChatId] = useState<string | null>(null);
+    
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [reAuthPassword, setReAuthPassword] = useState('');
     const [isReAuthModalOpen, setIsReAuthModalOpen] = useState(false);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    
+    useEffect(() => {
+        if (currentUser?.partner_id) {
+            api.createOrGetChat(currentUser.partner_id)
+                .then(chat => setChatId(chat.id))
+                .catch(err => {
+                    console.error("Failed to get chat for clearing history:", err);
+                    toast({ variant: 'destructive', title: 'Error', description: 'Could not load chat details.' });
+                });
+        }
+    }, [currentUser, toast]);
+
+    const handleClearHistory = async () => {
+        if (!chatId) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not find a chat to clear.' });
+            return;
+        }
+        setIsClearingChat(true);
+        try {
+            await api.clearChatHistory(chatId);
+            toast({ title: "Chat History Cleared", description: "Your messages have been permanently deleted." });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Error', description: `Failed to clear history: ${error.message}` });
+        } finally {
+            setIsClearingChat(false);
+        }
+    };
 
     const handleFinalDeleteAccount = () => {
         console.log("Final account deletion initiated. Password:", reAuthPassword);
@@ -63,17 +95,20 @@ export default function PrivacySettingsPage() {
                         </SettingsItem>
                          <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <SettingsItemButton>
-                                    <div className="font-medium flex items-center gap-2"><Trash2/> Clear Chat History</div>
+                                 <SettingsItemButton disabled={!chatId || isClearingChat}>
+                                    <div className="font-medium flex items-center gap-2">
+                                        {isClearingChat ? <Loader2 className="animate-spin h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+                                        Clear Chat History
+                                    </div>
                                     <ChevronRight className="text-muted-foreground" />
                                 </SettingsItemButton>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader><AlertDialogTitle>Clear all messages?</AlertDialogTitle><AlertDialogDescription>This action is irreversible and will delete your entire chat history for you and your partner.</AlertDialogDescription></AlertDialogHeader>
-                                <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => toast({title: "Chat History Cleared", description: "This is a mock action."})}>Clear History</AlertDialogAction></AlertDialogFooter>
+                                <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleClearHistory}>Clear History</AlertDialogAction></AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                         <SettingsItemButton>
+                         <SettingsItemButton onClick={() => toast({title: "Coming Soon!", description: "Conversation export will be available in a future update."})}>
                             <div className="font-medium flex items-center gap-2"><FileText/> Export Conversation</div>
                             <ChevronRight className="text-muted-foreground" />
                         </SettingsItemButton>

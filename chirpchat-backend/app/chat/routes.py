@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime, timezone
@@ -26,6 +26,10 @@ async def get_message_with_details_from_db(message_id: UUID) -> Optional[Message
         if not response.data: return None
         
         message_data = response.data
+        status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
+        if message_data.get("status") in status_map:
+            message_data["status"] = status_map[message_data["status"]]
+            
         if message_data.get("stickers"):
             message_data["sticker_image_url"] = message_data["stickers"].get("image_url")
             del message_data["stickers"]
@@ -35,9 +39,19 @@ async def get_message_with_details_from_db(message_id: UUID) -> Optional[Message
         return None
 
 async def get_chat_list_for_user(user_id: UUID) -> List[ChatResponse]:
+    """Helper to get a user's chat list, with last message details including sticker URL."""
     try:
         rpc_response = await db_manager.admin_client.rpc('get_user_chat_list', {'p_user_id': str(user_id)}).execute()
         if not rpc_response.data: return []
+
+        status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
+        
+        for chat_data in rpc_response.data:
+            if chat_data.get('last_message'):
+                last_message_status = chat_data['last_message'].get('status')
+                if last_message_status in status_map:
+                    chat_data['last_message']['status'] = status_map[last_message_status]
+        
         return [ChatResponse.model_validate(chat_data) for chat_data in rpc_response.data]
     except Exception as e:
         logger.error(f"Error calling get_user_chat_list RPC for user {user_id}: {e}", exc_info=True)
@@ -46,24 +60,48 @@ async def get_chat_list_for_user(user_id: UUID) -> List[ChatResponse]:
 @router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_message(
     message_id: UUID,
-    chat_id: UUID,
+    chat_id: UUID = Query(...),
     current_user: UserPublic = Depends(get_current_user),
 ):
     logger.info(f"User {current_user.id} attempting to delete message {message_id} from chat {chat_id}")
 
-    # Verify user is the sender of the message
     msg_resp = await db_manager.get_table("messages").select("user_id, chat_id").eq("id", str(message_id)).single().execute()
     if not msg_resp.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
     if str(msg_resp.data["user_id"]) != str(current_user.id) or str(msg_resp.data["chat_id"]) != str(chat_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own messages.")
 
-    # Perform deletion
     await db_manager.get_table("messages").delete().eq("id", str(message_id)).execute()
 
-    # Broadcast deletion event
     await ws_manager.broadcast_message_deletion(str(chat_id), str(message_id))
     
+    return None
+
+@router.delete("/{chat_id}/messages", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_chat_history(
+    chat_id: UUID,
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    """
+    Deletes all messages in a given chat. The user must be a participant.
+    """
+    logger.info(f"User {current_user.id} attempting to clear history for chat {chat_id}")
+
+    # 1. Verify user is a participant of the chat
+    participant_check_resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).maybe_single().execute()
+    if not participant_check_resp.data:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant of this chat and cannot clear its history.")
+
+    # 2. Delete all messages for the chat
+    await db_manager.get_table("messages").delete().eq("chat_id", str(chat_id)).execute()
+    
+    # 3. Update the chat's `updated_at` timestamp (last_message will become null automatically on next fetch)
+    await db_manager.get_table("chats").update({"updated_at": "now()"}).eq("id", str(chat_id)).execute()
+
+    # 4. Broadcast an event to all participants to clear their UI
+    await ws_manager.broadcast_chat_history_cleared(str(chat_id))
+    
+    logger.info(f"Successfully cleared history for chat {chat_id} by user {current_user.id}")
     return None
 
 @router.post("/", response_model=ChatResponse)
@@ -112,8 +150,12 @@ async def get_messages(chat_id: UUID, limit: int = 50, before_timestamp: Optiona
     messages_resp = await query.execute()
     
     messages_data_list = messages_resp.data or []
+    status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
     cleaned_messages = []
+
     for m in reversed(messages_data_list):
+        if m.get("status") in status_map:
+            m["status"] = status_map[m["status"]]
         if m.get("stickers"):
             m["sticker_image_url"] = m["stickers"].get("image_url")
             del m["stickers"]
@@ -138,7 +180,7 @@ async def send_message_http(chat_id: UUID, message_create: MessageCreate, curren
         await ws_manager.broadcast_chat_message(str(chat_id), incognito_message_obj)
         return incognito_message_obj
 
-    message_data_to_insert = message_create.model_dump()
+    message_data_to_insert = message_create.model_dump(exclude_unset=True)
     message_data_to_insert.update({
         "id": str(message_id), "chat_id": str(chat_id), "user_id": str(current_user.id),
         "status": MessageStatusEnum.SENT.value, "mode": message_create.mode.value if message_create.mode else MessageModeEnum.NORMAL.value,
@@ -194,3 +236,5 @@ async def react_to_message(message_id: UUID, reaction_toggle: ReactionToggle, cu
 
     await ws_manager.broadcast_reaction_update(chat_id_str, message_for_response)
     return message_for_response
+
+    

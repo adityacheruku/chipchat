@@ -87,10 +87,11 @@ export type UserProfileUpdateEventData = { event_type: "user_profile_update"; us
 export type HeartbeatClientEvent = { event_type: "HEARTBEAT"; };
 export type MessageAckEventData = { event_type: "message_ack"; client_temp_id: string; server_assigned_id: string; status: MessageStatus; timestamp: string; };
 export type ChatModeChangedEventData = { event_type: "chat_mode_changed"; chat_id: string; mode: MessageMode; };
+export type ChatHistoryClearedEventData = { event_type: "chat_history_cleared"; chat_id: string; };
 
 export type EventPayload = { sequence?: number; } & (
   | NewMessageEventData | MessageDeletedEventData | MessageReactionUpdateEventData | UserPresenceUpdateEventData | TypingIndicatorEventData
-  | ThinkingOfYouReceivedEventData | UserProfileUpdateEventData | MessageAckEventData | ChatModeChangedEventData
+  | ThinkingOfYouReceivedEventData | UserProfileUpdateEventData | MessageAckEventData | ChatModeChangedEventData | ChatHistoryClearedEventData
   | { event_type: "error", detail: string }
 );
 

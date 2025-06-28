@@ -100,6 +100,13 @@ async def broadcast_message_deletion(chat_id: str, message_id: str):
     payload = {"event_type": "message_deleted", "chat_id": chat_id, "message_id": message_id}
     if participant_ids: await broadcast_to_users(participant_ids, payload)
 
+async def broadcast_chat_history_cleared(chat_id: str):
+    """Broadcasts that a chat's history has been cleared."""
+    participant_ids = await _get_chat_participants(chat_id)
+    payload = {"event_type": "chat_history_cleared", "chat_id": chat_id}
+    if participant_ids:
+        await broadcast_to_users(participant_ids, payload)
+
 async def broadcast_chat_message(chat_id: str, message_data: MessageInDB):
     participant_ids = await _get_chat_participants(chat_id)
     payload = {"event_type": "new_message", "message": message_data.model_dump(mode='json'), "chat_id": chat_id}
@@ -172,3 +179,4 @@ async def update_user_last_seen_throttled(user_id: UUID):
 async def is_user_in_chat(user_id: UUID, chat_id: UUID) -> bool:
     resp = await db_manager.get_table("chat_participants").select("user_id").eq("chat_id", str(chat_id)).eq("user_id", str(user_id)).maybe_single().execute()
     return bool(resp.data)
+
