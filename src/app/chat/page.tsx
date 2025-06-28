@@ -5,10 +5,10 @@ import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayo
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import dynamic from 'next/dynamic';
-import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
-import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
+import { useMoodSuggestion } from '@/hooks/useMoodSuggestion';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { THINKING_OF_YOU_DURATION, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
@@ -96,7 +96,7 @@ export default function ChatPage() {
     }
   }, [activeChat]);
   
-  const handleMessageDeleted = useCallback((data: { message_id: string }) => {
+  const handleMessageDeleted = useCallback((data: MessageDeletedEventData) => {
     setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
   }, []);
 
@@ -245,7 +245,7 @@ export default function ChatPage() {
     return null;
   };
 
-  if (isLoadingPage) return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-4">Loading your profile...</p></div>;
+  if (isLoadingPage || !currentUser) return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-4">Loading your chat...</p></div>;
   if (!otherUser || !activeChat) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}</div></div>;
 
   return (
