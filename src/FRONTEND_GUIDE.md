@@ -2,7 +2,47 @@
 
 This document provides a comprehensive guide to the ChirpChat frontend, detailing its user interface (UI) components, user experience (UX) flows, styling principles, and interactive effects.
 
-## 1. Core Design Philosophy
+## 1. Design & UX Overview
+
+This section provides a high-level summary of the project's current design status.
+
+### 1.1. Implemented Screens & Fidelity
+
+All core screens of the application have been implemented as **high-fidelity, functional components** using Next.js, React, and ShadCN UI. They are beyond the wireframe/mockup stage and are fully interactive.
+
+Key implemented screens include:
+*   **Onboarding**: A multi-step flow for user registration (Phone -> OTP -> User Details) and Login.
+*   **Partner Pairing**: A screen for users to find and send/receive partner requests.
+*   **Chat Interface**: The primary real-time messaging screen.
+*   **Mood Entry Modal**: A dialog for users to set their current mood.
+*   **Settings Hub**: A central navigation page for all application settings.
+*   **Settings Sub-Pages**: Dedicated pages for Account, Notifications, Appearance, and Privacy.
+*   **PWA Quick Action Pages**: Simplified pages for "Set Mood," "Send Image," and "Thinking of You" actions initiated from the device's home screen.
+
+### 1.2. Visual Style Guide
+
+The visual style is well-defined and consistently applied throughout the application.
+
+*   **Color Palette**: The application uses a custom, calming color palette defined with HSL CSS variables for easy theming and consistency. The primary file for this is `src/app/globals.css`.
+    *   **Primary (`--primary`)**: `#90AFC5` (Soft Blue)
+    *   **Background (`--background`)**: `#F0F4F7` (Light Gray)
+    *   **Accent (`--accent`)**: `#A991B5` (Pale Violet)
+*   **Typography**: The primary font is **'PT Sans'**, imported from Google Fonts, used for both headlines and body text to provide a warm and modern feel.
+*   **Iconography**: The application uses **Lucide React** for a consistent, lightweight, and modern icon set.
+
+### 1.3. Navigation & UX Patterns
+
+*   **Navigation Model**: The app uses a **page-based routing system** managed by the Next.js App Router. The primary user flow is linear: Onboarding -> Partner Pairing -> Chat. Settings are a sub-section accessible from the main app areas.
+*   **Mobile-First Gestures**: The UI is designed with mobile users in mind, featuring intuitive touch interactions like **swipe-to-reply** and **long-press** to enter message selection mode.
+*   **UI Patterns**: For actions like picking attachments or emojis, the application consistently uses a bottom `Sheet` component, which is an ergonomic and common pattern on mobile devices.
+*   **Known UX Pain Points**:
+    *   The "read" status is currently chat-wide, not per-message.
+    *   The real-time typing indicator does not function on the SSE (fallback) connection.
+    *   Navigation is purely hierarchical; a bottom navigation bar for mobile could improve quick access to different app sections in the future.
+
+---
+
+## 2. Core Design Philosophy
 
 ChirpChat is designed to be an intimate, emotionally resonant space for two people. The UI/UX choices reflect this goal:
 
@@ -10,30 +50,6 @@ ChirpChat is designed to be an intimate, emotionally resonant space for two peop
 -   **Fluid & Responsive**: Interactions are designed to be smooth and jank-free, with subtle animations providing feedback without being distracting.
 -   **Intuitive & Accessible**: The interface is kept simple and predictable, ensuring that all features are easy to discover and use, including for users with disabilities.
 -   **Dynamic & Expressive**: The chat's appearance dynamically changes based on the combined mood of the partners, making the interface a living reflection of their emotional state.
-
----
-
-## 2. Styling & Theming
-
-The application's visual identity is managed through a combination of Tailwind CSS and a custom theme defined in `src/app/globals.css`.
-
-### 2.1. Color Palette
-
-The theme uses HSL CSS variables for easy manipulation and consistency.
-
--   **Primary (`--primary`)**: `#90AFC5` (Soft Blue) - Used for primary buttons, selected states, and key interactive elements.
--   **Background (`--background`)**: `#F0F4F7` (Light Gray) - The clean, non-obtrusive backdrop for the entire application.
--   **Accent (`--accent`)**: `#A991B5` (Pale Violet) - Used for hover states, mood indicators, and secondary highlights.
--   **Card (`--card`)**: `hsl(0 0% 100%)` (White) - The background for the main chat window and modals, providing a clean canvas for content.
--   **Text (`--foreground`)**: A dark, grayish-blue for optimal readability.
-
-### 2.2. Typography
-
--   **Font**: 'PT Sans' is used for all text (headlines and body) to provide a warm, modern, and highly readable feel. It's imported via Google Fonts in `src/app/layout.tsx`.
-
-### 2.3. Iconography
-
--   **Icons**: [Lucide React](https://lucide.dev/icons/) is used for a consistent, modern, and lightweight icon set across the application.
 
 ---
 

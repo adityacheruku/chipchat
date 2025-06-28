@@ -151,7 +151,7 @@ async def get_messages(chat_id: UUID, limit: int = 50, before_timestamp: Optiona
     # Find the last clear marker for the current user in this chat
     marker_resp = await db_manager.get_table("messages").select("created_at").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).eq("message_subtype", "history_cleared_marker").order("created_at", desc=True).limit(1).maybe_single().execute()
     
-    marker_timestamp = marker_resp.data['created_at'] if marker_resp.data else None
+ marker_timestamp = marker_resp.data['created_at'] if marker_resp and marker_resp.data else None
 
     query = db_manager.get_table("messages").select("*, stickers(image_url)").eq("chat_id", str(chat_id)).order("created_at", desc=True).limit(limit)
     if before_timestamp:
@@ -159,7 +159,7 @@ async def get_messages(chat_id: UUID, limit: int = 50, before_timestamp: Optiona
     if marker_timestamp:
         query = query.gt("created_at", marker_timestamp)
 
-    messages_resp = await query.execute()
+    messages_resp = query.execute()
     
     messages_data_list = messages_resp.data or []
     status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
