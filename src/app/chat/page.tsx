@@ -15,10 +15,9 @@ import { Button } from '@/components/ui/button';
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
-import { useAvatar } from '@/hooks/useAvatar';
 import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
-import { THINKING_OF_YOU_DURATION, MAX_AVATAR_SIZE_KB, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
+import { THINKING_OF_YOU_DURATION, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
@@ -198,9 +197,7 @@ export default function ChatPage() {
   });
 
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast: toast });
-  const { avatarPreview, handleFileChange: handleAvatarFileChangeHook, setAvatarPreview, } = useAvatar({ maxSizeKB: MAX_AVATAR_SIZE_KB, toast });
-
-  // ⚡️ Memoized callbacks to prevent re-renders in child components
+  
   const handleMoodChangeForAISuggestion = useCallback(async (newMood: Mood) => {
     if (currentUser) {
       try {
@@ -223,7 +220,6 @@ export default function ChatPage() {
     try {
         const partnerDetails = await api.getUserProfile(currentUser.partner_id);
         setOtherUser(partnerDetails);
-        if (currentUser.avatar_url) setAvatarPreview(currentUser.avatar_url);
         const chatSession = await api.createOrGetChat(currentUser.partner_id);
         setActiveChat(chatSession);
         if (chatSession) {
@@ -241,7 +237,7 @@ export default function ChatPage() {
         toast({ variant: 'destructive', title: 'API Error', description: apiErrorMsg, duration: 7000 });
         setChatSetupErrorMessage(apiErrorMsg);
     } finally { setIsChatLoading(false); }
-  }, [currentUser, router, setAvatarPreview, toast]);
+  }, [currentUser, router, toast]);
 
   const loadMoreMessages = useCallback(async () => {
     if (isLoadingMore || !hasMoreMessages || !activeChat || messages.length === 0) return;
@@ -386,22 +382,7 @@ export default function ChatPage() {
     sendMessage({ event_type: "toggle_reaction", message_id: messageId, chat_id: activeChat.id, emoji });
     addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
   }, [currentUser, activeChat, sendMessage, addAppEvent, messages, toast]);
-
-  const handleSaveProfile = useCallback(async (updatedProfileData: Partial<Pick<User, 'display_name' | 'mood' | 'phone' | 'email'>>, newAvatarFile?: File, onProgress?: (progress: number) => void) => {
-    if (!currentUser) return;
-    try {
-      if (newAvatarFile && onProgress) await api.uploadAvatar(newAvatarFile, onProgress);
-      if (Object.keys(updatedProfileData).length > 0) await api.updateUserProfile(updatedProfileData);
-      await fetchAndUpdateUser(); 
-      toast({ title: "Profile Updated", description: "Your profile has been saved." });
-      addAppEvent('profileUpdate', `${currentUser.display_name} updated profile.`, currentUser.id, currentUser.display_name);
-      setIsProfileModalOpen(false);
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Profile Save Failed', description: error.message });
-      throw error;
-    }
-  }, [currentUser, fetchAndUpdateUser, toast, addAppEvent]);
-
+  
   const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
     if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
     if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
@@ -531,7 +512,7 @@ export default function ChatPage() {
             </div>
           </ErrorBoundary>
         </div>
-        {isProfileModalOpen && currentUser && <UserProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} user={currentUser} onSave={handleSaveProfile} avatarPreview={avatarPreview || currentUser.avatar_url} onAvatarFileChange={handleAvatarFileChangeHook}/>}
+        {isProfileModalOpen && currentUser && <UserProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} user={currentUser} />}
         {fullScreenUserData && <FullScreenAvatarModal isOpen={isFullScreenAvatarOpen} onClose={() => setIsFullScreenAvatarOpen(false)} user={fullScreenUserData}/>}
         {mediaModalData && <FullScreenMediaModal isOpen={!!mediaModalData} onClose={() => setMediaModalData(null)} mediaUrl={mediaModalData.url} mediaType={mediaModalData.type}/>}
         {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={() => setIsMoodModalOpen(false)} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}
