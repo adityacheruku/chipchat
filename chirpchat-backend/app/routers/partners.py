@@ -49,12 +49,26 @@ async def send_partner_request(
 
     logger.info(f"User {current_user.id} sending partner request to {recipient_id}.")
     
-    # Check if sender or recipient already has a partner
+    # 1. Check if either user is already in a partnership.
     user_check_resp = await db_manager.get_table("users").select("id, partner_id").in_("id", [str(current_user.id), str(recipient_id)]).execute()
     for user in user_check_resp.data:
         if user['partner_id'] is not None:
-             raise HTTPException(status_code=400, detail=f"User {user['id']} is already in a partnership.")
+             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"User {user['id']} is already in a partnership.")
 
+    # 2. Check for an existing pending request between these two users in either direction.
+    # This prevents duplicate requests and handles race conditions where both users send a request simultaneously.
+    request_check_resp = await db_manager.get_table("partner_requests").select("id").or_(
+        f"and(sender_id.eq.{current_user.id},recipient_id.eq.{recipient_id},status.eq.pending)",
+        f"and(sender_id.eq.{recipient_id},recipient_id.eq.{current_user.id},status.eq.pending)"
+    ).limit(1).execute()
+    
+    if request_check_resp.data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A pending request already exists with this user."
+        )
+
+    # 3. If all checks pass, create the new request.
     new_request_data = {
         "sender_id": str(current_user.id),
         "recipient_id": str(recipient_id)
@@ -67,8 +81,9 @@ async def send_partner_request(
         request_resp = await db_manager.get_table("partner_requests").select("*, sender:sender_id(*), recipient:recipient_id(*)").eq("id", created_request_id).single().execute()
         
         return PartnerRequestResponse.model_validate(request_resp.data)
-    except Exception as e:
+    except Exception as e: # This is now a fallback for unexpected DB errors.
         logger.error(f"Error sending partner request from {current_user.id} to {recipient_id}: {e}", exc_info=True)
+        # The specific unique constraint error should be caught by the pre-check now.
         if "unique constraint" in str(e).lower():
             raise HTTPException(status_code=400, detail="A pending request to this user already exists.")
         raise HTTPException(status_code=500, detail="Could not send partner request.")
