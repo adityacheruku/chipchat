@@ -12,36 +12,34 @@ class RedisManager:
 
     async def connect(self):
         try:
-            self.redis_client = redis.from_url(self._url, decode_responses=True)
-            await self.redis_client.ping()
-            self.pubsub_client = self.redis_client.pubsub(ignore_subscribe_messages=True)
-            logger.info("Successfully connected to Redis.")
+            if not self.redis_client:
+                self.redis_client = redis.from_url(self._url, decode_responses=True)
+                await self.redis_client.ping()
+                logger.info("Successfully connected to Redis.")
+            if not self.pubsub_client:
+                 self.pubsub_client = self.redis_client.pubsub(ignore_subscribe_messages=True)
         except Exception as e:
             logger.error(f"Could not connect to Redis: {e}", exc_info=True)
             self.redis_client = None
             self.pubsub_client = None
+            raise ConnectionError("Failed to connect to Redis.")
 
     async def get_client(self) -> redis.Redis:
-        if not self.redis_client:
+        if not self.redis_client or not await self.redis_client.ping():
             await self.connect()
-        if not self.redis_client:
-             raise ConnectionError("Failed to connect to Redis.")
         return self.redis_client
 
     async def get_pubsub(self) -> redis.client.PubSub:
         if not self.pubsub_client:
             await self.connect()
-        if not self.pubsub_client:
-             raise ConnectionError("Failed to initialize Redis Pub/Sub.")
         return self.pubsub_client
 
     async def close(self):
-        if self.pubsub_client:
-            await self.pubsub_client.close()
-        if self.redis_client:
-            await self.redis_client.close()
+        if self.pubsub_client: await self.pubsub_client.close()
+        if self.redis_client: await self.redis_client.close()
+        self.redis_client = None
+        self.pubsub_client = None
         logger.info("Redis connection closed.")
-
 
 redis_manager = RedisManager(settings.REDIS_URL)
 

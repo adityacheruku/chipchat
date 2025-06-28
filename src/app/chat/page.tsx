@@ -1,18 +1,11 @@
 
 "use client";
 
-// ⚡️ Added React.memo for component memoization
 import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import dynamic from 'next/dynamic';
-import type { User, Message as MessageType, Mood, SupportedEmoji, AppEvent, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType } from '@/types';
-import ChatHeader from '@/components/chat/ChatHeader';
-import MessageArea from '@/components/chat/MessageArea';
-import InputBar from '@/components/chat/InputBar';
-import NotificationPrompt from '@/components/chat/NotificationPrompt';
-import { Button } from '@/components/ui/button';
-import { ToastAction } from "@/components/ui/toast";
+import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
@@ -23,43 +16,37 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useRealtime } from '@/hooks/useRealtime';
-import { Loader2, MessagesSquare, Wifi, WifiOff } from 'lucide-react';
+import { Loader2, Wifi, WifiOff } from 'lucide-react';
+import ChatHeader from '@/components/chat/ChatHeader';
+import MessageArea from '@/components/chat/MessageArea';
+import InputBar from '@/components/chat/InputBar';
+import NotificationPrompt from '@/components/chat/NotificationPrompt';
 
-// ⚡️ Memoized components to prevent re-renders when props don't change
 const MemoizedMessageArea = memo(MessageArea);
 const MemoizedChatHeader = memo(ChatHeader);
 const MemoizedInputBar = memo(InputBar);
 const FIRST_MESSAGE_SENT_KEY = 'chirpChat_firstMessageSent';
-const MESSAGE_SEND_TIMEOUT_MS = 15000; // 15 seconds
+const MESSAGE_SEND_TIMEOUT_MS = 15000;
 
-const ModalLoader = () => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <Loader2 className="h-8 w-8 animate-spin text-white" />
-    </div>
-  );
+const ModalLoader = () => <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>;
 
-// ⚡️ Lazy-loaded non-critical components for faster initial page load
 const FullScreenAvatarModal = dynamic(() => import('@/components/chat/FullScreenAvatarModal'), { ssr: false, loading: () => <ModalLoader /> });
 const FullScreenMediaModal = dynamic(() => import('@/components/chat/FullScreenMediaModal'), { ssr: false, loading: () => <ModalLoader /> });
 const MoodEntryModal = dynamic(() => import('@/components/chat/MoodEntryModal'), { ssr: false, loading: () => <ModalLoader /> });
 const ReactionSummaryModal = dynamic(() => import('@/components/chat/ReactionSummaryModal'), { ssr: false, loading: () => <ModalLoader /> });
 const DocumentPreviewModal = dynamic(() => import('@/components/chat/DocumentPreviewModal'), { ssr: false, loading: () => <ModalLoader /> });
 
-
 export default function ChatPage() {
-  // 1. Hooks: All hooks are now at the top level to follow Rules of Hooks
   const router = useRouter();
   const { toast } = useToast();
   const { currentUser, token, logout, fetchAndUpdateUser, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { isSubscribed, permissionStatus, subscribeToPush, isPushApiSupported } = usePushNotifications();
 
-  // 2. State Declarations
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [otherUser, setOtherUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(true);
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
-  const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
   const [chatSetupErrorMessage, setChatSetupErrorMessage] = useState<string | null>(null);
   const [isFullScreenAvatarOpen, setIsFullScreenAvatarOpen] = useState(false);
   const [fullScreenUserData, setFullScreenUserData] = useState<User | null>(null);
@@ -76,7 +63,6 @@ export default function ChatPage() {
   const [documentPreview, setDocumentPreview] = useState<MessageType | null>(null);
   const [replyingTo, setReplyingTo] = useState<MessageType | null>(null);
 
-  // 3. Ref Declarations
   const viewportRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastReactionToggleTimes = useRef<Record<string, number>>({});
@@ -84,156 +70,68 @@ export default function ChatPage() {
   const handleSendThoughtRef = useRef<() => void>(() => {});
   const pendingMessageTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
 
-  // 4. Callback Handler Declarations (memoized with useCallback)
-  const addAppEvent = useCallback((type: AppEvent['type'], description: string, userId?: string, userName?: string, metadata?: Record<string, any>) => {
-    setAppEvents(prevEvents => {
-      const newEvent: AppEvent = { id: `event_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, timestamp: Date.now(), type, description, userId, userName, metadata };
-      return [newEvent, ...prevEvents].slice(0, 50);
-    });
+  const setMessageAsFailed = useCallback((clientTempId: string) => {
+    setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId && msg.status === 'sending' ? { ...msg, status: 'failed' } : msg));
+    delete pendingMessageTimeouts.current[clientTempId];
   }, []);
 
   const handleMessageAck = useCallback((ackData: MessageAckEventData) => {
-      // Clear the timeout for this message as it has been acknowledged
       if (pendingMessageTimeouts.current[ackData.client_temp_id]) {
         clearTimeout(pendingMessageTimeouts.current[ackData.client_temp_id]);
         delete pendingMessageTimeouts.current[ackData.client_temp_id];
       }
-      setMessages(prevMessages => prevMessages.map(msg => msg.client_temp_id === ackData.client_temp_id ? { ...msg, id: ackData.server_assigned_id, status: ackData.status } : msg));
+      setMessages(prev => prev.map(msg => msg.client_temp_id === ackData.client_temp_id ? { ...msg, id: ackData.server_assigned_id, status: 'sent' } : msg));
   }, []);
 
   const handleNewMessage = useCallback((newMessageFromServer: MessageType) => {
-    setMessages(prevMessages => {
-      if (prevMessages.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id)) {
-          return prevMessages.map(m => (m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id) ? { ...newMessageFromServer, status: newMessageFromServer.status || 'sent' } : m).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    setMessages(prev => {
+      const messageExists = prev.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id);
+      if (messageExists) {
+          return prev.map(m => (m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id) ? { ...newMessageFromServer, status: newMessageFromServer.status || 'sent' } : m);
       }
-      return [...prevMessages, { ...newMessageFromServer, status: newMessageFromServer.status || 'sent' }].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      return [...prev, { ...newMessageFromServer, status: newMessageFromServer.status || 'sent' }];
     });
     if (activeChat && newMessageFromServer.chat_id === activeChat.id && newMessageFromServer.mode !== 'incognito') {
         setActiveChat(prev => prev ? ({...prev, last_message: newMessageFromServer, updated_at: newMessageFromServer.updated_at }) : null);
     }
   }, [activeChat]);
-
-  const handleReactionUpdate = useCallback((data: MessageReactionUpdateEventData) => {
-    setMessages(prevMessages => prevMessages.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg));
-  }, []);
-
-  const handlePresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => {
-    setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : prev);
-    if (currentUser && data.user_id === currentUser.id) fetchAndUpdateUser();
-  }, [currentUser, fetchAndUpdateUser]);
-
-  const handleProfileUpdate = useCallback((data: UserProfileUpdateEventData) => {
-    setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, ...data } : prev);
-    if (currentUser && data.user_id === currentUser.id) fetchAndUpdateUser();
-  }, [currentUser, fetchAndUpdateUser]);
-
-  const handleTypingUpdate = useCallback((data: TypingIndicatorEventData) => {
-    if (activeChat && data.chat_id === activeChat.id) {
-      setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }));
-    }
-  }, [activeChat]);
   
-  const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => {
-    if (activeChat && data.chat_id === activeChat.id) {
-        setChatMode(data.mode);
-        if (currentUser && otherUser) {
-            toast({ title: "Mode Changed", description: `${otherUser.display_name} switched the chat to ${data.mode} mode.`, duration: 3000 });
-        }
-    }
-  }, [activeChat, currentUser, otherUser, toast]);
-
-  const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => {
-    if (otherUser && data.sender_id === otherUser.id) {
-      toast({
-        title: "❤️ Thinking of You!",
-        description: `${otherUser.display_name} is thinking of you.`,
-        duration: THINKING_OF_YOU_DURATION,
-        action: ( <ToastAction altText="Send one back" onClick={() => handleSendThoughtRef.current()}> Send one back? </ToastAction> ),
-      });
-    }
-  }, [otherUser, toast]);
-
-  const handleDeleteMessage = useCallback(async (messageId: string, deleteType: DeleteType) => {
-    if (!activeChat) return;
-
-    // Optimistically remove the message from the UI
-    setMessages(prev => prev.filter(msg => msg.id !== messageId));
-
-    try {
-      if (deleteType === 'me') {
-        // This is a client-side only action for now.
-        // In a real app, you might sync this with the server so it doesn't reappear on reload.
-        console.log(`Locally deleting message ${messageId} for current user.`);
-      } else {
-        await api.deleteMessageForEveryone(messageId, activeChat.id);
-      }
-      toast({ title: "Message Deleted", duration: 2000 });
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Delete Failed', description: error.message });
-      // Here you might want to add the message back to the list if the API call fails
-    }
-  }, [activeChat, toast]);
-
-  const handleSetReplyingTo = useCallback((message: MessageType | null) => {
-    setReplyingTo(message);
+  const handleMessageDeleted = useCallback((data: { message_id: string }) => {
+    setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
   }, []);
 
-  const handleCancelReply = useCallback(() => {
-    setReplyingTo(null);
-  }, []);
+  const handleReactionUpdate = useCallback((data: MessageReactionUpdateEventData) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), []);
+  const handlePresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : prev), []);
+  const handleProfileUpdate = useCallback((data: UserProfileUpdateEventData) => setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, ...data } : prev), []);
+  const handleTypingUpdate = useCallback((data: TypingIndicatorEventData) => { if (activeChat?.id === data.chat_id) setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }))}, [activeChat]);
+  const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => { if (activeChat?.id === data.chat_id) setChatMode(data.mode); }, [activeChat]);
+  const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => { if (otherUser?.id === data.sender_id) toast({ title: "❤️ Thinking of You!", description: `${otherUser.display_name} is thinking of you.` })}, [otherUser, toast]);
 
-  // 5. Custom Hooks that depend on callbacks
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
-    onMessageReceived: handleNewMessage,
-    onReactionUpdate: handleReactionUpdate,
-    onPresenceUpdate: handlePresenceUpdate,
-    onTypingUpdate: handleTypingUpdate,
-    onThinkingOfYouReceived: handleThinkingOfYou,
-    onUserProfileUpdate: handleProfileUpdate,
-    onMessageAck: handleMessageAck,
-    onChatModeChanged: handleChatModeChanged,
+    onMessageReceived: handleNewMessage, onReactionUpdate: handleReactionUpdate, onPresenceUpdate: handlePresenceUpdate,
+    onTypingUpdate: handleTypingUpdate, onThinkingOfYouReceived: handleThinkingOfYou, onUserProfileUpdate: handleProfileUpdate,
+    onMessageAck: handleMessageAck, onChatModeChanged: handleChatModeChanged, onMessageDeleted: handleMessageDeleted
   });
 
-  const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast: toast });
-  
-  const handleMoodChangeForAISuggestion = useCallback(async (newMood: Mood) => {
-    if (currentUser) {
-      try {
-        await api.updateUserProfile({ mood: newMood });
-        await fetchAndUpdateUser();
-        addAppEvent('moodChange', `${currentUser.display_name} updated mood to ${newMood} via AI suggestion.`, currentUser.id, currentUser.display_name);
-      } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Mood Update Failed', description: error.message });
-      }
-    }
-  }, [currentUser, fetchAndUpdateUser, addAppEvent, toast]);
+  const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast });
 
+  const handleMoodChangeForAISuggestion = useCallback(async (newMood: Mood) => { if (currentUser) try { await api.updateUserProfile({ mood: newMood }); await fetchAndUpdateUser(); } catch (error: any) { toast({ variant: 'destructive', title: 'Mood Update Failed', description: error.message }) }}, [currentUser, fetchAndUpdateUser, toast]);
   const { isLoadingAISuggestion, suggestMood: aiSuggestMood, ReasoningDialog } = useMoodSuggestion({ currentUserMood: currentUser?.mood || 'Neutral', onMoodChange: handleMoodChangeForAISuggestion, currentMessageTextRef: lastMessageTextRef });
 
   const performLoadChatData = useCallback(async () => {
     if (!currentUser) return;
-    if (!currentUser.partner_id) { setIsChatLoading(false); setChatSetupErrorMessage("No partner found. Redirecting to partner selection..."); router.push('/onboarding/find-partner'); return; }
-    setIsChatLoading(true);
-    setChatSetupErrorMessage(null);
+    if (!currentUser.partner_id) { router.push('/onboarding/find-partner'); return; }
+    setIsChatLoading(true); setChatSetupErrorMessage(null);
     try {
-        const partnerDetails = await api.getUserProfile(currentUser.partner_id);
-        setOtherUser(partnerDetails);
-        const chatSession = await api.createOrGetChat(currentUser.partner_id);
-        setActiveChat(chatSession);
-        if (chatSession) {
-            const messagesData = await api.getMessages(chatSession.id, 50);
-            if(messagesData.messages.length < 50) setHasMoreMessages(false);
-            setMessages(messagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' })).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
-        } else { throw new Error("Failed to establish a chat session with your partner."); }
-        if (typeof window !== 'undefined' && currentUser.mood) {
-            const moodPrompted = sessionStorage.getItem('moodPromptedThisSession');
-            if (moodPrompted !== 'true') { setInitialMoodOnLoad(currentUser.mood); setIsMoodModalOpen(true); }
-        }
+        const [partnerDetails, chatSession] = await Promise.all([api.getUserProfile(currentUser.partner_id), api.createOrGetChat(currentUser.partner_id)]);
+        setOtherUser(partnerDetails); setActiveChat(chatSession);
+        const messagesData = await api.getMessages(chatSession.id, 50);
+        setHasMoreMessages(messagesData.messages.length >= 50);
+        setMessages(messagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' })));
+        if (typeof window !== 'undefined' && currentUser.mood && !sessionStorage.getItem('moodPromptedThisSession')) { setInitialMoodOnLoad(currentUser.mood); setIsMoodModalOpen(true); }
     } catch (error: any) {
-        const apiErrorMsg = `Failed to load chat data: ${error.message}`;
-        console.error('[ChatPage] performLoadChatData: Error -', apiErrorMsg, error);
-        toast({ variant: 'destructive', title: 'API Error', description: apiErrorMsg, duration: 7000 });
-        setChatSetupErrorMessage(apiErrorMsg);
+        toast({ variant: 'destructive', title: 'API Error', description: `Failed to load chat data: ${error.message}` });
+        setChatSetupErrorMessage(error.message);
     } finally { setIsChatLoading(false); }
   }, [currentUser, router, toast]);
 
@@ -242,15 +140,14 @@ export default function ChatPage() {
     setIsLoadingMore(true);
     try {
         const oldestMessage = messages[0];
-        if(!oldestMessage) return;
+        if(!oldestMessage) { setIsLoadingMore(false); return; }
         setTopMessageId(oldestMessage.id);
         const olderMessagesData = await api.getMessages(activeChat.id, 50, oldestMessage.created_at);
-        if (olderMessagesData.messages && olderMessagesData.messages.length > 0) {
-            const newMessages = olderMessagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' }));
-            setMessages(prevMessages => [...newMessages, ...prevMessages]);
-            if (olderMessagesData.messages.length < 50) setHasMoreMessages(false);
+        if (olderMessagesData.messages?.length > 0) {
+            setMessages(prev => [...olderMessagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' })), ...prev]);
+            setHasMoreMessages(olderMessagesData.messages.length >= 50);
         } else { setHasMoreMessages(false); }
-    } catch (error: any) { toast({ variant: 'destructive', title: 'Error', description: 'Could not load older messages.' });
+    } catch (error: any) { toast({ variant: 'destructive', title: 'Error', description: 'Could not load older messages.' })
     } finally { setIsLoadingMore(false); }
   }, [isLoadingMore, hasMoreMessages, activeChat, messages, toast]);
 
@@ -258,228 +155,86 @@ export default function ChatPage() {
     if (!activeChat) return;
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChat.id });
-    if (isTyping) {
-        typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChat.id }), 3000);
-    }
+    if (isTyping) typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChat.id }), 3000);
   }, [activeChat, sendMessage]);
 
-  const setMessageAsFailed = useCallback((clientTempId: string) => {
-    setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId && msg.status === 'sending' ? { ...msg, status: 'failed' } : msg));
-    delete pendingMessageTimeouts.current[clientTempId];
-  }, []);
-  
   const sendMessageWithTimeout = useCallback((messagePayload: any) => {
     sendMessage(messagePayload);
-    // Set a timeout to mark the message as failed if no ack is received
-    pendingMessageTimeouts.current[messagePayload.client_temp_id] = setTimeout(() => {
-        setMessageAsFailed(messagePayload.client_temp_id);
-    }, MESSAGE_SEND_TIMEOUT_MS);
+    pendingMessageTimeouts.current[messagePayload.client_temp_id] = setTimeout(() => setMessageAsFailed(messagePayload.client_temp_id), MESSAGE_SEND_TIMEOUT_MS);
   }, [sendMessage, setMessageAsFailed]);
 
-
   const handleSendMessage = useCallback((text: string, mode: MessageMode, replyToId?: string) => {
-    if (!currentUser || !activeChat) return;
-    if (!text.trim()) return;
+    if (!currentUser || !activeChat || !text.trim()) return;
     handleTyping(false);
     const clientTempId = uuidv4();
-    const optimisticMessage: MessageType = {
-      id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, text,
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text", mode: mode,
-      reply_to_message_id: replyToId,
-    };
-    setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
-    sendMessageWithTimeout({ event_type: "send_message", chat_id: activeChat.id, text, mode, client_temp_id: clientTempId, message_subtype: "text", reply_to_id: replyToId });
-    addAppEvent('messageSent', `${currentUser.display_name} sent: "${text.substring(0, 30)}"`, currentUser.id, currentUser.display_name);
+    const optimisticMessage: MessageType = { id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, text, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text", mode: mode, reply_to_message_id: replyToId };
+    setMessages(prev => [...prev, optimisticMessage]);
+    sendMessageWithTimeout({ event_type: "send_message", text, mode, client_temp_id: clientTempId, message_subtype: "text", reply_to_message_id: replyToId, chat_id: activeChat.id });
     if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) { lastMessageTextRef.current = text; aiSuggestMood(text); }
-    if (isPushApiSupported && !isSubscribed && permissionStatus === 'default') {
-        if (localStorage.getItem(FIRST_MESSAGE_SENT_KEY) !== 'true') {
-            localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true');
-            setTimeout(() => setShowNotificationPrompt(true), 2000);
-        }
-    }
-    if (replyToId) {
-        handleCancelReply();
-    }
-  }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, addAppEvent, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus, handleCancelReply]);
-  
-  const handleFileUpload = useCallback(async (file: File, subtype: MessageType['message_subtype'], mode: MessageMode, uploadFunction: (file: File, onProgress: (progress: number) => void) => Promise<any>) => {
+    if (isPushApiSupported && !isSubscribed && permissionStatus === 'default' && !localStorage.getItem(FIRST_MESSAGE_SENT_KEY)) { localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true'); setTimeout(() => setShowNotificationPrompt(true), 2000); }
+    if (replyToId) setReplyingTo(null);
+  }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
+
+  const handleFileUpload = useCallback(async (file: File, subtype: MessageType['message_subtype'], mode: MessageMode, uploadFunction: (file: File, onProgress: (p: number) => void) => Promise<any>) => {
     if (!currentUser || !activeChat) return;
     const clientTempId = uuidv4();
-    const optimisticMessage: MessageType = {
-      id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      status: 'uploading', uploadProgress: 0, client_temp_id: clientTempId, message_subtype: subtype, mode: mode, file: file, image_url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined, clip_url: file.type.startsWith('video/') ? URL.createObjectURL(file) : undefined, document_name: file.name,
-    };
-    setMessages(prev => [...prev, optimisticMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+    const optimisticMessage: MessageType = { id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), status: 'uploading', uploadProgress: 0, client_temp_id: clientTempId, message_subtype: subtype, mode, file, image_url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined, document_name: file.name };
+    setMessages(prev => [...prev, optimisticMessage]);
     try {
-        const onProgress = (progress: number) => { setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, uploadProgress: progress } : msg)); };
-        const uploadResult = await uploadFunction(file, onProgress);
-        setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, status: 'sending', uploadProgress: 100 } : msg));
-        let messagePayload: any = { event_type: "send_message", chat_id: activeChat.id, client_temp_id: clientTempId, message_subtype: subtype, mode: mode };
-        if (subtype === 'image') { messagePayload.image_url = uploadResult.image_url; messagePayload.image_thumbnail_url = uploadResult.image_thumbnail_url; }
-        else if (subtype === 'document') { messagePayload.document_url = uploadResult.file_url; messagePayload.document_name = uploadResult.file_name; messagePayload.file_size_bytes = uploadResult.file_size_bytes;}
-        else if (subtype === 'voice_message') { messagePayload.clip_url = uploadResult.file_url; messagePayload.duration_seconds = uploadResult.duration_seconds; messagePayload.file_size_bytes = uploadResult.file_size_bytes; messagePayload.audio_format = uploadResult.audio_format; }
-        sendMessageWithTimeout(messagePayload);
-        addAppEvent('messageSent', `${currentUser.display_name} sent a ${subtype}.`, currentUser.display_name, currentUser.id);
+        const onProgress = (p: number) => setMessages(prev => prev.map(m => m.client_temp_id === clientTempId ? { ...m, uploadProgress: p } : m));
+        const res = await uploadFunction(file, onProgress);
+        setMessages(prev => prev.map(m => m.client_temp_id === clientTempId ? { ...m, status: 'sending', uploadProgress: 100 } : m));
+        let payload: any = { event_type: "send_message", client_temp_id: clientTempId, message_subtype: subtype, mode, chat_id: activeChat.id };
+        if (subtype === 'image') { payload.image_url = res.image_url; payload.image_thumbnail_url = res.image_thumbnail_url; }
+        else if (subtype === 'document') { payload.document_url = res.file_url; payload.document_name = res.file_name; payload.file_size_bytes = res.file_size_bytes;}
+        else if (subtype === 'voice_message') { payload.clip_url = res.file_url; payload.duration_seconds = res.duration_seconds; payload.file_size_bytes = res.file_size_bytes; payload.audio_format = res.audio_format; }
+        sendMessageWithTimeout(payload);
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
-        setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId ? { ...msg, status: 'failed' } : msg));
+        setMessages(prev => prev.map(m => m.client_temp_id === clientTempId ? { ...m, status: 'failed' } : m));
     }
-  }, [currentUser, activeChat, sendMessageWithTimeout, addAppEvent, toast]);
+  }, [currentUser, activeChat, sendMessageWithTimeout, toast]);
   
-  const handleRetrySend = useCallback((message: MessageType) => {
-    if (!currentUser || !activeChat) return;
-    // Reset status to sending
-    setMessages(prev => prev.map(msg => msg.client_temp_id === message.client_temp_id ? { ...msg, status: 'sending' } : msg));
-    
-    // Re-use the original payload creation logic
-    let messagePayload: any = { 
-        event_type: "send_message", 
-        chat_id: activeChat.id, 
-        client_temp_id: message.client_temp_id, 
-        message_subtype: message.message_subtype,
-        mode: message.mode,
-        text: message.text,
-        sticker_id: message.sticker_id,
-        // etc for other types
-    };
-     sendMessageWithTimeout(messagePayload);
-  }, [currentUser, activeChat, sendMessageWithTimeout]);
-
+  const handleRetrySend = useCallback((message: MessageType) => setMessages(prev => prev.map(m => m.client_temp_id === message.client_temp_id ? { ...m, status: 'sending' } : m)), []);
+  const handleDeleteMessage = useCallback(async (messageId: string, deleteType: DeleteType) => { if (!activeChat) return; try { if (deleteType === 'everyone') { await api.deleteMessageForEveryone(messageId, activeChat.id); } setMessages(prev => prev.filter(msg => msg.id !== messageId)); toast({ title: "Message Deleted" }); } catch (error: any) { toast({ variant: 'destructive', title: 'Delete Failed', description: error.message }); }}, [activeChat, toast]);
 
   const handleSendImage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'image', mode, api.uploadChatImage), [handleFileUpload]);
   const handleSendDocument = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'document', mode, api.uploadChatDocument), [handleFileUpload]);
   const handleSendVoiceMessage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'voice_message', mode, api.uploadVoiceMessage), [handleFileUpload]);
-  const handleSendSticker = useCallback((stickerId: string, mode: MessageMode) => {
-    if (!currentUser || !activeChat) return;
-    const clientTempId = uuidv4();
-    sendMessageWithTimeout({ event_type: "send_message", chat_id: activeChat.id, sticker_id: stickerId, client_temp_id: clientTempId, message_subtype: "sticker", mode });
-    addAppEvent('messageSent', `${currentUser.display_name} sent a sticker.`, currentUser.display_name, currentUser.id);
-  }, [currentUser, activeChat, sendMessageWithTimeout, addAppEvent]);
+  const handleSendSticker = useCallback((stickerId: string, mode: MessageMode) => { if (!currentUser || !activeChat) return; sendMessageWithTimeout({ event_type: "send_message", sticker_id: stickerId, client_temp_id: uuidv4(), message_subtype: "sticker", mode, chat_id: activeChat.id }); }, [currentUser, activeChat, sendMessageWithTimeout]);
   
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
-    if (!currentUser || !activeChat) return;
-    const message = messages.find(m => m.id === messageId);
-    if (message?.mode === 'incognito') { toast({ title: "Can't React", description: "Reactions are disabled for incognito messages.", duration: 2000 }); return; }
-    const RATE_LIMIT_MS = 500;
-    const key = `${messageId}_${emoji}`;
-    const now = Date.now();
-    if (lastReactionToggleTimes.current[key] && (now - lastReactionToggleTimes.current[key] < RATE_LIMIT_MS)) return;
+    if (!currentUser || !activeChat || messages.find(m => m.id === messageId)?.mode === 'incognito') return;
+    const key = `${messageId}_${emoji}`; const now = Date.now();
+    if (lastReactionToggleTimes.current[key] && (now - lastReactionToggleTimes.current[key] < 500)) return;
     lastReactionToggleTimes.current[key] = now;
-    setMessages(prevMessages => prevMessages.map(msg => {
-        if (msg.id === messageId) {
-          const newReactions = JSON.parse(JSON.stringify(msg.reactions || {}));
-          if (!newReactions[emoji]) newReactions[emoji] = [];
-          const userReactedIndex = newReactions[emoji].indexOf(currentUser.id);
-          if (userReactedIndex > -1) { newReactions[emoji].splice(userReactedIndex, 1); if (newReactions[emoji].length === 0) delete newReactions[emoji];
-          } else { newReactions[emoji].push(currentUser.id); }
-          return { ...msg, reactions: newReactions };
-        }
-        return msg;
-      }));
+    setMessages(prev => prev.map(m => { if (m.id === messageId) { const r = { ...m.reactions }; if (!r[emoji]) r[emoji] = []; const i = r[emoji]!.indexOf(currentUser.id); if (i > -1) r[emoji]!.splice(i, 1); else r[emoji]!.push(currentUser.id); if (r[emoji]!.length === 0) delete r[emoji]; return { ...m, reactions: r }; } return m; }));
     sendMessage({ event_type: "toggle_reaction", message_id: messageId, chat_id: activeChat.id, emoji });
-    addAppEvent('reactionAdded', `${currentUser.display_name} toggled ${emoji} reaction.`, currentUser.id, currentUser.display_name, { messageId });
-  }, [currentUser, activeChat, sendMessage, addAppEvent, messages, toast]);
+  }, [currentUser, activeChat, sendMessage, messages]);
   
-  const getDynamicBackgroundClass = useCallback((mood1?: Mood, mood2?: Mood): string => {
-    if (!mood1 || !mood2) return 'bg-mood-default-chat-area';
-    if (mood1 === 'Happy' && mood2 === 'Happy') return 'bg-mood-happy-happy';
-    if (mood1 === 'Excited' && mood2 === 'Excited') return 'bg-mood-excited-excited';
-    if ((['Chilling','Neutral','Thoughtful','Content'].includes(mood1)) && (['Chilling','Neutral','Thoughtful','Content'].includes(mood2))) { return 'bg-mood-calm-calm'; }
-    if (mood1 === 'Sad' && mood2 === 'Sad') return 'bg-mood-sad-sad';
-    if (mood1 === 'Angry' && mood2 === 'Angry') return 'bg-mood-angry-angry';
-    if (mood1 === 'Anxious' && mood2 === 'Anxious') return 'bg-mood-anxious-anxious';
-    if (((mood1 === 'Happy' && (mood2 === 'Sad' || mood2 === 'Angry')) || ((mood1 === 'Sad' || mood1 === 'Angry') && mood2 === 'Happy')) || (mood1 === 'Excited' && (mood2 === 'Sad' || mood2 === 'Chilling' || mood2 === 'Angry')) || (((mood1 === 'Sad' || mood1 === 'Chilling' || mood1 === 'Angry') && mood2 === 'Excited'))) { return 'bg-mood-thoughtful-thoughtful'; }
-    return 'bg-mood-default-chat-area';
-  }, []);
-  
-  handleSendThoughtRef.current = useCallback(async () => {
-    if (!currentUser || !otherUser) return;
-    sendMessage({ event_type: "ping_thinking_of_you", recipient_user_id: otherUser.id });
-    initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name);
-    addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
-  }, [currentUser, otherUser, sendMessage, initiateThoughtNotification, addAppEvent]);
+  const getDynamicBg = useCallback((m1?: Mood, m2?: Mood) => !m1||!m2?'bg-mood-default-chat-area':m1==='Happy'&&m2==='Happy'?'bg-mood-happy-happy':m1==='Excited'&&m2==='Excited'?'bg-mood-excited-excited':(['Chilling','Neutral','Thoughtful','Content'].includes(m1))&&(['Chilling','Neutral','Thoughtful','Content'].includes(m2))?'bg-mood-calm-calm':m1==='Sad'&&m2==='Sad'?'bg-mood-sad-sad':m1==='Angry'&&m2==='Angry'?'bg-mood-angry-angry':m1==='Anxious'&&m2==='Anxious'?'bg-mood-anxious-anxious':(((m1==='Happy'&&(m2==='Sad'||m2==='Angry'))||((m1==='Sad'||m1==='Angry')&&m2==='Happy'))||(m1==='Excited'&&(m2==='Sad'||m2==='Chilling'||m2==='Angry'))||(((m1==='Sad'||m1==='Chilling'||m1==='Angry')&&m2==='Excited')))?'bg-mood-thoughtful-thoughtful':'bg-mood-default-chat-area', []);
+  handleSendThoughtRef.current = useCallback(async () => { if (!currentUser || !otherUser) return; sendMessage({ event_type: "ping_thinking_of_you", recipient_user_id: otherUser.id }); initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name); }, [currentUser, otherUser, sendMessage, initiateThoughtNotification]);
 
   const onProfileClick = useCallback(() => router.push('/settings'), [router]);
   const handleOtherUserAvatarClick = useCallback(() => { if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); } }, [otherUser]);
-  const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
-    if (currentUser) {
-      try {
-        await api.updateUserProfile({ mood: newMood });
-        await fetchAndUpdateUser();
-        toast({ title: "Mood Updated!", description: `Your mood is now ${newMood}.` });
-      } catch (error: any) { toast({ variant: 'destructive', title: 'Mood Update Failed', description: error.message }); }
-    }
-    if (typeof window !== 'undefined') sessionStorage.setItem('moodPromptedThisSession', 'true');
-    setIsMoodModalOpen(false);
-  }, [currentUser, fetchAndUpdateUser, toast]);
-
+  const handleSetMoodFromModal = useCallback(async (newMood: Mood) => { if (currentUser) try { await api.updateUserProfile({ mood: newMood }); await fetchAndUpdateUser(); toast({ title: "Mood Updated!" }); } catch (e: any) { toast({ variant: 'destructive', title: 'Update Failed' }) } if (typeof window !== 'undefined') sessionStorage.setItem('moodPromptedThisSession', 'true'); setIsMoodModalOpen(false); }, [currentUser, fetchAndUpdateUser, toast]);
   const handleContinueWithCurrentMood = useCallback(() => { if (typeof window !== 'undefined') sessionStorage.setItem('moodPromptedThisSession', 'true'); setIsMoodModalOpen(false); }, []);
-  const handleShowReactions = useCallback((message: MessageType, allUsers: Record<string, User>) => { if (message.reactions && Object.keys(message.reactions).length > 0) setReactionModalData({ reactions: message.reactions, allUsers }); }, []);
+  const handleShowReactions = useCallback((message: MessageType, allUsers: Record<string, User>) => { if (message.reactions) setReactionModalData({ reactions: message.reactions, allUsers }) }, []);
   const handleEnableNotifications = useCallback(() => { subscribeToPush(); setShowNotificationPrompt(false); }, [subscribeToPush]);
   const handleDismissNotificationPrompt = useCallback(() => { setShowNotificationPrompt(false); sessionStorage.setItem('notificationPromptDismissed', 'true'); }, []);
   const handleShowMedia = useCallback((url: string, type: 'image' | 'video') => setMediaModalData({ url, type }), []);
   const handleShowDocumentPreview = useCallback((message: MessageType) => setDocumentPreview(message), []);
-  const handleSelectMode = useCallback((mode: MessageMode) => {
-    if (!activeChat) return;
-    setChatMode(mode);
-    sendMessage({ event_type: "change_chat_mode", chat_id: activeChat.id, mode: mode });
-    toast({ title: `Switched to ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode`, duration: 2000 });
-  }, [activeChat, sendMessage, toast]);
+  const handleSelectMode = useCallback((mode: MessageMode) => { if (activeChat) { setChatMode(mode); sendMessage({ event_type: "change_chat_mode", chat_id: activeChat.id, mode }); toast({ title: `Switched to ${mode} Mode` }); }}, [activeChat, sendMessage, toast]);
+  const handleCancelReply = useCallback(() => setReplyingTo(null), []);
+  const handleSetReplyingTo = useCallback((message: MessageType | null) => setReplyingTo(message), []);
 
-  // 6. Effect Hooks
-  useEffect(() => {
-    if (!isAuthLoading && !isAuthenticated) { router.push('/'); return; }
-    if (isAuthenticated && currentUser) { performLoadChatData(); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAuthLoading, currentUser?.id]);
-
-  useEffect(() => {
-    let newBgClass = 'bg-mood-default-chat-area';
-    if (chatMode === 'fight') newBgClass = 'bg-mode-fight';
-    else if (chatMode === 'incognito') newBgClass = 'bg-mode-incognito';
-    else if (currentUser?.mood && otherUser?.mood) newBgClass = getDynamicBackgroundClass(currentUser.mood, otherUser.mood);
-    setDynamicBgClass(newBgClass);
-  }, [chatMode, currentUser?.mood, otherUser?.mood, getDynamicBackgroundClass]);
-
-  useEffect(() => {
-    const incognitoMessages = messages.filter(m => m.mode === 'incognito');
-    if (incognitoMessages.length > 0) {
-      const timer = setTimeout(() => { setMessages(prev => prev.filter(m => m.mode !== 'incognito')); }, 30 * 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [messages]);
-
-  useLayoutEffect(() => {
-    if (topMessageId && viewportRef.current) {
-        const topMessageElement = viewportRef.current.querySelector(`#message-${topMessageId}`);
-        if (topMessageElement) { topMessageElement.scrollIntoView({ block: 'start', behavior: 'instant' }); }
-        setTopMessageId(null);
-    }
-  }, [topMessageId, messages]);
-  
-  // Cleanup timeouts on unmount
-  useEffect(() => {
-    const timeouts = pendingMessageTimeouts.current;
-    return () => {
-      Object.values(timeouts).forEach(clearTimeout);
-    };
-  }, []);
-
-  // 7. Memoized Values (useMemo)
-  const filteredMessages = useMemo(() => {
-    const incognitoMessages = messages.filter(msg => msg.mode === 'incognito');
-    const modeSpecificMessages = messages.filter(msg => {
-      if (msg.mode === 'incognito') return false;
-      if (chatMode === 'normal') return msg.mode === 'normal' || !msg.mode;
-      return msg.mode === chatMode;
-    });
-    return [...modeSpecificMessages, ...incognitoMessages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  }, [messages, chatMode]);
+  useEffect(() => { if (!isAuthLoading && !isAuthenticated) router.push('/'); if (isAuthenticated && currentUser) performLoadChatData(); }, [isAuthenticated, isAuthLoading, currentUser?.id]);
+  useEffect(() => { setDynamicBgClass(chatMode==='fight'?'bg-mode-fight':chatMode==='incognito'?'bg-mode-incognito':getDynamicBg(currentUser?.mood, otherUser?.mood)); }, [chatMode, currentUser?.mood, otherUser?.mood, getDynamicBg]);
+  useEffect(() => { const incognito = messages.filter(m => m.mode === 'incognito'); if (incognito.length > 0) { const timer = setTimeout(() => { setMessages(prev => prev.filter(m => m.mode !== 'incognito')); }, 30000); return () => clearTimeout(timer); } }, [messages]);
+  useLayoutEffect(() => { if (topMessageId && viewportRef.current) { const el = viewportRef.current.querySelector(`#message-${topMessageId}`); if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' }); setTopMessageId(null); }}, [topMessageId, messages]);
+  useEffect(() => { const timeouts = pendingMessageTimeouts.current; return () => { Object.values(timeouts).forEach(clearTimeout); }; }, []);
 
   const allUsersForMessageArea = useMemo(() => (currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {}), [currentUser, otherUser]);
-  
-  // 8. Render Logic
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
   const isInputDisabled = protocol === 'disconnected';
 
@@ -490,22 +245,19 @@ export default function ChatPage() {
     return null;
   };
 
-  if (isLoadingPage) return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-foreground ml-4">Loading your profile...</p></div>;
-  if (!isAuthenticated && !isAuthLoading) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><p className="text-destructive text-lg mb-4">Authentication required.</p><Button onClick={() => router.push('/')} variant="outline">Go to Login</Button></div></div>;
-  if (!otherUser || !activeChat) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}<Button variant="link" className="mt-4" onClick={() => router.push('/onboarding/find-partner')}>Find a Partner</Button></div></div>;
-
-  const otherUserIsTyping = otherUser && typingUsers[otherUser.id]?.isTyping;
+  if (isLoadingPage) return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-4">Loading your profile...</p></div>;
+  if (!otherUser || !activeChat) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}</div></div>;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <div className={cn("flex flex-1 flex-col overflow-hidden", dynamicBgClass === 'bg-mood-default-chat-area' ? 'bg-background' : dynamicBgClass)}>
         <ConnectionStatusBanner />
         <div className={cn("flex-grow w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden", (protocol !== 'websocket' && protocol !== 'disconnected') && 'pt-10')}>
-          <ErrorBoundary fallbackMessage="The chat couldn't be displayed. Try refreshing the page.">
+          <ErrorBoundary fallbackMessage="The chat couldn't be displayed.">
             <div className="w-full max-w-2xl h-full flex flex-col bg-card shadow-2xl rounded-lg overflow-hidden relative">
-              <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name} even when ChirpChat is closed.` : 'Get notified about important activity.'}/>
-              <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!otherUserIsTyping}/>
-              <MemoizedMessageArea viewportRef={viewportRef} messages={filteredMessages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(message) => handleShowReactions(message, allUsersForMessageArea)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} onDeleteMessage={handleDeleteMessage} onShowDocumentPreview={handleShowDocumentPreview} onSetReplyingTo={handleSetReplyingTo} />
+              <NotificationPrompt isOpen={showNotificationPrompt} onEnable={handleEnableNotifications} onDismiss={handleDismissNotificationPrompt} title="Enable Notifications" message={otherUser ? `Stay connected with ${otherUser.display_name}` : 'Get notified.'}/>
+              <MemoizedChatHeader currentUser={currentUser} otherUser={otherUser} onProfileClick={onProfileClick} onSendThinkingOfYou={handleSendThoughtRef.current} isTargetUserBeingThoughtOf={!!(otherUser && activeThoughtNotificationFor === otherUser.id)} onOtherUserAvatarClick={handleOtherUserAvatarClick} isOtherUserTyping={!!(otherUser && typingUsers[otherUser.id]?.isTyping)}/>
+              <MemoizedMessageArea viewportRef={viewportRef} messages={messages} currentUser={currentUser} allUsers={allUsersForMessageArea} onToggleReaction={handleToggleReaction} onShowReactions={(m, u) => handleShowReactions(m, u)} onShowMedia={handleShowMedia} onLoadMore={loadMoreMessages} hasMore={hasMoreMessages} isLoadingMore={isLoadingMore} onRetrySend={handleRetrySend} onDeleteMessage={handleDeleteMessage} onShowDocumentPreview={handleShowDocumentPreview} onSetReplyingTo={handleSetReplyingTo} />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} replyingTo={replyingTo} onCancelReply={handleCancelReply} allUsers={allUsersForMessageArea} />
             </div>
           </ErrorBoundary>

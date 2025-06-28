@@ -1,10 +1,10 @@
 
 "use client";
 
-import type { Message, WebSocketEventData, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, HeartbeatClientEvent, EventPayload, ChatModeChangedEventData } from '@/types';
+import type { Message, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, EventPayload, ChatModeChangedEventData, MessageDeletedEventData } from '@/types';
 import { api } from './api';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://d87c-49-43-230-78.ngrok-free.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
 const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 const EVENTS_BASE_URL = API_BASE_URL;
 
@@ -14,11 +14,7 @@ const LAST_SEQUENCE_KEY = 'chirpChat_lastSequence';
 const RECONNECT_DELAY_MS = 5000;
 
 export type RealtimeProtocol = 'connecting' | 'websocket' | 'sse' | 'disconnected' | 'fallback' | 'syncing';
-
 type EventListener = (eventType: string, data: any) => void;
-const listeners: Set<EventListener> = new Set();
-const pendingMessages = new Map<string, Record<string, any>>();
-
 
 class RealtimeService {
   private ws: WebSocket | null = null;
@@ -30,292 +26,62 @@ class RealtimeService {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private activityTimeout: NodeJS.Timeout | null = null;
   private reconnectTimeout: NodeJS.Timeout | null = null;
+  private listeners: Set<EventListener> = new Set();
+  private pendingMessages = new Map<string, Record<string, any>>();
 
-  constructor() {
-    if (typeof window !== 'undefined') {
-      const storedSeq = localStorage.getItem(LAST_SEQUENCE_KEY);
-      this.lastSequence = storedSeq ? parseInt(storedSeq, 10) : 0;
-
-      window.addEventListener('online', this.handleOnline);
-      window.addEventListener('offline', this.handleOffline);
-    }
-  }
-
-  // --- Public API ---
-
-  public connect(authToken: string) {
-    if (this.protocol !== 'disconnected' && this.token === authToken) {
-      return; // Already connected or connecting with the same token
-    }
-    this.token = authToken;
-    this.startConnectionSequence();
-  }
-
-  public disconnect() {
-    this.token = null;
-    this.cleanup();
-    this.setProtocol('disconnected');
-  }
-
+  constructor() { if (typeof window !== 'undefined') { this.lastSequence = parseInt(localStorage.getItem(LAST_SEQUENCE_KEY) || '0', 10); window.addEventListener('online', this.handleOnline); window.addEventListener('offline', this.handleOffline); }}
+  public connect(authToken: string) { if (this.protocol !== 'disconnected' && this.token === authToken) return; this.token = authToken; this.startConnectionSequence(); }
+  public disconnect() { this.token = null; this.cleanup(); this.setProtocol('disconnected'); }
   public sendMessage = (payload: Record<string, any>) => {
-    if (payload.event_type === 'send_message' && payload.client_temp_id) {
-        pendingMessages.set(payload.client_temp_id, payload);
-    }
-    
-    if (this.protocol === 'websocket' && this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(payload));
-    } else if (this.protocol === 'sse' || this.protocol === 'fallback') {
-      // For SSE/fallback, only certain actions are sent via HTTP
-      if (payload.event_type === 'send_message') {
-          const { chat_id, ...messageData } = payload;
-          api.sendMessageHttp(chat_id, messageData).catch(err => {
-              this.emit('error', { title: 'Send Failed (HTTP)', description: err.message });
-              pendingMessages.delete(payload.client_temp_id);
-          });
-      } else if (payload.event_type === 'ping_thinking_of_you') {
-          api.sendThinkingOfYouPing(payload.recipient_user_id).catch(err => {
-             this.emit('error', { title: 'Ping Failed (HTTP)', description: err.message });
-          });
-      } else if (payload.event_type === 'toggle_reaction') {
-           api.toggleReactionHttp(payload.message_id, payload.emoji).catch(err => {
-             this.emit('error', { title: 'Reaction Failed (HTTP)', description: err.message });
-          });
-      }
-      else {
-           console.warn(`Event type "${payload.event_type}" is not sent over HTTP fallback.`);
-      }
-    } else if (this.protocol !== 'websocket' && this.protocol !== 'sse' && this.protocol !== 'fallback') {
-        this.emit('error', { title: 'Not Connected', description: 'Cannot send message. Please check your connection.' });
-    }
+    if (payload.event_type === 'send_message' && payload.client_temp_id) this.pendingMessages.set(payload.client_temp_id, payload);
+    if (this.protocol === 'websocket' && this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(payload));
+    else if (this.protocol === 'sse' || this.protocol === 'fallback') {
+      const { chat_id, ...messageData } = payload;
+      if (payload.event_type === 'send_message') api.sendMessageHttp(chat_id, messageData).catch(err => this.emit('error', { title: 'Send Failed', description: err.message }));
+      else if (payload.event_type === 'ping_thinking_of_you') api.sendThinkingOfYouPing(payload.recipient_user_id).catch(err => this.emit('error', { title: 'Ping Failed', description: err.message }));
+      else if (payload.event_type === 'toggle_reaction') api.toggleReactionHttp(payload.message_id, payload.emoji).catch(err => this.emit('error', { title: 'Reaction Failed', description: err.message }));
+    } else this.emit('error', { title: 'Not Connected', description: 'Cannot send message.' });
   }
+  public subscribe(l: EventListener) { this.listeners.add(l); l('protocol-change', this.protocol); }
+  public unsubscribe(l: EventListener) { this.listeners.delete(l); }
+  public getProtocol = () => this.protocol;
 
-  public subscribe(listener: EventListener) {
-    listeners.add(listener);
-    // Immediately notify the new subscriber of the current status
-    listener('protocol-change', this.protocol);
-  }
-
-  public unsubscribe(listener: EventListener) {
-    listeners.delete(listener);
-  }
-
-  public getProtocol(): RealtimeProtocol {
-    return this.protocol;
-  }
-
-  // --- Internal Logic ---
-
-  private setProtocol(newProtocol: RealtimeProtocol) {
-    if (this.protocol !== newProtocol) {
-      this.protocol = newProtocol;
-      this.emit('protocol-change', this.protocol);
-    }
-  }
-
-  private emit(eventType: string, data: any) {
-    listeners.forEach(listener => listener(eventType, data));
-  }
-
+  private setProtocol(p: RealtimeProtocol) { if (this.protocol !== p) { this.protocol = p; this.emit('protocol-change', p); }}
+  private emit(event: string, data: any) { this.listeners.forEach(l => l(event, data)); }
   private handleEvent(data: EventPayload) {
-    if (data.sequence && data.sequence > this.lastSequence) {
-        this.lastSequence = data.sequence;
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LAST_SEQUENCE_KEY, String(data.sequence));
-        }
-    }
-    
-    if (data.event_type === 'message_ack' && data.client_temp_id) {
-        pendingMessages.delete(data.client_temp_id);
-    }
-    
+    if (data.sequence && data.sequence > this.lastSequence) { this.lastSequence = data.sequence; localStorage.setItem(LAST_SEQUENCE_KEY, String(data.sequence)); }
+    if (data.event_type === 'message_ack' && data.client_temp_id) this.pendingMessages.delete(data.client_temp_id);
     this.emit('event', data);
   }
-
   private async syncEvents() {
-    if (this.isSyncing) return;
-    this.isSyncing = true;
-    this.setProtocol('syncing');
-    try {
-        const missedEvents = await api.syncEvents(this.lastSequence);
-        if (missedEvents && missedEvents.length > 0) {
-            console.log(`Sync: processing ${missedEvents.length} missed events.`);
-            missedEvents.forEach(event => this.handleEvent(event));
-        }
-    } catch (error: any) {
-        console.error("Failed to sync events:", error);
-        this.emit('error', { title: 'Sync Failed', description: 'Could not retrieve missed messages.' });
-    } finally {
-        this.isSyncing = false;
-    }
+    if (this.isSyncing) return; this.isSyncing = true; this.setProtocol('syncing');
+    try { const events = await api.syncEvents(this.lastSequence); if (events?.length > 0) events.forEach(e => this.handleEvent(e));
+    } catch (error: any) { this.emit('error', { title: 'Sync Failed', description: 'Could not retrieve missed messages.' });
+    } finally { this.isSyncing = false; }
   }
-
-  private startConnectionSequence = () => {
-    if (!this.token || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      this.setProtocol('disconnected');
-      return;
-    }
-
-    this.cleanup();
-    this.setProtocol('connecting');
-    this.connectWebSocket();
-  };
-
+  private startConnectionSequence = () => { if (!this.token || (typeof navigator !== 'undefined' && !navigator.onLine)) { this.setProtocol('disconnected'); return; } this.cleanup(); this.setProtocol('connecting'); this.connectWebSocket(); };
   private connectWebSocket() {
-    if (!this.token) return;
-    const wsUrl = `${WS_BASE_URL}/ws/connect?token=${encodeURIComponent(this.token)}`;
-    this.ws = new WebSocket(wsUrl);
-
-    this.ws.onopen = async () => {
-      await this.syncEvents();
-      this.setProtocol('websocket');
-      this.resetActivityTimeout();
-      this.startHeartbeat();
-      if (pendingMessages.size > 0) {
-        console.log(`WebSocket: Resending ${pendingMessages.size} pending messages.`);
-        pendingMessages.forEach(payload => this.ws?.send(JSON.stringify(payload)));
-      }
-    };
-
-    this.ws.onmessage = (event) => {
-      this.resetActivityTimeout();
-      try {
-        const data = JSON.parse(event.data as string) as EventPayload;
-        if (data.event_type === 'heartbeat_ack') {
-            return; // It's just a keep-alive, do nothing else.
-        }
-        this.handleEvent(data);
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
-
-    this.ws.onerror = (err) => {
-      console.error("WebSocket error:", err);
-      // onclose will handle the fallback
-    };
-    
-    this.ws.onclose = (event) => {
-        this.stopHeartbeat();
-        this.ws = null;
-        if (event.code === 1008) { // Policy Violation - auth failed
-            this.emit('auth-error');
-            this.disconnect();
-            return;
-        }
-        if (this.token) { // If token is null, it means disconnect was intentional
-          this.connectSSE();
-        }
-    };
+    if (!this.token) return; this.ws = new WebSocket(`${WS_BASE_URL}/ws/connect?token=${encodeURIComponent(this.token)}`);
+    this.ws.onopen = async () => { await this.syncEvents(); this.setProtocol('websocket'); this.resetActivityTimeout(); this.startHeartbeat(); if (this.pendingMessages.size > 0) this.pendingMessages.forEach(p => this.ws?.send(JSON.stringify(p))); };
+    this.ws.onmessage = (event) => { this.resetActivityTimeout(); const data = JSON.parse(event.data); if (data.event_type !== 'heartbeat_ack') this.handleEvent(data); };
+    this.ws.onerror = () => {};
+    this.ws.onclose = (event) => { this.stopHeartbeat(); this.ws = null; if (event.code === 1008) { this.emit('auth-error'); this.disconnect(); return; } if (this.token) this.connectSSE(); };
   }
-
   private connectSSE = async () => {
-    if (!this.token) return;
-    console.log("WebSocket failed. Falling back to SSE.");
-    
-    this.setProtocol('fallback');
-    const sseUrl = `${EVENTS_BASE_URL}/events/subscribe?token=${encodeURIComponent(this.token)}`;
-    this.sse = new EventSource(sseUrl, { withCredentials: false });
-
-    this.sse.onopen = async () => {
-      console.log("SSE connection established.");
-      await this.syncEvents();
-      this.setProtocol('sse'); // Move back to SSE state after sync
-    };
-
-    this.sse.onerror = (err) => {
-      console.error("SSE connection error:", err);
-      // Don't fall back here if the error is due to auth failure,
-      // as the 'auth_error' event will handle it.
-      if (this.protocol !== 'disconnected') {
-        this.sse?.close();
-        this.sse = null;
-        this.scheduleReconnect();
-      }
-    };
-    
-    this.sse.addEventListener("auth_error", (event: MessageEvent) => {
-        console.error("SSE Authentication failed via event.");
-        this.emit('auth-error');
-        this.disconnect(); // This will close the SSE connection and reset state
-    });
-
-    this.sse.addEventListener("sse_connected", (event: MessageEvent) => {
-        // This confirms the generator has started successfully on the backend.
-        console.log("SSE stream connected by server:", event.data);
-    });
-
-    const sseMessageHandler = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data) as EventPayload;
-        this.handleEvent(data);
-      } catch (e) {
-        console.error("Failed to parse SSE event data:", e);
-      }
-    };
-
-    // Use a set of known event types to add listeners
-    const ALL_EVENT_TYPES = ["new_message", "message_reaction_update", "user_presence_update", "typing_indicator", "thinking_of_you_received", "user_profile_update", "message_ack", "error", "ping", "chat_mode_changed"];
-    ALL_EVENT_TYPES.forEach(type => this.sse?.addEventListener(type, sseMessageHandler));
+    if (!this.token) return; this.setProtocol('fallback'); this.sse = new EventSource(`${EVENTS_BASE_URL}/events/subscribe?token=${encodeURIComponent(this.token)}`);
+    this.sse.onopen = async () => { await this.syncEvents(); this.setProtocol('sse'); };
+    this.sse.onerror = () => { if (this.protocol !== 'disconnected') { this.sse?.close(); this.sse = null; this.scheduleReconnect(); }};
+    this.sse.addEventListener("auth_error", () => { this.emit('auth-error'); this.disconnect(); });
+    const ALL_EVENT_TYPES: Array<EventPayload['event_type']> = ["new_message", "message_deleted", "message_reaction_update", "user_presence_update", "typing_indicator", "thinking_of_you_received", "user_profile_update", "message_ack", "error", "chat_mode_changed"];
+    ALL_EVENT_TYPES.forEach(type => this.sse?.addEventListener(type, (event: MessageEvent) => this.handleEvent(JSON.parse(event.data))));
   }
-
-  private scheduleReconnect = () => {
-    this.setProtocol('disconnected');
-    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    this.reconnectTimeout = setTimeout(() => {
-        if(this.token) this.startConnectionSequence();
-    }, RECONNECT_DELAY_MS);
-  }
-
-  private startHeartbeat() {
-    this.stopHeartbeat();
-    this.heartbeatInterval = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ event_type: "HEARTBEAT" } as HeartbeatClientEvent));
-      }
-    }, HEARTBEAT_INTERVAL);
-  }
-
-  private stopHeartbeat() {
-    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-    this.heartbeatInterval = null;
-  }
-
-  private resetActivityTimeout = () => {
-    if(this.activityTimeout) clearTimeout(this.activityTimeout);
-    this.activityTimeout = setTimeout(() => {
-      console.warn('Realtime: Server activity timeout. Closing connection.');
-      this.ws?.close(1000, 'Server activity timeout'); // Use valid close code
-    }, SERVER_ACTIVITY_TIMEOUT);
-  };
-
-  private cleanup = () => {
-    this.stopHeartbeat();
-    if(this.activityTimeout) clearTimeout(this.activityTimeout);
-    if(this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    
-    if (this.ws) {
-        this.ws.onclose = null; // Prevent onclose handler from firing during manual cleanup
-        this.ws.close(1000, 'Client initiated cleanup');
-        this.ws = null;
-    }
-    if (this.sse) {
-        this.sse.close();
-        this.sse = null;
-    }
-  };
-  
-  private handleOnline = () => {
-    console.log("Browser is online.");
-    if (this.protocol === 'disconnected') {
-      this.startConnectionSequence();
-    }
-  };
-  
-  private handleOffline = () => {
-    console.log("Browser is offline.");
-    this.cleanup();
-    this.setProtocol('disconnected');
-  };
+  private scheduleReconnect = () => { this.setProtocol('disconnected'); if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout); this.reconnectTimeout = setTimeout(() => { if(this.token) this.startConnectionSequence(); }, RECONNECT_DELAY_MS); }
+  private startHeartbeat() { this.stopHeartbeat(); this.heartbeatInterval = setInterval(() => { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ event_type: "HEARTBEAT" })); }, HEARTBEAT_INTERVAL); }
+  private stopHeartbeat() { if (this.heartbeatInterval) clearInterval(this.heartbeatInterval); }
+  private resetActivityTimeout = () => { if(this.activityTimeout) clearTimeout(this.activityTimeout); this.activityTimeout = setTimeout(() => this.ws?.close(), SERVER_ACTIVITY_TIMEOUT); };
+  private cleanup = () => { this.stopHeartbeat(); if(this.activityTimeout) clearTimeout(this.activityTimeout); if(this.reconnectTimeout) clearTimeout(this.reconnectTimeout); if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; } if (this.sse) { this.sse.close(); this.sse = null; }}
+  private handleOnline = () => { if (this.protocol === 'disconnected') this.startConnectionSequence(); };
+  private handleOffline = () => { this.cleanup(); this.setProtocol('disconnected'); };
 }
 
 export const realtimeService = new RealtimeService();

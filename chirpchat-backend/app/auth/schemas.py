@@ -3,17 +3,13 @@ from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
-import re # For phone number validation
+import re
 
-# Corresponds to ALL_MOODS in frontend types.ts
 ALL_MOODS = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"]
 Mood = str 
 
-# 🔒 Security: New schemas for the multi-step OTP registration flow.
-
 class PhoneSchema(BaseModel):
     phone: str
-
     @validator('phone')
     def validate_phone(cls, v):
         if not re.match(r"^\+[1-9]\d{1,14}$", v):
@@ -38,30 +34,23 @@ class PasswordChangeRequest(BaseModel):
 
 class UserBase(BaseModel):
     id: UUID
-    phone: str # Phone number is now primary for lookups if ID not in token
+    phone: str
     display_name: str
-    email: Optional[EmailStr] = None # Email is now optional
+    email: Optional[EmailStr] = None
     avatar_url: Optional[str] = None
     mood: Optional[Mood] = "Neutral"
     is_online: Optional[bool] = False
     last_seen: Optional[datetime] = None
     partner_id: Optional[UUID] = None
 
-class UserCreate(BaseModel):
-    # This model is now used internally by the registration endpoint, not as a direct request body.
-    phone: str
-    password: str = Field(min_length=8)
-    display_name: str
-    email: Optional[EmailStr] = None
-
 class UserLogin(BaseModel):
-    phone: str # Changed from email
+    phone: str
     password: str
 
 class UserUpdate(BaseModel):
     display_name: Optional[str] = None
     mood: Optional[Mood] = None
-    email: Optional[EmailStr] = None # Allow updating optional email
+    email: Optional[EmailStr] = None
     avatar_url: Optional[str] = None
 
 class UserPublic(BaseModel):
@@ -78,7 +67,6 @@ class UserPublic(BaseModel):
     class Config:
         from_attributes = True
 
-
 class Token(BaseModel):
     access_token: str
     refresh_token: str
@@ -89,5 +77,3 @@ class TokenData(BaseModel):
     phone: Optional[str] = None
     user_id: Optional[UUID] = None
     token_type: Optional[str] = None
-
-    

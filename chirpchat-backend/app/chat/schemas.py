@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 import enum
 
-class ClipTypeEnum(str, enum.Enum): # Using enum.Enum for proper value access
+class ClipTypeEnum(str, enum.Enum):
     AUDIO = "audio"
     VIDEO = "video"
 
@@ -23,55 +23,38 @@ class MessageModeEnum(str, enum.Enum):
     FIGHT = "fight"
     INCOGNITO = "incognito"
 
-# =================================================================
-# CUSTOMIZE YOUR EMOJIS HERE (BACKEND)
-# =================================================================
-# This list validates incoming reaction emojis on the server.
-# It should match the list in `src/types/index.ts` on the frontend.
-# Example: SUPPORTED_EMOJIS = ['😊', '🎉', '👍', '❤️']
-#
-SUPPORTED_EMOJIS = [
-    # Add your custom emojis here. For example:
-    # '👍', '❤️', '😂', '😮', '😢', '🙏'
-]
-SupportedEmoji = str # Use Pydantic enum or validator for stricter check
+SUPPORTED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+SupportedEmoji = str
 
 class MessageStatusEnum(str, enum.Enum):
     SENDING = "sending"
-    SENT = "sent" # Renamed from sent_to_server
-    DELIVERED = "delivered" # Renamed from delivered_to_recipient
-    READ = "read" # Renamed from read_by_recipient
+    SENT = "sent"
+    DELIVERED = "delivered"
+    READ = "read"
     FAILED = "failed"
 
 class MessageBase(BaseModel):
     text: Optional[str] = None
     message_subtype: Optional[MessageSubtypeEnum] = MessageSubtypeEnum.TEXT
-    mode: Optional[MessageModeEnum] = MessageModeEnum.NORMAL # New field for message mode
-    
-    # Sticker fields - now just sticker_id
+    mode: Optional[MessageModeEnum] = MessageModeEnum.NORMAL
     sticker_id: Optional[UUID] = None
-    
-    # Media clip fields
     clip_type: Optional[ClipTypeEnum] = None
     clip_placeholder_text: Optional[str] = None
     clip_url: Optional[str] = None
-    # Image fields
     image_url: Optional[str] = None
-    image_thumbnail_url: Optional[str] = None # For optimized image loading
-    # Document fields
+    image_thumbnail_url: Optional[str] = None
     document_url: Optional[str] = None
     document_name: Optional[str] = None
-    # Voice message metadata
     duration_seconds: Optional[int] = None
     file_size_bytes: Optional[int] = None
     audio_format: Optional[str] = None
     transcription: Optional[str] = None
-
+    reply_to_message_id: Optional[UUID] = None
 
 class MessageCreate(MessageBase):
-    chat_id: Optional[UUID] = None # Added for WebSocket payload validation
-    recipient_id: Optional[UUID] = None # For HTTP creation, if directly targeting a user to start a chat
-    client_temp_id: Optional[str] = None # Client-generated temporary ID for deduplication and optimistic UI
+    chat_id: Optional[UUID] = None
+    recipient_id: Optional[UUID] = None
+    client_temp_id: Optional[str] = None
 
 class MessageInDB(MessageBase):
     id: UUID
@@ -80,28 +63,19 @@ class MessageInDB(MessageBase):
     created_at: datetime
     updated_at: datetime
     reactions: Optional[Dict[SupportedEmoji, List[UUID]]] = Field(default_factory=dict)
-    status: Optional[MessageStatusEnum] = MessageStatusEnum.SENT # Default status when fetched/created by server
-    client_temp_id: Optional[str] = None # Store the client's temporary ID
-
-    # To show stickers in chat list, we need to join and get the URL
+    status: Optional[MessageStatusEnum] = MessageStatusEnum.SENT
+    client_temp_id: Optional[str] = None
     sticker_image_url: Optional[str] = None
+    class Config: from_attributes = True
 
-    class Config:
-        from_attributes = True
-
-
-class ChatParticipant(BaseModel): # Renamed from UserPublic in context of chat participant list
-    id: UUID # Changed from user_id to id to match UserPublic
+class ChatParticipant(BaseModel):
+    id: UUID
     display_name: str
     avatar_url: Optional[str] = None
     mood: Optional[str] = "Neutral"
     is_online: Optional[bool] = False
     last_seen: Optional[datetime] = None
-
-
-    class Config:
-        from_attributes = True
-
+    class Config: from_attributes = True
 
 class ChatBase(BaseModel):
     id: UUID
@@ -111,10 +85,7 @@ class ChatResponse(ChatBase):
     last_message: Optional[MessageInDB] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
+    class Config: from_attributes = True
 
 class ReactionToggle(BaseModel):
     emoji: SupportedEmoji
@@ -129,9 +100,7 @@ class MessageListResponse(BaseModel):
     messages: List[MessageInDB]
 
 class DefaultChatPartnerResponse(BaseModel):
-    user_id: UUID # Kept as user_id for clarity of purpose
+    user_id: UUID
     display_name: str
     avatar_url: Optional[str] = None
-
-    class Config:
-        from_attributes = True
+    class Config: from_attributes = True
