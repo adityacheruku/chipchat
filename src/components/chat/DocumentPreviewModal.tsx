@@ -105,4 +105,3 @@ export default function DocumentPreviewModal({ isOpen, onClose, message }: Docum
     </Dialog>
   );
 }
-

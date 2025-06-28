@@ -232,7 +232,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   
   const isStickerMessage = message.message_subtype === 'sticker';
   const isEmojiOnlyMessage = message.message_subtype === 'text' && message.text && EMOJI_ONLY_REGEX.test(message.text.trim()) && message.text.trim().length <= 5;
-  const isMediaBubble = isStickerMessage || isEmojiOnlyMessage || message.message_subtype === 'image' || message.message_subtype === 'voice_message' || message.status === 'uploading';
+  const isMediaBubble = isStickerMessage || isEmojiOnlyMessage || message.message_subtype === 'image' || message.message_subtype === 'voice_message';
 
 
   let formattedTime = "sending...";
@@ -243,13 +243,35 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   } catch(e) { console.warn("Could not parse message timestamp:", message.created_at) }
 
   const renderMessageContent = () => {
-    if (message.status === 'uploading' && message.message_subtype !== 'image') {
-      return (
-        <div className="w-48 flex items-center gap-2 bg-muted/50 rounded-lg p-2 overflow-hidden text-secondary-foreground">
-          <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin" />
-          <div className="flex-grow min-w-0">
-            <p className="text-xs font-semibold truncate">{message.file?.name || 'File'}</p>
+    if (message.status === 'uploading') {
+      if (message.message_subtype === 'document') {
+        return (
+          <div className="w-48 flex items-center gap-2">
+            <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin text-muted-foreground" />
+            <span className="opacity-50 truncate">{message.file?.name || 'Uploading...'}</span>
           </div>
+        );
+      }
+      if (message.message_subtype === 'image') {
+        return (
+          <div className="w-[120px] h-[120px] rounded-md overflow-hidden bg-muted relative flex items-center justify-center animate-pulse">
+            {message.image_url && (
+              <Image
+                src={message.image_url} // This is the local blob URL
+                alt="Uploading preview"
+                fill
+                className="object-cover"
+              />
+            )}
+            <div className="absolute inset-0 bg-black/20" />
+            <Loader2 className="animate-spin h-8 w-8 text-white/90 relative z-10" />
+          </div>
+        );
+      }
+      return (
+        <div className="w-48 flex items-center gap-2">
+          <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin text-muted-foreground" />
+          <p className="text-xs font-semibold truncate opacity-50">{message.file?.name || 'File'}</p>
         </div>
       );
     }
@@ -258,22 +280,6 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized /> : null;
       case 'voice_message': return message.clip_url ? <AudioPlayer src={message.clip_url} initialDuration={message.duration_seconds} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
       case 'image':
-        if (message.status === 'uploading') {
-          return (
-            <div className="w-[120px] h-[120px] rounded-md overflow-hidden bg-muted relative flex items-center justify-center">
-              {message.image_url && (
-                <Image
-                  src={message.image_url} // This is the local blob URL
-                  alt="Uploading preview"
-                  fill
-                  className="object-cover blur-sm scale-110"
-                />
-              )}
-              <div className="absolute inset-0 bg-black/20" />
-              <Loader2 className="animate-spin h-8 w-8 text-white/90 relative z-10" />
-            </div>
-          );
-        }
         if (message.status === 'failed') {
           return (
              <div className="w-[120px] h-[120px] rounded-md border-2 border-dashed border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center p-2 text-center text-destructive">
@@ -287,7 +293,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           );
         }
         return message.image_url ? (
-          <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-all duration-200 hover:scale-105 active:scale-95">
+          <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-all duration-200 active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg">
               <Image src={message.image_thumbnail_url || message.image_url} alt="Chat image" layout="fill" className="object-cover" data-ai-hint="chat photo"/>
           </button>
         ) : <p className="text-sm italic">Image unavailable</p>;
@@ -297,7 +303,21 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
               <span className="text-sm italic underline hover:opacity-80">{message.clip_placeholder_text || `View ${message.clip_type} clip`}</span>
          </button>
       ) : <p className="text-sm italic">Clip unavailable</p>;
-      case 'document': return message.document_url ? (
+      case 'document':
+        if (message.status === 'failed') {
+          return (
+            <div className={cn(buttonVariants({ variant: 'destructive' }), 'h-auto py-2 w-full max-w-[250px] bg-destructive/20 text-destructive')}>
+              <AlertTriangle size={24} className="mr-3 flex-shrink-0" />
+              <div className="flex flex-col text-left min-w-0">
+                  <span className="font-medium text-sm">Upload Failed</span>
+                  <Button variant="link" size="sm" onClick={() => onRetrySend(message)} className="h-auto p-0 text-destructive hover:underline justify-start">
+                    Retry
+                  </Button>
+              </div>
+            </div>
+          );
+        }
+        return message.document_url ? (
         <button onClick={() => onShowDocumentPreview(message)} className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')}>
             <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
             <div className="flex flex-col text-left min-w-0">
@@ -305,7 +325,12 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                 <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to preview'}</span>
             </div>
         </button>
-      ) : <p className="text-sm italic">Document unavailable</p>;
+      ) : (
+          <div className="flex items-center p-3 text-red-500">
+            <AlertTriangle className="w-6 h-6 mr-2" />
+            <span className="text-sm">Cannot load document</span>
+          </div>
+      );
       case 'text':
       case 'emoji_only':
       default: return message.text ? <p className={cn("text-sm whitespace-pre-wrap break-words", isEmojiOnlyMessage && "text-5xl")}>{message.text}</p> : <p className="text-sm italic">Message unavailable</p>;
@@ -350,9 +375,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                   {...doubleTapEvents}
                   className={cn(
                     'relative rounded-xl shadow-md transition-transform',
-                    isMediaBubble ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
-                    !isMediaBubble && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
-                    !isMediaBubble && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
+                    isMediaBubble || message.message_subtype === 'document' ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
+                    !isMediaBubble && message.message_subtype !== 'document' && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
+                    !isMediaBubble && message.message_subtype !== 'document' && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
                     message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80'
                   )}
                 >
