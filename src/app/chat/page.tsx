@@ -39,7 +39,6 @@ const ModalLoader = () => (
   );
 
 // ⚡️ Lazy-loaded non-critical components for faster initial page load
-const UserProfileModal = dynamic(() => import('@/components/chat/UserProfileModal'), { ssr: false, loading: () => <ModalLoader /> });
 const FullScreenAvatarModal = dynamic(() => import('@/components/chat/FullScreenAvatarModal'), { ssr: false, loading: () => <ModalLoader /> });
 const FullScreenMediaModal = dynamic(() => import('@/components/chat/FullScreenMediaModal'), { ssr: false, loading: () => <ModalLoader /> });
 const MoodEntryModal = dynamic(() => import('@/components/chat/MoodEntryModal'), { ssr: false, loading: () => <ModalLoader /> });
@@ -58,7 +57,6 @@ export default function ChatPage() {
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [otherUser, setOtherUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isChatLoading, setIsChatLoading] = useState(true);
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
   const [appEvents, setAppEvents] = useState<AppEvent[]>([]);
@@ -402,7 +400,7 @@ export default function ChatPage() {
     addAppEvent('thoughtPingSent', `${currentUser.display_name} sent 'thinking of you' to ${otherUser.display_name}.`, currentUser.id, currentUser.display_name);
   }, [currentUser, otherUser, sendMessage, initiateThoughtNotification, addAppEvent]);
 
-  const onProfileClick = useCallback(() => setIsProfileModalOpen(true), []);
+  const onProfileClick = useCallback(() => router.push('/settings'), [router]);
   const handleOtherUserAvatarClick = useCallback(() => { if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); } }, [otherUser]);
   const handleSetMoodFromModal = useCallback(async (newMood: Mood) => {
     if (currentUser) {
@@ -512,7 +510,6 @@ export default function ChatPage() {
             </div>
           </ErrorBoundary>
         </div>
-        {isProfileModalOpen && currentUser && <UserProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} user={currentUser} />}
         {fullScreenUserData && <FullScreenAvatarModal isOpen={isFullScreenAvatarOpen} onClose={() => setIsFullScreenAvatarOpen(false)} user={fullScreenUserData}/>}
         {mediaModalData && <FullScreenMediaModal isOpen={!!mediaModalData} onClose={() => setMediaModalData(null)} mediaUrl={mediaModalData.url} mediaType={mediaModalData.type}/>}
         {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={() => setIsMoodModalOpen(false)} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}

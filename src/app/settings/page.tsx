@@ -7,7 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, ChevronRight, User, Bell, Palette, Shield } from 'lucide-react';
+import { Loader2, ArrowLeft, ChevronRight, User, Bell, Palette, Shield, LogOut } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Separator } from '@/components/ui/separator';
 
 const SettingsLink = ({ href, icon, title, description }: { href: string; icon: React.ElementType; title: string; description: string }) => {
     const Icon = icon;
@@ -27,7 +29,7 @@ const SettingsLink = ({ href, icon, title, description }: { href: string; icon: 
 
 
 export default function SettingsHubPage() {
-    const { currentUser, isLoading: isAuthLoading, isAuthenticated } = useAuth();
+    const { currentUser, isLoading: isAuthLoading, isAuthenticated, logout } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
@@ -89,6 +91,19 @@ export default function SettingsHubPage() {
                             title="Privacy & Data"
                             description="Receipts, history, account data"
                        />
+                    </CardContent>
+                </Card>
+
+                 <Card className="mt-6">
+                    <CardContent className="p-2">
+                         <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <button className="flex items-center justify-between py-3 w-full text-left hover:bg-destructive/10 -mx-2 px-4 rounded-lg text-destructive">
+                                    <div className="flex items-center gap-3 font-medium"><LogOut /> Logout</div>
+                                </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>You will be returned to the login screen.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={logout}>Logout</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                        </AlertDialog>
                     </CardContent>
                 </Card>
             </main>

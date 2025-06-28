@@ -18,7 +18,7 @@ const SettingsItemButton = ({ children, onClick }: { children: React.ReactNode, 
 
 
 export default function AccountSettingsPage() {
-    const { currentUser, isLoading: isAuthLoading, logout } = useAuth();
+    const { currentUser, isLoading: isAuthLoading } = useAuth();
     const router = useRouter();
 
     if (isAuthLoading || !currentUser) {
@@ -34,15 +34,6 @@ export default function AccountSettingsPage() {
                        <SettingsItemButton><div className="font-medium">Edit Profile</div><ChevronRight className="text-muted-foreground" /></SettingsItemButton>
                        <SettingsItemButton><div className="font-medium">Change Password</div><ChevronRight className="text-muted-foreground" /></SettingsItemButton>
                        <SettingsItemButton><div className="font-medium">Manage Partner</div><ChevronRight className="text-muted-foreground" /></SettingsItemButton>
-                         <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <button className="flex items-center justify-between py-3 w-full text-left hover:bg-destructive/10 -mx-4 px-4 rounded-lg text-destructive">
-                                    <div className="flex items-center gap-2 font-medium"><LogOut /> Logout</div>
-                                    <ChevronRight />
-                                </button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>You will be returned to the login screen.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={logout}>Logout</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-                        </AlertDialog>
                     </CardContent>
                 </Card>
             </main>
