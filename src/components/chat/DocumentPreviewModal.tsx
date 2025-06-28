@@ -3,12 +3,9 @@
 
 import type { Message } from '@/types';
 import { Button } from '@/components/ui/button';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { FileText, Download, ArrowUpRightFromSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 
 interface DocumentPreviewModalProps {
   isOpen: boolean;
@@ -27,7 +24,6 @@ function formatFileSize(bytes?: number | null): string | null {
 
 
 export default function DocumentPreviewModal({ isOpen, onClose, message }: DocumentPreviewModalProps) {
-  const isMobile = useIsMobile();
   const { toast } = useToast();
 
   const handleDownload = async () => {
@@ -106,22 +102,12 @@ export default function DocumentPreviewModal({ isOpen, onClose, message }: Docum
         </div>
     </>
   );
-
-  if (isMobile) {
-    return (
-      <Sheet open={isOpen} onOpenChange={onClose}>
-        <SheetContent side="bottom" className="rounded-t-lg p-0">
-          <Content />
-        </SheetContent>
-      </Sheet>
-    );
-  }
-
+  
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md p-0">
-         <Content />
-      </DialogContent>
-    </Dialog>
+    <Sheet open={isOpen} onOpenChange={onClose}>
+      <SheetContent side="bottom" className="rounded-t-lg p-0">
+        <Content />
+      </SheetContent>
+    </Sheet>
   );
 }

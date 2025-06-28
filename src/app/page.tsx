@@ -285,44 +285,38 @@ export default function AuthPage() {
 
 
   return (
-    <main className="flex min-h-screen bg-background">
-      <div className="hidden md:flex md:w-1/2 bg-slate-50 dark:bg-zinc-900 items-center justify-center p-12 text-center">
-        <BrandSection />
-      </div>
-
-      <div className="w-full md:w-1/2 flex items-center justify-center p-6 sm:p-12">
-        <div className="w-full max-w-sm mx-auto">
-          <div className="md:hidden text-center mb-8">
-            <BrandSection />
-          </div>
-
-          {authMode === 'register' ? (
-            <>
-              {registerStep === 'phone' && <RegisterPhoneStep handleSendOtp={handleSendOtp} regPhone={regPhone} setRegPhone={setRegPhone} loading={loading} />}
-              {registerStep === 'otp' && <RegisterOtpStep handleVerifyOtp={handleVerifyOtp} regOtp={regOtp} setRegOtp={setRegOtp} loading={loading} regPhone={regPhone} setRegisterStep={setRegisterStep} />}
-              {registerStep === 'details' && <RegisterDetailsStep handleCompleteRegistration={handleCompleteRegistration} regDisplayName={regDisplayName} setRegDisplayName={setRegDisplayName} regPassword={regPassword} setRegPassword={setRegPassword} checkPasswordStrength={checkPasswordStrength} passwordStrength={passwordStrength} regOptionalEmail={regOptionalEmail} setRegOptionalEmail={setRegOptionalEmail} agreeToTerms={agreeToTerms} setAgreeToTerms={setAgreeToTerms} loading={loading} />}
-              <p className="text-center text-sm mt-6">
-                Already have an account?{' '}
-                <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
-                  Log In
-                </button>
-              </p>
-            </>
-          ) : (
-            <>
-               <CardHeader className="p-0 mb-6">
-                    <CardTitle>Welcome Back</CardTitle>
-                </CardHeader>
-              <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
-              <p className="text-center text-sm mt-6">
-                Don't have an account?{' '}
-                <button type="button" onClick={() => { setAuthMode('register'); setRegisterStep('phone'); }} className="font-semibold text-primary hover:underline focus:outline-none">
-                  Sign Up
-                </button>
-              </p>
-            </>
-          )}
+    <main className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
+      <div className="w-full max-w-sm mx-auto">
+        <div className="text-center mb-8">
+          <BrandSection />
         </div>
+
+        {authMode === 'register' ? (
+          <>
+            {registerStep === 'phone' && <RegisterPhoneStep handleSendOtp={handleSendOtp} regPhone={regPhone} setRegPhone={setRegPhone} loading={loading} />}
+            {registerStep === 'otp' && <RegisterOtpStep handleVerifyOtp={handleVerifyOtp} regOtp={regOtp} setRegOtp={setRegOtp} loading={loading} regPhone={regPhone} setRegisterStep={setRegisterStep} />}
+            {registerStep === 'details' && <RegisterDetailsStep handleCompleteRegistration={handleCompleteRegistration} regDisplayName={regDisplayName} setRegDisplayName={setRegDisplayName} regPassword={regPassword} setRegPassword={setRegPassword} checkPasswordStrength={checkPasswordStrength} passwordStrength={passwordStrength} regOptionalEmail={regOptionalEmail} setRegOptionalEmail={setRegOptionalEmail} agreeToTerms={agreeToTerms} setAgreeToTerms={setAgreeToTerms} loading={loading} />}
+            <p className="text-center text-sm mt-6">
+              Already have an account?{' '}
+              <button type="button" onClick={() => setAuthMode('login')} className="font-semibold text-primary hover:underline focus:outline-none">
+                Log In
+              </button>
+            </p>
+          </>
+        ) : (
+          <>
+             <CardHeader className="p-0 mb-6">
+                  <CardTitle>Welcome Back</CardTitle>
+              </CardHeader>
+            <LoginForm handleLoginSubmit={handleLoginSubmit} loginPhone={loginPhone} setLoginPhone={setLoginPhone} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loading={loading} />
+            <p className="text-center text-sm mt-6">
+              Don't have an account?{' '}
+              <button type="button" onClick={() => { setAuthMode('register'); setRegisterStep('phone'); }} className="font-semibold text-primary hover:underline focus:outline-none">
+                Sign Up
+              </button>
+            </p>
+          </>
+        )}
       </div>
     </main>
   );

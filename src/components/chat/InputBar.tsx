@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift, ShieldAlert, EyeOff, MessageCircle, Reply } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
@@ -16,7 +15,6 @@ import { PICKER_EMOJIS, type MessageMode, type Message, type User } from '@/type
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useLongPress } from '@/hooks/useLongPress';
 
 interface InputBarProps {
@@ -87,7 +85,6 @@ function InputBar({
   const [messageText, setMessageText] = useState('');
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
-  const isMobile = useIsMobile();
   
   const [stagedAttachments, setStagedAttachments] = useState<File[]>([]);
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
@@ -378,14 +375,6 @@ function InputBar({
     </Tabs>
   ), [emojiSearch, recentEmojis, filteredEmojis, handleEmojiSelect, handleStickerSelect]);
 
-  const AttachmentPickerComponent = isMobile ? Sheet : Popover;
-  const AttachmentPickerTrigger = isMobile ? SheetTrigger : PopoverTrigger;
-  const AttachmentPickerContent = isMobile ? SheetContent : PopoverContent;
-
-  const ToolsPickerComponent = isMobile ? Sheet : Popover;
-  const ToolsPickerTrigger = isMobile ? SheetTrigger : PopoverTrigger;
-  const ToolsPickerContent = isMobile ? SheetContent : PopoverContent;
-
   return (
     <div className={cn("p-3 border-t border-border bg-card transition-colors duration-300", isDragging && "bg-primary/20 border-primary")}
         onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragEvents} onDrop={handleDrop}>
@@ -399,21 +388,21 @@ function InputBar({
       )}
 
       <form onSubmit={handleCompositeSend} className="flex items-end space-x-2">
-        <AttachmentPickerComponent open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
-          <AttachmentPickerTrigger asChild>
+        <Sheet open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
+          <SheetTrigger asChild>
             <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file or change mode" disabled={isSending || disabled}><Paperclip size={22} /></Button>
-          </AttachmentPickerTrigger>
-          <AttachmentPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-auto rounded-t-lg" : "w-80 p-2")}><AttachmentPicker /></AttachmentPickerContent>
-        </AttachmentPickerComponent>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="p-0 border-t bg-card h-auto rounded-t-lg"><AttachmentPicker /></SheetContent>
+        </Sheet>
         
         <div className="flex-grow relative flex items-end">
              <Textarea ref={textareaRef} placeholder={replyingTo ? "Type your reply..." : "Type a message..."} value={messageText} onChange={handleTypingChange} onBlur={handleBlur} className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[44px] max-h-[120px] pt-[11px]" autoComplete="off" disabled={isSending || disabled} rows={1} aria-label="Message input"/>
-             <ToolsPickerComponent open={isToolsOpen} onOpenChange={setIsToolsOpen}>
-                <ToolsPickerTrigger asChild>
+             <Sheet open={isToolsOpen} onOpenChange={setIsToolsOpen}>
+                <SheetTrigger asChild>
                     <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}><Smile size={22} /></Button>
-                </ToolsPickerTrigger>
-                <ToolsPickerContent side="bottom" className={cn(isMobile ? "p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col" : "w-[400px] h-[500px] p-0 flex flex-col")}><ToolsPicker /></ToolsPickerContent>
-            </ToolsPickerComponent>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col"><ToolsPicker /></SheetContent>
+            </Sheet>
         </div>
         
         {showSendButton && (

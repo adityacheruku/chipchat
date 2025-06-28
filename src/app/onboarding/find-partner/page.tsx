@@ -133,7 +133,7 @@ export default function FindPartnerPage() {
     );
 
     return (
-        <div className="flex min-h-screen flex-col items-center justify-center p-2 sm:p-4 bg-background relative">
+        <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background relative">
              <Button
                 variant="outline"
                 size="sm"
@@ -144,7 +144,7 @@ export default function FindPartnerPage() {
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
             </Button>
-            <Card className="w-full max-w-lg md:max-w-2xl shadow-xl mt-16 sm:mt-0">
+            <Card className="w-full max-w-lg shadow-xl mt-16 sm:mt-0">
                 <CardHeader>
                     <CardTitle>Choose Your Partner</CardTitle>
                     <CardDescription>
@@ -269,7 +269,7 @@ export default function FindPartnerPage() {
                 </CardContent>
             </Card>
 
-            <Button onClick={handleInvite} className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 rounded-full h-14 w-14 shadow-lg bg-accent hover:bg-accent/90">
+            <Button onClick={handleInvite} className="fixed bottom-10 right-10 rounded-full h-14 w-14 shadow-lg bg-accent hover:bg-accent/90">
                 <Share2 className="h-6 w-6 text-accent-foreground"/>
                 <span className="sr-only">Invite via Link</span>
             </Button>
