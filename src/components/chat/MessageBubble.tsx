@@ -243,7 +243,6 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   } catch(e) { console.warn("Could not parse message timestamp:", message.created_at) }
 
   const renderMessageContent = () => {
-    // This now only handles non-image uploads. Image uploads are handled in the 'image' case.
     if (message.status === 'uploading' && message.message_subtype !== 'image') return <UploadProgressIndicator fileName={message.file?.name || 'File'} progress={message.uploadProgress || 0} />;
     
     switch (message.message_subtype) {
@@ -257,7 +256,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                 <Image
                   src={message.image_url} // This is the local blob URL
                   alt="Uploading preview"
-                  layout="fill"
+                  fill
                   className="object-cover blur-sm scale-110"
                 />
               )}
@@ -290,11 +289,11 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
          </button>
       ) : <p className="text-sm italic">Clip unavailable</p>;
       case 'document': return message.document_url ? (
-        <a href={message.document_url} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2')}>
-            <FileText size={24} className="mr-2" />
-            <div className="flex flex-col text-left">
-                <span className="font-semibold">{message.document_name || 'Document'}</span>
-                <span className="text-xs opacity-80">{formatFileSize(message.file_size_bytes) || 'Click to open'}</span>
+        <a href={message.document_url} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')}>
+            <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
+            <div className="flex flex-col text-left min-w-0">
+                <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
+                <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to open'}</span>
             </div>
         </a>
       ) : <p className="text-sm italic">Document unavailable</p>;
