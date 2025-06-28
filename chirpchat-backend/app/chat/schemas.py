@@ -17,6 +17,7 @@ class MessageSubtypeEnum(str, enum.Enum):
     DOCUMENT = "document"
     VOICE_MESSAGE = "voice_message"
     EMOJI_ONLY = "emoji_only"
+    HISTORY_CLEARED_MARKER = "history_cleared_marker"
 
 class MessageModeEnum(str, enum.Enum):
     NORMAL = "normal"

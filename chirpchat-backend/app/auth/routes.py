@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from datetime import datetime, timezone
 import random
 
-from app.auth.schemas import UserLogin, UserUpdate, UserPublic, Token, PhoneSchema, VerifyOtpRequest, VerifyOtpResponse, CompleteRegistrationRequest, PasswordChangeRequest
+from app.auth.schemas import UserLogin, UserUpdate, UserPublic, Token, PhoneSchema, VerifyOtpRequest, VerifyOtpResponse, CompleteRegistrationRequest, PasswordChangeRequest, DeleteAccountRequest
 from app.auth.dependencies import get_current_user, get_current_active_user, get_user_from_refresh_token
 from app.utils.security import get_password_hash, verify_password, create_access_token, create_refresh_token, create_registration_token, verify_registration_token
 from app.database import db_manager
@@ -191,6 +191,33 @@ async def change_password(password_data: PasswordChangeRequest, current_user: Us
     new_hashed_password = get_password_hash(password_data.new_password)
     await db_manager.get_table("users").update({"hashed_password": new_hashed_password, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(current_user.id)).execute()
     logger.info(f"User {current_user.id} successfully changed their password.")
+    return None
+
+@user_router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    delete_request: DeleteAccountRequest,
+    current_user: UserPublic = Depends(get_current_active_user)
+):
+    user_resp = await db_manager.get_table("users").select("hashed_password").eq("id", str(current_user.id)).single().execute()
+    
+    if not verify_password(delete_request.password, user_resp.data["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password. Account not deleted.",
+        )
+
+    try:
+        # Use admin client to perform deletion. Assumes RLS is set up to allow this
+        # or that cascading deletes are configured in the database schema.
+        await db_manager.admin_client.table("users").delete().eq("id", str(current_user.id)).execute()
+        logger.info(f"User {current_user.id} successfully deleted their account.")
+    except Exception as e:
+        logger.error(f"Error during account deletion for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="A server error occurred while trying to delete the account.",
+        )
+    
     return None
 
 @user_router.post("/me/avatar", response_model=UserPublic)

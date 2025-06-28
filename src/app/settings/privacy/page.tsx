@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -36,12 +37,22 @@ export default function PrivacySettingsPage() {
     const [isReAuthModalOpen, setIsReAuthModalOpen] = useState(false);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     
-    const handleFinalDeleteAccount = () => {
-        console.log("Final account deletion initiated. Password:", reAuthPassword);
-        toast({title: "Account Deletion Initiated", description: "This is a mock action. No data was deleted."});
-        setIsReAuthModalOpen(false);
-        setReAuthPassword('');
-        logout();
+    const handleFinalDeleteAccount = async () => {
+        if (!reAuthPassword) {
+            toast({ variant: 'destructive', title: "Password required" });
+            return;
+        }
+        try {
+            await api.deleteAccount({ password: reAuthPassword });
+            toast({title: "Account Deleted", description: "Your account has been permanently deleted."});
+            // The logout function will handle redirecting to the home page.
+            logout(); 
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: "Deletion Failed", description: error.message });
+        } finally {
+            setIsReAuthModalOpen(false);
+            setReAuthPassword('');
+        }
     };
 
     if (isAuthLoading || !currentUser) {

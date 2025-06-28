@@ -3,7 +3,7 @@ import type {
   AuthResponse, User, UserInToken, Chat, Message, ApiErrorResponse, SupportedEmoji,
   VoiceMessageUploadResponse, StickerPackResponse, StickerListResponse, PushSubscriptionJSON,
   NotificationSettings, PartnerRequest, EventPayload, VerifyOtpResponse,
-  CompleteRegistrationRequest, DocumentUploadResponse, PasswordChangeRequest
+  CompleteRegistrationRequest, DocumentUploadResponse, PasswordChangeRequest, DeleteAccountRequest
 } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
@@ -116,6 +116,14 @@ export const api = {
   },
   changePassword: async (passwordData: PasswordChangeRequest): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/users/me/password`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(passwordData) });
+    await handleResponse<void>(response);
+  },
+  deleteAccount: async (data: DeleteAccountRequest): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/users/me`, {
+      method: 'DELETE',
+      headers: getApiHeaders(),
+      body: JSON.stringify(data),
+    });
     await handleResponse<void>(response);
   },
   getPartnerSuggestions: async (): Promise<{users: User[]}> => {

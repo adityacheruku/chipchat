@@ -74,6 +74,7 @@ export interface ApiErrorResponse { detail?: string | { msg: string; type: strin
 export interface VerifyOtpResponse { registration_token: string; }
 export interface CompleteRegistrationRequest { registration_token: string; display_name: string; password: string; email?: string; }
 export interface PasswordChangeRequest { current_password: string; new_password: string; }
+export interface DeleteAccountRequest { password: string; }
 export interface DocumentUploadResponse { file_url: string; file_name: string; file_size_bytes: number; }
 export interface VoiceMessageUploadResponse { file_url: string; clip_type: 'audio'; duration_seconds: number | null; file_size_bytes: number | null; audio_format: string | null; }
 
