@@ -64,11 +64,18 @@ const suggestMoodFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-      const {output} = await prompt(input);
-      if (output?.suggestedMood && ALL_MOODS.includes(output.suggestedMood as Mood)) {
+      const response = await prompt(input);
+      const output = response.output;
+
+      if (!output) {
+        throw new Error("Model returned no structured output.");
+      }
+
+      if (output.suggestedMood && ALL_MOODS.includes(output.suggestedMood as Mood)) {
         return output;
       }
-      return { reasoning: output?.reasoning || "No strong mood change detected." };
+      
+      return { reasoning: output.reasoning || "No strong mood change detected." };
     } catch (error) {
       console.error('Error in suggestMoodFlow:', error);
       return { reasoning: "Error analyzing mood." };
