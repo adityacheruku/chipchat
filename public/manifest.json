@@ -1,46 +1,52 @@
 {
   "name": "ChirpChat",
   "short_name": "ChirpChat",
-  "description": "An emotionally intelligent chat application for two.",
+  "description": "A friendly chat application with PWA shortcuts.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F0F4F7",
+  "theme_color": "#90AFC5",
   "icons": [
     {
-      "src": "/icons/icon-192.png",
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "start_url": "/chat",
-  "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#90AFC5",
   "shortcuts": [
     {
       "name": "Set My Mood",
       "short_name": "Mood",
-      "description": "Quickly set your current mood",
+      "description": "Quickly update your mood for your partner.",
       "url": "/quick/mood",
-      "icons": [{ "src": "/icons/shortcut-mood.png", "sizes": "192x192" }]
+      "icons": [
+        { "src": "/icons/shortcut-mood.png", "sizes": "96x96" }
+      ]
     },
     {
-      "name": "Send a Thought",
-      "short_name": "Ping",
-      "description": "Let your partner know you're thinking of them",
-      "url": "/quick/think",
-      "icons": [{ "src": "/icons/shortcut-think.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Share an Image",
+      "name": "Send an Image",
       "short_name": "Image",
-      "description": "Quickly send an image to your chat",
+      "description": "Send an image to your partner.",
       "url": "/quick/image",
-      "icons": [{ "src": "/icons/shortcut-image.png", "sizes": "192x192" }]
+      "icons": [
+        { "src": "/icons/shortcut-image.png", "sizes": "96x96" }
+      ]
+    },
+    {
+      "name": "Thinking of You",
+      "short_name": "Think",
+      "description": "Let your partner know you're thinking of them.",
+      "url": "/quick/think",
+      "icons": [
+        { "src": "/icons/shortcut-think.png", "sizes": "96x96" }
+      ]
     }
   ]
 }

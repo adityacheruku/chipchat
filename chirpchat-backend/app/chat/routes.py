@@ -151,7 +151,7 @@ async def get_messages(chat_id: UUID, limit: int = 50, before_timestamp: Optiona
     # Find the last clear marker for the current user in this chat
     marker_resp = await db_manager.get_table("messages").select("created_at").eq("chat_id", str(chat_id)).eq("user_id", str(current_user.id)).eq("message_subtype", "history_cleared_marker").order("created_at", desc=True).limit(1).maybe_single().execute()
     
- marker_timestamp = marker_resp.data['created_at'] if marker_resp and marker_resp.data else None
+    marker_timestamp = marker_resp.data['created_at'] if marker_resp and marker_resp.data else None
 
     query = db_manager.get_table("messages").select("*, stickers(image_url)").eq("chat_id", str(chat_id)).order("created_at", desc=True).limit(limit)
     if before_timestamp:
@@ -159,7 +159,7 @@ async def get_messages(chat_id: UUID, limit: int = 50, before_timestamp: Optiona
     if marker_timestamp:
         query = query.gt("created_at", marker_timestamp)
 
-    messages_resp = query.execute()
+    messages_resp = await query.execute()
     
     messages_data_list = messages_resp.data or []
     status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
@@ -187,12 +187,12 @@ async def send_message_http(chat_id: UUID, message_create: MessageCreate, curren
     message_id = uuid.uuid4()
     
     if message_create.mode == MessageModeEnum.INCOGNITO:
-        incognito_message_obj = MessageInDB(id=message_id, chat_id=chat_id, user_id=current_user.id, **message_create.model_dump(), status=MessageStatusEnum.SENT, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc), reactions={})
+        incognito_message_obj = MessageInDB(id=message_id, chat_id=chat_id, user_id=current_user.id, **message_create.model_dump(exclude={'chat_id', 'recipient_id'}), status=MessageStatusEnum.SENT, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc), reactions={})
         await ws_manager.mark_message_as_processed(message_create.client_temp_id)
         await ws_manager.broadcast_chat_message(str(chat_id), incognito_message_obj)
         return incognito_message_obj
 
-    message_data_to_insert = message_create.model_dump(exclude_unset=True)
+    message_data_to_insert = message_create.model_dump(exclude_unset=True, exclude={'chat_id', 'recipient_id'})
     message_data_to_insert.update({
         "id": str(message_id), "chat_id": str(chat_id), "user_id": str(current_user.id),
         "status": MessageStatusEnum.SENT.value, "mode": message_create.mode.value if message_create.mode else MessageModeEnum.NORMAL.value,
