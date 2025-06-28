@@ -49,9 +49,29 @@ export default function DocumentPreviewModal({ isOpen, onClose, message }: Docum
     }
   };
 
-  const handleOpenInNewTab = () => {
-    if (!message?.document_url) return;
-    window.open(message.document_url, '_blank', 'noopener,noreferrer');
+  const handleOpenIn = async () => {
+    if (!message?.document_url || !message.document_name) return;
+
+    // Use Web Share API if available
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: message.document_name,
+                url: message.document_url,
+                text: `Check out this document: ${message.document_name}`,
+            });
+        } catch (error) {
+            // This error is often thrown when the user cancels the share dialog.
+            if ((error as Error).name !== 'AbortError') {
+                console.error("Share failed:", error);
+                // As a fallback, open in a new tab
+                window.open(message.document_url, '_blank', 'noopener,noreferrer');
+            }
+        }
+    } else {
+        // Fallback for browsers that don't support the Web Share API
+        window.open(message.document_url, '_blank', 'noopener,noreferrer');
+    }
   };
 
   if (!message) return null;
@@ -64,7 +84,7 @@ export default function DocumentPreviewModal({ isOpen, onClose, message }: Docum
             Document Preview
         </SheetTitle>
         <SheetDescription>
-          Download or open the document in a new tab.
+          Download the document or use the share menu to open it in another app.
         </SheetDescription>
       </SheetHeader>
       <div className="flex flex-col items-center justify-center p-6 text-center space-y-4">
@@ -79,9 +99,9 @@ export default function DocumentPreviewModal({ isOpen, onClose, message }: Docum
             <Download className="mr-2 h-4 w-4" />
             Download
           </Button>
-          <Button onClick={handleOpenInNewTab} variant="outline" className="w-full">
+          <Button onClick={handleOpenIn} variant="outline" className="w-full">
              <ArrowUpRightFromSquare className="mr-2 h-4 w-4" />
-            Open in New Tab
+            Open In…
           </Button>
         </div>
     </>

@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Loader2 } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Loader2, Eye, FileEdit } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -27,7 +27,6 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useLongPress } from '@/hooks/useLongPress';
 import { useDoubleTap } from '@/hooks/useDoubleTap';
 import DeleteMessageDialog from './DeleteMessageDialog';
 import { useSwipe } from '@/hooks/useSwipe';
@@ -182,6 +181,8 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
+  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const wasLongPressRef = useRef(false);
 
   const handleReply = () => {
     toast({ title: 'Reply Coming Soon!', description: 'This feature is currently under development.' });
@@ -207,10 +208,33 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   
   const doubleTapEvents = useDoubleTap(handleDoubleTap, 300);
   
-  const longPressEvents = useLongPress(() => {
-    if(navigator.vibrate) navigator.vibrate(50);
-    setIsActionMenuOpen(true);
-  }, { threshold: 300 });
+  const handlePointerDown = useCallback(() => {
+    wasLongPressRef.current = false;
+    longPressTimeoutRef.current = setTimeout(() => {
+        if(navigator.vibrate) navigator.vibrate(50);
+        setIsActionMenuOpen(true);
+        wasLongPressRef.current = true;
+    }, 400); // 400ms threshold
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    if (longPressTimeoutRef.current) {
+        clearTimeout(longPressTimeoutRef.current);
+    }
+  }, []);
+
+  const handleBubbleClick = useCallback((e: React.MouseEvent) => {
+    if (wasLongPressRef.current) {
+        e.preventDefault();
+        return;
+    }
+    // Handle single tap actions
+    if (message.message_subtype === 'image' && message.image_url) {
+        onShowMedia(message.image_url, 'image');
+    } else if (message.message_subtype === 'document' && message.document_url) {
+        onShowDocumentPreview(message);
+    }
+  }, [message, onShowMedia, onShowDocumentPreview]);
 
   const getReactorNames = (reactors: string[] | undefined) => {
     if (!reactors || reactors.length === 0) return "No one";
@@ -318,13 +342,13 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           );
         }
         return message.document_url ? (
-        <button onClick={() => onShowDocumentPreview(message)} className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')}>
+        <div className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')}>
             <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
             <div className="flex flex-col text-left min-w-0">
                 <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
                 <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to preview'}</span>
             </div>
-        </button>
+        </div>
       ) : (
           <div className="flex items-center p-3 text-red-500">
             <AlertTriangle className="w-6 h-6 mr-2" />
@@ -371,7 +395,10 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
             <DropdownMenu open={isActionMenuOpen} onOpenChange={setIsActionMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <div
-                  {...longPressEvents}
+                  onPointerDown={handlePointerDown}
+                  onPointerUp={handlePointerUp}
+                  onClick={handleBubbleClick}
+                  onContextMenu={(e) => e.preventDefault()}
                   {...doubleTapEvents}
                   className={cn(
                     'relative rounded-xl shadow-md transition-transform',
@@ -385,30 +412,54 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger disabled={reactionsDisabled}>
-                      <SmilePlus className="mr-2 h-4 w-4" />
-                      <span>React</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuPortal>
-                      <DropdownMenuSubContent>
-                        <div className="flex p-1">
-                          {QUICK_REACTION_EMOJIS.map((emoji) => (
-                            <DropdownMenuItem
-                              key={emoji}
-                              className="flex-1 justify-center rounded-md p-0 focus:bg-accent/50"
-                              onSelect={() => onToggleReaction(message.id, emoji)}
-                            >
-                              <span className="text-xl p-1.5">{emoji}</span>
-                            </DropdownMenuItem>
-                          ))}
-                        </div>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuPortal>
-                  </DropdownMenuSub>
-                  <DropdownMenuItem onSelect={() => handleCopy()} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={handleReply}><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
+                  {message.message_subtype === 'document' && message.document_url ? (
+                    <>
+                        <DropdownMenuItem onSelect={() => onShowDocumentPreview(message)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            <span>Preview</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => {
+                            navigator.clipboard.writeText(message.document_url!);
+                            toast({ title: "Link Copied" });
+                        }}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            <span>Copy Link</span>
+                        </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <>
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger disabled={reactionsDisabled}>
+                            <SmilePlus className="mr-2 h-4 w-4" />
+                            <span>React</span>
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent>
+                              <div className="flex p-1">
+                                {QUICK_REACTION_EMOJIS.map((emoji) => (
+                                  <DropdownMenuItem
+                                    key={emoji}
+                                    className="flex-1 justify-center rounded-md p-0 focus:bg-accent/50"
+                                    onSelect={() => onToggleReaction(message.id, emoji)}
+                                  >
+                                    <span className="text-xl p-1.5">{emoji}</span>
+                                  </DropdownMenuItem>
+                                ))}
+                              </div>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                        <DropdownMenuItem onSelect={handleCopy} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuItem onSelect={handleReply} disabled><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
                   <DropdownMenuItem disabled><Forward className="mr-2 h-4 w-4" /> Forward</DropdownMenuItem>
+                  {message.message_subtype === 'document' && (
+                    <DropdownMenuItem onSelect={() => {}} disabled>
+                        <FileEdit className="mr-2 h-4 w-4" />
+                        <span>Rename</span>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
