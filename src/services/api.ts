@@ -27,23 +27,20 @@ function getApiHeaders(options: { contentType?: string | null, includeAuth?: boo
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
-  // Handle successful responses with no content first.
   if (response.status === 204) {
     return {} as T;
   }
 
-  // Handle error responses (non-2xx).
+  const text = await response.text();
+  
   if (!response.ok) {
     let errorData: ApiErrorResponse = { detail: `HTTP error ${response.status}` };
     try {
-      // Try to parse the error response as JSON, as this is the expected format.
-      errorData = await response.json();
+      if (text) errorData = JSON.parse(text);
     } catch (e) {
-      // If parsing fails, it's not a JSON error. The status itself is the best info we have.
-      // The default errorData message is sufficient.
+      errorData.detail = text || `HTTP error ${response.status}`;
     }
     
-    // Extract a clean error message from the JSON detail if possible.
     const errorMessage = typeof errorData.detail === 'string'
       ? errorData.detail
       : Array.isArray(errorData.detail) && errorData.detail[0]?.msg
@@ -53,16 +50,13 @@ async function handleResponse<T>(response: Response): Promise<T> {
     throw new Error(errorMessage);
   }
 
-  // Handle successful (2xx) responses.
   try {
-    // For successful responses, we expect JSON.
-    return await response.json() as T;
+    return text ? (JSON.parse(text) as T) : ({} as T);
   } catch (e) {
-    // This can happen if a 200 OK has an empty body, which is valid.
-    // Treat it like a 204 No Content.
-    return {} as T;
+    throw new Error("Failed to parse JSON response");
   }
 }
+
 
 async function uploadWithProgress<T>(url: string, formData: FormData, onProgress: (progress: number) => void): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -91,40 +85,44 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/auth/login`, { method: 'POST', headers: getApiHeaders({ contentType: 'application/x-www-form-urlencoded', includeAuth: false }), body: formData.toString() });
     return handleResponse<AuthResponse>(response);
   },
-  sendOtp: (phone: string) => handleResponse<{message: string}>(fetch(`${API_BASE_URL}/auth/send-otp`, { method: 'POST', headers: getApiHeaders({ includeAuth: false }), body: JSON.stringify({ phone }) })),
-  verifyOtp: (phone: string, otp: string) => handleResponse<VerifyOtpResponse>(fetch(`${API_BASE_URL}/auth/verify-otp`, { method: 'POST', headers: getApiHeaders({ includeAuth: false }), body: JSON.stringify({ phone, otp }) })),
-  completeRegistration: (userData: CompleteRegistrationRequest) => handleResponse<AuthResponse>(fetch(`${API_BASE_URL}/auth/complete-registration`, { method: 'POST', headers: getApiHeaders({ includeAuth: false }), body: JSON.stringify(userData) })),
-  getCurrentUserProfile: () => handleResponse<UserInToken>(fetch(`${API_BASE_URL}/users/me`, { headers: getApiHeaders() })),
-  getUserProfile: (userId: string) => handleResponse<User>(fetch(`${API_BASE_URL}/users/${userId}`, { headers: getApiHeaders() })),
-  updateUserProfile: (data: Partial<User>) => handleResponse<UserInToken>(fetch(`${API_BASE_URL}/users/me/profile`, { method: 'PUT', headers: getApiHeaders(), body: JSON.stringify(data) })),
-  uploadAvatar: (file: File, onProgress: (p: number) => void) => uploadWithProgress(`${API_BASE_URL}/users/me/avatar`, new FormData().append('file', file) && new FormData(), onProgress),
-  changePassword: (passwordData: PasswordChangeRequest) => handleResponse<void>(fetch(`${API_BASE_URL}/users/me/password`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(passwordData) })),
-  getPartnerSuggestions: () => handleResponse<{users: User[]}>(fetch(`${API_BASE_URL}/partners/suggestions`, { headers: getApiHeaders() })),
-  getIncomingRequests: () => handleResponse<{requests: PartnerRequest[]}>(fetch(`${API_BASE_URL}/partners/requests/incoming`, { headers: getApiHeaders() })),
-  getOutgoingRequests: () => handleResponse<{requests: PartnerRequest[]}>(fetch(`${API_BASE_URL}/partners/requests/outgoing`, { headers: getApiHeaders() })),
-  sendPartnerRequest: (recipientId: string) => handleResponse<PartnerRequest>(fetch(`${API_BASE_URL}/partners/request`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ recipient_id: recipientId }) })),
-  respondToPartnerRequest: (requestId: string, action: 'accept'|'reject') => handleResponse<void>(fetch(`${API_BASE_URL}/partners/requests/${requestId}/respond`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ action }) })),
-  disconnectPartner: () => handleResponse<void>(fetch(`${API_BASE_URL}/partners/me`, { method: 'DELETE', headers: getApiHeaders() })),
-  createOrGetChat: (recipientId: string) => handleResponse<Chat>(fetch(`${API_BASE_URL}/chats/`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ recipient_id: recipientId }) })),
-  listChats: () => handleResponse<{chats: Chat[]}>(fetch(`${API_BASE_URL}/chats/`, { headers: getApiHeaders() })),
-  getMessages: (chatId: string, limit = 50, before?: string) => handleResponse<{messages: Message[]}>(fetch(`${API_BASE_URL}/chats/${chatId}/messages?${new URLSearchParams({ limit: String(limit), ...(before && { before_timestamp: before }) })}`, { headers: getApiHeaders() })),
-  sendMessageHttp: (chatId: string, data: Partial<Message>) => handleResponse<Message>(fetch(`${API_BASE_URL}/chats/${chatId}/messages`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(data) })),
-  toggleReactionHttp: (messageId: string, emoji: SupportedEmoji) => handleResponse<Message>(fetch(`${API_BASE_URL}/chats/messages/${messageId}/reactions`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ emoji }) })),
-  deleteMessageForEveryone: (messageId: string, chatId: string) => handleResponse<void>(fetch(`${API_BASE_URL}/chats/messages/${messageId}?chat_id=${chatId}`, { method: 'DELETE', headers: getApiHeaders() })),
-  uploadChatImage: (file: File, onProgress: (p: number) => void) => { const fd = new FormData(); fd.append('file', file); return uploadWithProgress(`${API_BASE_URL}/uploads/chat_image`, fd, onProgress); },
-  uploadMoodClip: (file: File, type: string, onProgress: (p: number) => void) => { const fd = new FormData(); fd.append('file', file); fd.append('clip_type', type); return uploadWithProgress(`${API_BASE_URL}/uploads/mood_clip`, fd, onProgress); },
-  uploadChatDocument: (file: File, onProgress: (p: number) => void) => { const fd = new FormData(); fd.append('file', file); return uploadWithProgress<DocumentUploadResponse>(`${API_BASE_URL}/uploads/chat_document`, fd, onProgress); },
-  uploadVoiceMessage: (file: File, onProgress: (p: number) => void) => { const fd = new FormData(); fd.append('file', file); return uploadWithProgress<VoiceMessageUploadResponse>(`${API_BASE_URL}/uploads/voice_message`, fd, onProgress); },
-  getStickerPacks: () => handleResponse<StickerPackResponse>(fetch(`${API_BASE_URL}/stickers/packs`, { headers: getApiHeaders() })),
-  getStickersInPack: (packId: string) => handleResponse<StickerListResponse>(fetch(`${API_BASE_URL}/stickers/pack/${packId}`, { headers: getApiHeaders() })),
-  searchStickers: (query: string) => handleResponse<StickerListResponse>(fetch(`${API_BASE_URL}/stickers/search`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ query }) })),
-  getRecentStickers: () => handleResponse<StickerListResponse>(fetch(`${API_BASE_URL}/stickers/recent`, { headers: getApiHeaders() })),
-  getFavoriteStickers: () => handleResponse<StickerListResponse>(fetch(`${API_BASE_URL}/stickers/favorites`, { headers: getApiHeaders() })),
-  toggleFavoriteSticker: (stickerId: string) => handleResponse<StickerListResponse>(fetch(`${API_BASE_URL}/stickers/favorites/toggle`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ sticker_id: stickerId }) })),
-  sendThinkingOfYouPing: (recipientUserId: string) => handleResponse<{status: string}>(fetch(`${API_BASE_URL}/users/${recipientUserId}/ping-thinking-of-you`, { method: 'POST', headers: getApiHeaders() })),
-  sendPushSubscriptionToServer: (sub: PushSubscriptionJSON) => handleResponse(fetch(`${API_BASE_URL}/notifications/subscribe`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(sub) })),
-  removePushSubscriptionFromServer: (endpoint: string) => handleResponse(fetch(`${API_BASE_URL}/notifications/unsubscribe`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ endpoint }) })),
-  getNotificationSettings: () => handleResponse<NotificationSettings>(fetch(`${API_BASE_URL}/notifications/settings`, { headers: getApiHeaders() })),
-  updateNotificationSettings: (settings: Partial<NotificationSettings>) => handleResponse<NotificationSettings>(fetch(`${API_BASE_URL}/notifications/settings`, { method: 'PUT', headers: getApiHeaders(), body: JSON.stringify(settings) })),
-  syncEvents: (since: number) => handleResponse<EventPayload[]>(fetch(`${API_BASE_URL}/events/sync?since=${since}`, { headers: getApiHeaders() })),
+  sendOtp: async (phone: string) => handleResponse<{message: string}>(await fetch(`${API_BASE_URL}/auth/send-otp`, { method: 'POST', headers: getApiHeaders({ includeAuth: false }), body: JSON.stringify({ phone }) })),
+  verifyOtp: async (phone: string, otp: string) => handleResponse<VerifyOtpResponse>(await fetch(`${API_BASE_URL}/auth/verify-otp`, { method: 'POST', headers: getApiHeaders({ includeAuth: false }), body: JSON.stringify({ phone, otp }) })),
+  completeRegistration: async (userData: CompleteRegistrationRequest) => handleResponse<AuthResponse>(await fetch(`${API_BASE_URL}/auth/complete-registration`, { method: 'POST', headers: getApiHeaders({ includeAuth: false }), body: JSON.stringify(userData) })),
+  getCurrentUserProfile: async () => handleResponse<UserInToken>(await fetch(`${API_BASE_URL}/users/me`, { headers: getApiHeaders() })),
+  getUserProfile: async (userId: string) => handleResponse<User>(await fetch(`${API_BASE_URL}/users/${userId}`, { headers: getApiHeaders() })),
+  updateUserProfile: async (data: Partial<User>) => handleResponse<UserInToken>(await fetch(`${API_BASE_URL}/users/me/profile`, { method: 'PUT', headers: getApiHeaders(), body: JSON.stringify(data) })),
+  uploadAvatar: async (file: File, onProgress: (p: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return uploadWithProgress(`${API_BASE_URL}/users/me/avatar`, formData, onProgress);
+  },
+  changePassword: async (passwordData: PasswordChangeRequest) => handleResponse<void>(await fetch(`${API_BASE_URL}/users/me/password`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(passwordData) })),
+  getPartnerSuggestions: async () => handleResponse<{users: User[]}>(await fetch(`${API_BASE_URL}/partners/suggestions`, { headers: getApiHeaders() })),
+  getIncomingRequests: async () => handleResponse<{requests: PartnerRequest[]}>(await fetch(`${API_BASE_URL}/partners/requests/incoming`, { headers: getApiHeaders() })),
+  getOutgoingRequests: async () => handleResponse<{requests: PartnerRequest[]}>(await fetch(`${API_BASE_URL}/partners/requests/outgoing`, { headers: getApiHeaders() })),
+  sendPartnerRequest: async (recipientId: string) => handleResponse<PartnerRequest>(await fetch(`${API_BASE_URL}/partners/request`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ recipient_id: recipientId }) })),
+  respondToPartnerRequest: async (requestId: string, action: 'accept'|'reject') => handleResponse<void>(await fetch(`${API_BASE_URL}/partners/requests/${requestId}/respond`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ action }) })),
+  disconnectPartner: async () => handleResponse<void>(await fetch(`${API_BASE_URL}/partners/me`, { method: 'DELETE', headers: getApiHeaders() })),
+  createOrGetChat: async (recipientId: string) => handleResponse<Chat>(await fetch(`${API_BASE_URL}/chats/`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ recipient_id: recipientId }) })),
+  listChats: async () => handleResponse<{chats: Chat[]}>(await fetch(`${API_BASE_URL}/chats/`, { headers: getApiHeaders() })),
+  getMessages: async (chatId: string, limit = 50, before?: string) => handleResponse<{messages: Message[]}>(await fetch(`${API_BASE_URL}/chats/${chatId}/messages?${new URLSearchParams({ limit: String(limit), ...(before && { before_timestamp: before }) })}`, { headers: getApiHeaders() })),
+  sendMessageHttp: async (chatId: string, data: Partial<Message>) => handleResponse<Message>(await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(data) })),
+  toggleReactionHttp: async (messageId: string, emoji: SupportedEmoji) => handleResponse<Message>(await fetch(`${API_BASE_URL}/chats/messages/${messageId}/reactions`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ emoji }) })),
+  deleteMessageForEveryone: async (messageId: string, chatId: string) => handleResponse<void>(await fetch(`${API_BASE_URL}/chats/messages/${messageId}?chat_id=${chatId}`, { method: 'DELETE', headers: getApiHeaders() })),
+  uploadChatImage: async (file: File, onProgress: (p: number) => void) => { const fd = new FormData(); fd.append('file', file); return uploadWithProgress(`${API_BASE_URL}/uploads/chat_image`, fd, onProgress); },
+  uploadMoodClip: async (file: File, type: string, onProgress: (p: number) => void) => { const fd = new FormData(); fd.append('file', file); fd.append('clip_type', type); return uploadWithProgress(`${API_BASE_URL}/uploads/mood_clip`, fd, onProgress); },
+  uploadChatDocument: async (file: File, onProgress: (p: number) => void) => { const fd = new FormData(); fd.append('file', file); return uploadWithProgress<DocumentUploadResponse>(`${API_BASE_URL}/uploads/chat_document`, fd, onProgress); },
+  uploadVoiceMessage: async (file: File, onProgress: (p: number) => void) => { const fd = new FormData(); fd.append('file', file); return uploadWithProgress<VoiceMessageUploadResponse>(`${API_BASE_URL}/uploads/voice_message`, fd, onProgress); },
+  getStickerPacks: async () => handleResponse<StickerPackResponse>(await fetch(`${API_BASE_URL}/stickers/packs`, { headers: getApiHeaders() })),
+  getStickersInPack: async (packId: string) => handleResponse<StickerListResponse>(await fetch(`${API_BASE_URL}/stickers/pack/${packId}`, { headers: getApiHeaders() })),
+  searchStickers: async (query: string) => handleResponse<StickerListResponse>(await fetch(`${API_BASE_URL}/stickers/search`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ query }) })),
+  getRecentStickers: async () => handleResponse<StickerListResponse>(await fetch(`${API_BASE_URL}/stickers/recent`, { headers: getApiHeaders() })),
+  getFavoriteStickers: async () => handleResponse<StickerListResponse>(await fetch(`${API_BASE_URL}/stickers/favorites`, { headers: getApiHeaders() })),
+  toggleFavoriteSticker: async (stickerId: string) => handleResponse<StickerListResponse>(await fetch(`${API_BASE_URL}/stickers/favorites/toggle`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ sticker_id: stickerId }) })),
+  sendThinkingOfYouPing: async (recipientUserId: string) => handleResponse<{status: string}>(await fetch(`${API_BASE_URL}/users/${recipientUserId}/ping-thinking-of-you`, { method: 'POST', headers: getApiHeaders() })),
+  sendPushSubscriptionToServer: async (sub: PushSubscriptionJSON) => handleResponse(await fetch(`${API_BASE_URL}/notifications/subscribe`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(sub) })),
+  removePushSubscriptionFromServer: async (endpoint: string) => handleResponse(await fetch(`${API_BASE_URL}/notifications/unsubscribe`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ endpoint }) })),
+  getNotificationSettings: async () => handleResponse<NotificationSettings>(await fetch(`${API_BASE_URL}/notifications/settings`, { headers: getApiHeaders() })),
+  updateNotificationSettings: async (settings: Partial<NotificationSettings>) => handleResponse<NotificationSettings>(await fetch(`${API_BASE_URL}/notifications/settings`, { method: 'PUT', headers: getApiHeaders(), body: JSON.stringify(settings) })),
+  syncEvents: async (since: number) => handleResponse<EventPayload[]>(await fetch(`${API_BASE_URL}/events/sync?since=${since}`, { headers: getApiHeaders() })),
 };
