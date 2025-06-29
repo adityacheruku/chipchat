@@ -1,4 +1,6 @@
 
+import type { UploadError } from './uploadErrors';
+
 export type Mood = string;
 export const ALL_MOODS: Mood[] = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"];
 export type SupportedEmoji = string; 
@@ -60,6 +62,7 @@ export interface Message {
   transcription?: string | null;
   reply_to_message_id?: string | null;
   uploadProgress?: number;
+  uploadError?: UploadError;
   file?: File;
 }
 
@@ -116,7 +119,7 @@ export interface UploadItem {
   priority: number;
   status: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
-  error?: string;
+  error?: UploadError;
   retryCount: number;
   createdAt: Date;
 }
@@ -126,6 +129,6 @@ export interface UploadProgress {
   messageId: string;
   status: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
-  error?: string;
+  error?: UploadError;
   result?: any;
 }

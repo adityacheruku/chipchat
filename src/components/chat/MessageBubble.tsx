@@ -30,6 +30,7 @@ import DeleteMessageDialog from './DeleteMessageDialog';
 import { useSwipe } from '@/hooks/useSwipe';
 import { useLongPress } from '@/hooks/useLongPress';
 import Spinner from '../common/Spinner';
+import UploadProgressIndicator from './UploadProgressIndicator';
 
 const EMOJI_ONLY_REGEX = /^(?:[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\udbff][\udc00-\udfff]|[\u0023-\u0039]\ufe0f?\u20e3|\u3299|\u3297|\u303d|\u3030|\u24c2|\ud83c[\udd70-\udd71]|\ud83c[\udd7e-\udd7f]|\ud83c\udd8e|\ud83c[\udd91-\udd9a]|\ud83c[\udde6-\uddff]|\ud83c[\ude01-\ude02]|\ud83c\ude1a|\ud83c\ude2f|\ud83c[\ude32-\ude3a]|\ud83c[\ude50-\ude51]|\u203c|\u2049|[\u25aa-\u25ab]|\u25b6|\u25c0|[\u25fb-\u25fe]|\u00a9|\u00ae|\u2122|\u2139|\ud83c\udc04|[\u2600-\u26FF]|\u2b05|\u2b06|\u2b07|\u2b1b|\u2b1c|\u2b50|\u2b55|\u231a|\u231b|\u2328|\u23cf|[\u23e9-\u23f3]|[\u23f8-\u23fa]|\ud83c\udccf|\u2934|\u2935|[\u2190-\u21ff])+$/;
 
@@ -306,37 +307,12 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
   const repliedToSender = repliedToMessage ? allUsers[repliedToMessage.user_id] : null;
 
   const renderMessageContent = () => {
-    if (message.status === 'uploading') {
-      if (message.message_subtype === 'document') {
-        return (
-          <div className="w-48 flex items-center gap-2 opacity-50">
-            <Spinner />
-            <span className="truncate">{message.file?.name || 'Uploading...'}</span>
-          </div>
-        );
-      }
-      if (message.message_subtype === 'image' || message.message_subtype === 'clip') {
-        return (
-          <div className="w-[120px] h-[120px] rounded-md overflow-hidden bg-muted relative flex items-center justify-center animate-pulse">
-            {message.image_url && (
-              <Image
-                src={message.image_url} // This is the local blob URL
-                alt="Uploading preview"
-                fill
-                className="object-cover"
-                loading="lazy"
-              />
-            )}
-            <div className="absolute inset-0 bg-black/20" />
-            <Spinner />
-          </div>
-        );
-      }
+    if (message.status === 'uploading' || (message.status === 'failed' && (message.message_subtype === 'image' || message.message_subtype === 'document'))) {
       return (
-        <div className="w-48 flex items-center gap-2">
-          <Spinner />
-          <p className="text-xs font-semibold truncate opacity-50">{message.file?.name || 'File'}</p>
-        </div>
+        <UploadProgressIndicator 
+            message={message} 
+            onRetry={() => handleRetry(message)} 
+        />
       );
     }
     
@@ -345,18 +321,6 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
           case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized loading="lazy" /> : null;
           case 'voice_message': return message.clip_url ? <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
           case 'image':
-            if (message.status === 'failed') {
-              return (
-                 <div className="w-[120px] h-[120px] rounded-md border-2 border-dashed border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center p-2 text-center text-destructive">
-                    <ImageOff size={28} className="mb-2" />
-                    <p className="text-xs font-semibold mb-2">Upload Failed</p>
-                    <Button variant="destructive" size="sm" onClick={() => handleRetry(message)} className="h-auto px-2 py-1 text-xs">
-                      <RefreshCw size={12} className="mr-1" />
-                      Retry
-                    </Button>
-                  </div>
-              );
-            }
             return message.image_url ? (
               <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
                   <Image src={message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
@@ -375,17 +339,6 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
             }
             return <p className="text-sm italic">Clip unavailable</p>;
           case 'document':
-            if (message.status === 'failed') {
-              return (
-                <button className={cn(buttonVariants({ variant: 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-destructive/20 text-destructive border-destructive/50 hover:bg-destructive/30')} onClick={() => handleRetry(message)}>
-                  <AlertTriangle size={24} className="mr-3 flex-shrink-0" />
-                  <div className="flex flex-col text-left min-w-0">
-                      <span className="font-medium text-sm">Upload Failed</span>
-                      <span className="text-xs">Click to retry</span>
-                  </div>
-                </button>
-              );
-            }
             return message.document_url ? (
               <button onClick={() => onShowDocumentPreview(message)} className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')} aria-label={`Preview document: ${message.document_name}`}>
                 <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />

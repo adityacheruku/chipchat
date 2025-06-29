@@ -1,6 +1,7 @@
 
 import { api } from './api';
-import type { UploadItem, UploadProgress } from '@/types';
+import type { UploadItem, UploadProgress, UploadError } from '@/types';
+import { UploadErrorCode, ERROR_MESSAGES } from '@/types/uploadErrors';
 import { validateFile } from '@/utils/fileValidation';
 
 // A simple event emitter
@@ -64,7 +65,7 @@ class UploadManager {
     try {
       const validation = validateFile(item.file);
       if (!validation.isValid) {
-        throw new Error(validation.errors.join(', '));
+        throw new Error(validation.errors.join(', '), { cause: UploadErrorCode.VALIDATION_FAILED });
       }
       const mediaType = validation.fileType as 'image' | 'video' | 'audio' | 'document';
       
@@ -88,8 +89,16 @@ class UploadManager {
       const currentItem = this.queue[itemIndex];
       if (currentItem) {
         currentItem.status = 'failed';
-        currentItem.error = error.message;
-        emitProgress({ messageId: item.messageId, status: 'failed', progress: 0, error: error.message });
+        
+        const errorCode = (error.cause || UploadErrorCode.SERVER_ERROR) as UploadErrorCode;
+        const uploadError: UploadError = {
+            code: errorCode,
+            message: error.message || ERROR_MESSAGES[errorCode] || 'An unknown error occurred.',
+            retryable: [UploadErrorCode.NETWORK_ERROR, UploadErrorCode.SERVER_ERROR, UploadErrorCode.TIMEOUT].includes(errorCode),
+        };
+        
+        currentItem.error = uploadError;
+        emitProgress({ messageId: item.messageId, status: 'failed', progress: 0, error: uploadError });
         this.handleRetryLogic(currentItem);
       }
     } finally {
@@ -98,7 +107,7 @@ class UploadManager {
   }
 
   private handleRetryLogic(item: UploadItem): void {
-      if (item.retryCount < 3) {
+      if (item.error?.retryable && item.retryCount < 3) {
           item.retryCount++;
           const delay = Math.pow(2, item.retryCount) * 1000; // Exponential backoff
           setTimeout(() => {
@@ -142,4 +151,5 @@ class UploadManager {
   public resumeQueue(): void { /* Not implemented */ }
 }
 
-export const uploadManager = new UploadManager();
+// Ensure singleton instance in browser environment
+export const uploadManager = typeof window !== 'undefined' ? new UploadManager() : {} as UploadManager;
