@@ -1,7 +1,6 @@
 
 "use client";
 
-import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
 
 export interface CompressionSettings {
@@ -22,13 +21,20 @@ export interface CompressionProgress {
 class VideoCompressor {
   private ffmpeg: FFmpeg | null = null;
   private isInitialized = false;
+  private createFFmpeg: any = null;
+  private fetchFile: any = null;
 
   async initialize(onProgress: (progress: CompressionProgress) => void): Promise<void> {
     if (this.isInitialized) return;
     onProgress({ progress: 0, stage: 'initializing' });
 
     try {
-      this.ffmpeg = createFFmpeg({
+      // Dynamically import the ffmpeg module only on the client
+      const ffmpegModule = await import('@ffmpeg/ffmpeg');
+      this.createFFmpeg = ffmpegModule.createFFmpeg;
+      this.fetchFile = ffmpegModule.fetchFile;
+      
+      this.ffmpeg = this.createFFmpeg({
         log: process.env.NODE_ENV === 'development',
         corePath: '/ffmpeg/ffmpeg-core.js',
         // Note: For cross-origin isolation issues, ensure server headers are set:
@@ -53,14 +59,14 @@ class VideoCompressor {
     if (!this.isInitialized) {
       await this.initialize(onProgress);
     }
-    if (!this.ffmpeg) throw new Error("FFmpeg not available.");
+    if (!this.ffmpeg || !this.fetchFile) throw new Error("FFmpeg not available.");
 
     const settings = this.getCompressionSettings(level);
     const inputName = 'input.' + (file.name.split('.').pop() || 'mp4');
     const outputName = 'output.mp4';
 
     try {
-      this.ffmpeg.FS('writeFile', inputName, await fetchFile(file));
+      this.ffmpeg.FS('writeFile', inputName, await this.fetchFile(file));
 
       this.ffmpeg.setProgress(({ ratio }) => {
         onProgress({
@@ -97,13 +103,13 @@ class VideoCompressor {
     if (!this.isInitialized) {
       await this.initialize(onProgress);
     }
-    if (!this.ffmpeg) throw new Error("FFmpeg not available.");
+    if (!this.ffmpeg || !this.fetchFile) throw new Error("FFmpeg not available.");
 
     const inputName = 'input.' + (file.name.split('.').pop() || 'webm');
     const outputName = 'output.mp4'; // Using mp4 container with AAC audio is very compatible
 
     try {
-      this.ffmpeg.FS('writeFile', inputName, await fetchFile(file));
+      this.ffmpeg.FS('writeFile', inputName, await this.fetchFile(file));
 
       this.ffmpeg.setProgress(({ ratio }) => {
         onProgress({
