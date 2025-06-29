@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Message, User, SupportedEmoji, DeleteType } from '@/types';
@@ -194,8 +195,10 @@ const AudioPlayer = memo(({ message, sender, isCurrentUser, PlayerIcon = Mic }: 
 });
 AudioPlayer.displayName = "AudioPlayer";
 
-const AudioFilePlayer = memo(({ message, isCurrentUser }: { message: Message; isCurrentUser: boolean; }) => {
+const AudioFilePlayer = memo(({ message, isCurrentUser, allUsers }: { message: Message; isCurrentUser: boolean; allUsers: Record<string, User> }) => {
     const { title, artist } = message.file_metadata || {};
+    const sender = allUsers[message.user_id];
+    if (!sender) return null; // Or a fallback UI
 
     return (
         <div className={cn("p-2 w-full max-w-[250px] sm:max-w-xs", isCurrentUser ? "text-primary-foreground" : "text-secondary-foreground")}>
@@ -206,7 +209,7 @@ const AudioFilePlayer = memo(({ message, isCurrentUser }: { message: Message; is
                     <p className="text-xs opacity-80 truncate">{artist || 'Unknown Artist'}</p>
                 </div>
             </div>
-            <AudioPlayer message={message} sender={allUsers[message.user_id]} isCurrentUser={isCurrentUser} PlayerIcon={Music} />
+            <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} PlayerIcon={Music} />
         </div>
     );
 });
@@ -338,7 +341,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
         switch (message.message_subtype) {
           case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized loading="lazy" /> : null;
           case 'voice_message': return message.clip_url ? <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
-          case 'audio': return message.clip_url ? <AudioFilePlayer message={message} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Audio file unavailable</p>;
+          case 'audio': return message.clip_url ? <AudioFilePlayer message={message} isCurrentUser={isCurrentUser} allUsers={allUsers} /> : <p className="text-sm italic">Audio file unavailable</p>;
           case 'image':
             return message.image_url ? (
               <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-full max-w-[250px] aspect-[4/3] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>

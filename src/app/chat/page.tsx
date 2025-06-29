@@ -329,6 +329,23 @@ export default function ChatPage() {
       ? validation.fileType as MessageSubtype
       : intendedSubtype;
 
+    let priority: number;
+    switch (finalSubtype) {
+        case 'voice_message':
+            priority = 1;
+            break;
+        case 'image':
+        case 'clip':
+            priority = 5;
+            break;
+        case 'document':
+        case 'audio':
+            priority = 10;
+            break;
+        default:
+            priority = 5;
+    }
+
     const clientTempId = uuidv4();
     const optimisticMessage: MessageType = {
         id: clientTempId,
@@ -352,7 +369,7 @@ export default function ChatPage() {
       file,
       messageId: clientTempId,
       chatId: activeChat.id,
-      priority: 5,
+      priority,
       subtype: finalSubtype
     });
   }, [currentUser, activeChat]);

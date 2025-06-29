@@ -1,4 +1,5 @@
 
+
 import type { UploadError } from './uploadErrors';
 
 export type Mood = string;
