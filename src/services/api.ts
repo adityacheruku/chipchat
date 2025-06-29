@@ -121,22 +121,28 @@ export const api = {
     formData.append('payload', JSON.stringify(payload));
     return createUploadRequest(`${API_BASE_URL}/uploads/file`, formData, onProgress);
   },
-  uploadAvatar: async (file: File, onProgress: (p: number) => void): Promise<{ file_url: string }> => {
+  // Chunked Upload Endpoints
+  initiateChunkedUpload: async (filename: string, filesize: number, filetype: string): Promise<{ upload_id: string }> => {
+    const response = await fetch(`${API_BASE_URL}/uploads/initiate_chunked`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ filename, filesize, filetype }) });
+    return handleResponse<{ upload_id: string }>(response);
+  },
+  uploadChunk: (uploadId: string, chunkIndex: number, chunk: Blob, onProgress: (p: number) => void): UploadRequest => {
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('payload', JSON.stringify({ file_type: 'image' })); // Use the unified endpoint
-    return createUploadRequest(`${API_BASE_URL}/uploads/file`, formData, onProgress).promise;
+    formData.append('upload_id', uploadId);
+    formData.append('chunk_index', String(chunkIndex));
+    formData.append('chunk', chunk);
+    return createUploadRequest(`${API_BASE_URL}/uploads/chunk`, formData, onProgress);
+  },
+  finalizeChunkedUpload: async (uploadId: string): Promise<any> => {
+    const response = await fetch(`${API_BASE_URL}/uploads/finalize_chunked`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ upload_id: uploadId }) });
+    return handleResponse<any>(response);
   },
   changePassword: async (passwordData: PasswordChangeRequest): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/users/me/password`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(passwordData) });
     await handleResponse<void>(response);
   },
   deleteAccount: async (data: DeleteAccountRequest): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/users/me`, {
-      method: 'DELETE',
-      headers: getApiHeaders(),
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(`${API_BASE_URL}/users/me`, { method: 'DELETE', headers: getApiHeaders(), body: JSON.stringify(data) });
     await handleResponse<void>(response);
   },
   getPartnerSuggestions: async (): Promise<{users: User[]}> => {
@@ -240,3 +246,5 @@ export const api = {
     return handleResponse<EventPayload[]>(response);
   },
 };
+
+    

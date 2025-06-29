@@ -23,3 +23,7 @@ redis[hiredis]==5.0.1
 sse-starlette==2.1.0
 prometheus-fastapi-instrumentator==7.0.0
 mutagen==1.47.0
+aiofiles==23.2.1
+python-magic-bin==0.4.14
+
+    
