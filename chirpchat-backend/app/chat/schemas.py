@@ -1,7 +1,6 @@
-
-from typing import List, Optional, Dict
-from uuid import UUID
 from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+from uuid import UUID
 from datetime import datetime
 import enum
 
@@ -48,6 +47,7 @@ class MessageBase(BaseModel):
     document_name: Optional[str] = None
     duration_seconds: Optional[int] = None
     file_size_bytes: Optional[int] = None
+    file_metadata: Optional[Dict[str, Any]] = None
     audio_format: Optional[str] = None
     transcription: Optional[str] = None
     reply_to_message_id: Optional[UUID] = None
