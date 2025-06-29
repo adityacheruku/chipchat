@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { FFmpeg } from '@ffmpeg/ffmpeg';
+import { FFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
 
 export interface CompressionSettings {
   maxWidth: number;
@@ -21,32 +21,30 @@ export interface CompressionProgress {
 class VideoCompressor {
   private ffmpeg: FFmpeg | null = null;
   private isInitialized = false;
-  private createFFmpeg: any = null;
-  private fetchFile: any = null;
 
   async initialize(onProgress: (progress: CompressionProgress) => void): Promise<void> {
     if (this.isInitialized) return;
     onProgress({ progress: 0, stage: 'initializing' });
 
     try {
-      // Dynamically import the ffmpeg module only on the client
-      const ffmpegModule = await import('@ffmpeg/ffmpeg');
-      this.createFFmpeg = ffmpegModule.createFFmpeg;
-      this.fetchFile = ffmpegModule.fetchFile;
+      this.ffmpeg = new FFmpeg();
       
-      this.ffmpeg = this.createFFmpeg({
-        log: process.env.NODE_ENV === 'development',
-        corePath: '/ffmpeg/ffmpeg-core.js',
-        // Note: For cross-origin isolation issues, ensure server headers are set:
-        // Cross-Origin-Opener-Policy: same-origin
-        // Cross-Origin-Embedder-Policy: require-corp
+      this.ffmpeg.on('log', (message) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(message);
+        }
       });
-      await this.ffmpeg.load();
+      
+      await this.ffmpeg.load({
+        coreURL: '/ffmpeg/ffmpeg-core.js',
+      });
+      
       this.isInitialized = true;
       onProgress({ progress: 100, stage: 'initializing' });
     } catch (error) {
       console.error("FFmpeg initialization failed:", error);
       this.isInitialized = false;
+      this.ffmpeg = null; // Ensure ffmpeg is null on failure
       throw new Error("Could not initialize video compressor.");
     }
   }
@@ -59,40 +57,40 @@ class VideoCompressor {
     if (!this.isInitialized) {
       await this.initialize(onProgress);
     }
-    if (!this.ffmpeg || !this.fetchFile) throw new Error("FFmpeg not available.");
+    if (!this.ffmpeg) throw new Error("FFmpeg not available.");
 
     const settings = this.getCompressionSettings(level);
     const inputName = 'input.' + (file.name.split('.').pop() || 'mp4');
     const outputName = 'output.mp4';
 
     try {
-      this.ffmpeg.FS('writeFile', inputName, await this.fetchFile(file));
+      await this.ffmpeg.writeFile(inputName, await fetchFile(file));
 
-      this.ffmpeg.setProgress(({ ratio }) => {
+      this.ffmpeg.on('progress', ({ progress }) => {
         onProgress({
-          progress: Math.round(ratio * 100),
+          progress: Math.round(progress * 100),
           stage: 'compressing',
         });
       });
 
       const command = this.buildCompressionCommand(inputName, outputName, settings);
-      await this.ffmpeg.run(...command);
+      await this.ffmpeg.exec(command);
 
-      const data = this.ffmpeg.FS('readFile', outputName);
+      const data = await this.ffmpeg.readFile(outputName);
       
       onProgress({ progress: 100, stage: 'done' });
-      return new Blob([data.buffer], { type: 'video/mp4' });
+      return new Blob([data], { type: 'video/mp4' });
 
     } catch (error: any) {
       console.error("Video compression failed:", error);
       throw new Error(`Video compression failed: ${error.message}`);
     } finally {
-      try {
-        this.ffmpeg.FS('unlink', inputName);
-        this.ffmpeg.FS('unlink', outputName);
-      } catch (e) {
-        // Ignore cleanup errors
-      }
+        try {
+            if (this.ffmpeg) {
+                await this.ffmpeg.deleteFile(inputName);
+                await this.ffmpeg.deleteFile(outputName);
+            }
+        } catch(e) { /* ignore cleanup errors */ }
     }
   }
 
@@ -103,17 +101,17 @@ class VideoCompressor {
     if (!this.isInitialized) {
       await this.initialize(onProgress);
     }
-    if (!this.ffmpeg || !this.fetchFile) throw new Error("FFmpeg not available.");
+    if (!this.ffmpeg) throw new Error("FFmpeg not available.");
 
     const inputName = 'input.' + (file.name.split('.').pop() || 'webm');
     const outputName = 'output.mp4'; // Using mp4 container with AAC audio is very compatible
 
     try {
-      this.ffmpeg.FS('writeFile', inputName, await this.fetchFile(file));
+      await this.ffmpeg.writeFile(inputName, await fetchFile(file));
 
-      this.ffmpeg.setProgress(({ ratio }) => {
+      this.ffmpeg.on('progress', ({ progress }) => {
         onProgress({
-          progress: Math.round(ratio * 100),
+          progress: Math.round(progress * 100),
           stage: 'compressing',
         });
       });
@@ -128,23 +126,23 @@ class VideoCompressor {
         outputName
       ];
 
-      await this.ffmpeg.run(...command);
+      await this.ffmpeg.exec(command);
 
-      const data = this.ffmpeg.FS('readFile', outputName);
+      const data = await this.ffmpeg.readFile(outputName);
       
       onProgress({ progress: 100, stage: 'done' });
-      return new Blob([data.buffer], { type: 'audio/mp4' });
+      return new Blob([data], { type: 'audio/mp4' });
 
     } catch (error: any) {
       console.error("Audio compression failed:", error);
       throw new Error(`Audio compression failed: ${error.message}`);
     } finally {
-      try {
-        this.ffmpeg.FS('unlink', inputName);
-        this.ffmpeg.FS('unlink', outputName);
-      } catch (e) {
-        // Ignore cleanup errors
-      }
+        try {
+            if (this.ffmpeg) {
+                await this.ffmpeg.deleteFile(inputName);
+                await this.ffmpeg.deleteFile(outputName);
+            }
+        } catch(e) { /* ignore cleanup errors */ }
     }
   }
 
