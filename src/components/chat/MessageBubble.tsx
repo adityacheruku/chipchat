@@ -242,7 +242,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
     }
   }, [message.id, message.status, message.mode, onToggleReaction, isSelectionMode]);
   
-  const doubleTapEvents = useDoubleTap(handleDoubleTap, 300);
+  const doubleTapEvents = useDoubleTap(handleDoubleTap, { timeout: 300 });
   
   const handleBubbleClick = (e: React.MouseEvent) => {
     if (swipeHandlers.isSwiping() || longPressHandlers.isLongPressing()) {

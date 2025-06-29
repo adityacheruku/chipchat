@@ -144,7 +144,7 @@ export const api = {
   },
   respondToPartnerRequest: async (requestId: string, action: 'accept'|'reject'): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/partners/requests/${requestId}/respond`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ action }) });
-    await handleResponse<void>(response);
+    return handleResponse<void>(response);
   },
   disconnectPartner: async (): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/partners/me`, { method: 'DELETE', headers: getApiHeaders() });
