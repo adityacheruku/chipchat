@@ -221,8 +221,14 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
   const { toast } = useToast();
 
   const swipeHandlers = useSwipe({
-    onSwipeRight: () => { if (!isSelectionMode) onSetReplyingTo(message); },
-    onSwipeLeft: () => { if (!isSelectionMode) setIsDeleteDialogOpen(true); },
+    onSwipeRight: () => {
+      if (isSelectionMode) return;
+      isCurrentUser ? setIsDeleteDialogOpen(true) : onSetReplyingTo(message);
+    },
+    onSwipeLeft: () => {
+      if (isSelectionMode) return;
+      isCurrentUser ? onSetReplyingTo(message) : setIsDeleteDialogOpen(true);
+    },
   });
   
   const longPressHandlers = useLongPress(() => {
@@ -364,7 +370,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
           case 'clip': return message.clip_url ? (
              <button onClick={() => onShowMedia(message.clip_url!, 'video')} className="flex items-center gap-2 group/media">
                   <PlayCircle size={32} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80", "group-hover/media:scale-110 transition-transform")} />
-                  <span className="text-sm italic underline hover:opacity-80">{message.text || `View ${message.clip_type} clip`}</span>
+                  <span className="text-sm italic underline hover:opacity-80">{message.clip_placeholder_text || `View ${message.clip_type} clip`}</span>
              </button>
           ) : <p className="text-sm italic">Clip unavailable</p>;
           case 'document':
@@ -417,6 +423,11 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
   const swipeDisabled = isMediaBubble || isSelectionMode;
   const isVoiceMessage = message.message_subtype === 'voice_message';
 
+  const RightSwipeIcon = isCurrentUser ? Trash2 : Reply;
+  const LeftSwipeIcon = isCurrentUser ? Reply : Trash2;
+  const rightSwipeBg = isCurrentUser ? 'bg-destructive' : 'bg-blue-500';
+  const leftSwipeBg = isCurrentUser ? 'bg-blue-500' : 'bg-destructive';
+
   return (
     <div
       id={wrapperId}
@@ -443,11 +454,11 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
           >
             {!swipeDisabled && (
               <>
-                <div className="absolute inset-y-0 left-0 flex items-center bg-blue-500 px-4 text-white rounded-l-xl transition-opacity" style={{ opacity: Math.max(0, swipeHandlers.translateX / 60) }}>
-                    <Reply size={20} />
+                <div className={cn("absolute inset-y-0 left-0 flex items-center px-4 text-white rounded-l-xl transition-opacity", rightSwipeBg)} style={{ opacity: Math.max(0, swipeHandlers.translateX / 60) }}>
+                    <RightSwipeIcon size={20} />
                 </div>
-                <div className="absolute inset-y-0 right-0 flex items-center bg-destructive px-4 text-white rounded-r-xl transition-opacity" style={{ opacity: Math.max(0, -swipeHandlers.translateX / 60) }}>
-                    <Trash2 size={20} />
+                <div className={cn("absolute inset-y-0 right-0 flex items-center px-4 text-white rounded-r-xl transition-opacity", leftSwipeBg)} style={{ opacity: Math.max(0, -swipeHandlers.translateX / 60) }}>
+                    <LeftSwipeIcon size={20} />
                 </div>
               </>
             )}
