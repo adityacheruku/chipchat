@@ -1,6 +1,6 @@
 
 import { api } from './api';
-import type { UploadItem, UploadProgress, UploadError } from '@/types';
+import type { UploadItem, UploadProgress, UploadError, MessageSubtype } from '@/types';
 import { UploadErrorCode, ERROR_MESSAGES } from '@/types/uploadErrors';
 import { validateFile } from '@/utils/fileValidation';
 import { imageProcessor } from './imageProcessor';
@@ -71,36 +71,35 @@ class UploadManager {
       }
       
       let fileToUpload: Blob = item.file;
-      let mediaType = validation.fileType;
+      let mediaTypeForBackend: MessageSubtype | 'audio' = item.subtype;
       let thumbnailDataUrl: string | undefined = undefined;
       let eagerTransforms: string[] = [];
 
-      if (mediaType === 'image') {
+      if (item.subtype === 'image') {
         const variants = await imageProcessor.processImage(item.file);
         fileToUpload = variants.compressed.blob;
         thumbnailDataUrl = variants.thumbnail.dataUrl;
         emitProgress({ messageId: item.messageId, status: 'processing', progress: 0, thumbnailDataUrl });
         eagerTransforms = ["w_800,c_limit,q_auto,f_auto"];
-      } else if (mediaType === 'video') {
+      } else if (item.subtype === 'clip') { // Video
         this.queue[itemIndex].status = 'compressing';
         emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
         fileToUpload = await videoCompressor.compressVideo(item.file, 'medium', (progress) => {
             emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
         });
-        eagerTransforms = ["w_400,h_400,c_limit,f_jpg,so_1"];
-      } else if (mediaType === 'audio') {
+        eagerTransforms = ["w_400,h_400,c_limit,f_jpg,so_1"]; // Thumbnail
+      } else if (item.subtype === 'voice_message') {
         this.queue[itemIndex].status = 'compressing';
         emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
         fileToUpload = await videoCompressor.compressAudio(item.file, (progress) => {
             emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
         });
-        mediaType = 'voice_message'; // Use specific type for backend
       }
 
       this.queue[itemIndex].status = 'uploading';
       emitProgress({ messageId: item.messageId, status: 'uploading', progress: 0, thumbnailDataUrl });
       
-      const payload = { file_type: mediaType, eager: eagerTransforms };
+      const payload = { file_type: mediaTypeForBackend, eager: eagerTransforms };
       const { xhr, promise } = api.uploadFile(fileToUpload, payload, (progress) => {
         const currentItem = this.queue[itemIndex];
         if (currentItem) {

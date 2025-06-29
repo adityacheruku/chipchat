@@ -30,7 +30,7 @@ export interface UserInToken extends User {}
 
 export type MessageClipType = 'audio' | 'video';
 export type MessageStatus = "uploading" | "sending" | "sent" | "delivered" | "read" | "failed";
-export type MessageSubtype = 'text' | 'sticker' | 'clip' | 'image' | 'document' | 'voice_message' | 'emoji_only' | 'history_cleared_marker';
+export type MessageSubtype = 'text' | 'sticker' | 'clip' | 'image' | 'document' | 'voice_message' | 'audio' | 'emoji_only' | 'history_cleared_marker';
 export type MessageMode = 'normal' | 'fight' | 'incognito';
 export type DeleteType = 'me' | 'everyone';
 
@@ -124,6 +124,7 @@ export interface UploadItem {
   error?: UploadError;
   retryCount: number;
   createdAt: Date;
+  subtype: MessageSubtype;
 }
 
 export interface UploadProgress {

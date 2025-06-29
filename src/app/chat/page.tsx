@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayo
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import dynamic from 'next/dynamic';
-import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData, ChatHistoryClearedEventData, UploadProgress } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData, ChatHistoryClearedEventData, UploadProgress, MessageSubtype } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
@@ -39,6 +39,7 @@ import { buttonVariants } from '@/components/ui/button';
 import FullPageLoader from '@/components/common/FullPageLoader';
 import Spinner from '@/components/common/Spinner';
 import MessageInfoModal from '@/components/chat/MessageInfoModal';
+import { validateFile } from '@/utils/fileValidation';
 
 
 const MemoizedMessageArea = memo(MessageArea);
@@ -145,7 +146,7 @@ export default function ChatPage() {
     const handleProgress = (update: UploadProgress) => {
       setMessages(prev => prev.map(m => {
         if (m.client_temp_id === update.messageId) {
-          const updatedMessage: Message = { ...m };
+          const updatedMessage: MessageType = { ...m };
           if (update.status === 'completed' && update.result) {
             updatedMessage.uploadStatus = 'completed';
             updatedMessage.status = 'sending'; // Now waiting for WebSocket send
@@ -179,23 +180,18 @@ export default function ChatPage() {
               mode: originalMessage.mode,
               reply_to_message_id: originalMessage.reply_to_message_id,
               message_subtype: originalMessage.message_subtype,
-              file_metadata: {
-                  name: result.original_filename,
-                  size: result.bytes,
-                  format: result.format,
-                  resource_type: result.resource_type,
-              }
+              file_metadata: result.file_metadata,
           };
-
+          
           if (originalMessage.message_subtype === 'image') {
               payload.image_url = result.secure_url;
               payload.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
               payload.image_thumbnail_url = originalMessage.thumbnailDataUrl; // Keep local thumb for perf
-          } else if (originalMessage.message_subtype === 'clip' || originalMessage.message_subtype === 'voice_message') {
+          } else if (originalMessage.message_subtype === 'clip' || originalMessage.message_subtype === 'voice_message' || originalMessage.message_subtype === 'audio') {
               payload.clip_url = result.secure_url;
               payload.image_thumbnail_url = result.eager?.[0]?.secure_url;
               payload.duration_seconds = result.duration;
-              if (originalMessage.message_subtype === 'voice_message') {
+              if (originalMessage.message_subtype === 'voice_message' || originalMessage.message_subtype === 'audio') {
                  payload.clip_type = 'audio';
                  payload.audio_format = result.format;
               } else {
@@ -325,8 +321,13 @@ export default function ChatPage() {
     if (replyToId) setReplyingTo(null);
   }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
   
-  const handleFileUpload = useCallback((file: File, mode: MessageMode, subtype: MessageType['message_subtype']) => {
+  const handleFileUpload = useCallback((file: File, mode: MessageMode, intendedSubtype: MessageType['message_subtype']) => {
     if (!currentUser || !activeChat) return;
+
+    const validation = validateFile(file);
+    const finalSubtype = (intendedSubtype === 'document' && ['image', 'video', 'audio'].includes(validation.fileType))
+      ? validation.fileType as MessageSubtype
+      : intendedSubtype;
 
     const clientTempId = uuidv4();
     const optimisticMessage: MessageType = {
@@ -338,11 +339,11 @@ export default function ChatPage() {
         status: 'uploading',
         uploadStatus: 'pending',
         client_temp_id: clientTempId,
-        message_subtype: subtype,
+        message_subtype: finalSubtype,
         mode,
         file,
         document_name: file.name,
-        thumbnailDataUrl: subtype === 'image' ? URL.createObjectURL(file) : undefined,
+        thumbnailDataUrl: finalSubtype === 'image' ? URL.createObjectURL(file) : undefined,
     };
     setMessages(prev => [...prev, optimisticMessage]);
     
@@ -352,6 +353,7 @@ export default function ChatPage() {
       messageId: clientTempId,
       chatId: activeChat.id,
       priority: 5,
+      subtype: finalSubtype
     });
   }, [currentUser, activeChat]);
 

@@ -1,14 +1,21 @@
 
 import os
+import json
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 import cloudinary
 import cloudinary.uploader
-from typing import Dict, Any
+from typing import Dict, Any, List
+from pydantic import BaseModel, ValidationError
+import io
 
 from app.auth.dependencies import get_current_active_user 
 from app.auth.schemas import UserPublic 
 from app.utils.security import validate_image_upload, validate_clip_upload, validate_document_upload
 from app.utils.logging import logger 
+from mutagen.mp3 import MP3
+from mutagen.flac import FLAC
+from mutagen.mp4 import MP4
+from mutagen import File as MutagenFile
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -19,85 +26,110 @@ cloudinary.config(
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
-async def _upload_to_cloudinary(file: UploadFile, folder: str, resource_type: str, transformations: list = []) -> Dict[str, Any]:
+class UploadPayload(BaseModel):
+    file_type: str
+    eager: List[str] = []
+
+def extract_audio_metadata(content: bytes, filename: str) -> dict:
+    """Extracts metadata from an audio file using mutagen."""
+    metadata = {}
+    file_ext = filename.split('.')[-1].lower() if '.' in filename else ''
+    file_like_object = io.BytesIO(content)
+    
+    try:
+        audio = None
+        if file_ext == 'mp3':
+            audio = MP3(file_like_object)
+        elif file_ext == 'flac':
+            audio = FLAC(file_like_object)
+        elif file_ext in ['m4a', 'mp4', 'm4b']:
+            audio = MP4(file_like_object)
+        else:
+            audio = MutagenFile(file_like_object, easy=True)
+
+        if audio:
+            if audio.info:
+                metadata['duration'] = int(audio.info.length)
+                metadata['bitrate'] = audio.info.bitrate
+            if audio.tags:
+                tags_dict = dict(audio.tags)
+                if 'title' in tags_dict: metadata['title'] = tags_dict['title'][0]
+                if 'artist' in tags_dict: metadata['artist'] = tags_dict['artist'][0]
+                if 'album' in tags_dict: metadata['album'] = tags_dict['album'][0]
+                if 'tracknumber' in tags_dict: metadata['tracknumber'] = tags_dict['tracknumber'][0]
+                if 'date' in tags_dict: metadata['date'] = tags_dict['date'][0]
+
+    except Exception as e:
+        logger.warning(f"Could not extract metadata from {filename}: {e}")
+    
+    return metadata
+
+async def _upload_to_cloudinary(file_obj, folder: str, resource_type: str, transformations: list = [], filename: str = "file") -> Dict[str, Any]:
     """Helper function to handle Cloudinary upload and error handling."""
     try:
-        logger.info(f"Attempting to upload: {file.filename} to folder {folder} with transformations: {transformations}")
+        logger.info(f"Attempting to upload: {filename} to folder {folder} with transformations: {transformations}")
         result = cloudinary.uploader.upload(
-            file.file, 
+            file_obj, 
             folder=folder, 
             resource_type=resource_type,
             eager=transformations,
-            eager_async=True # Use async eager transformations for faster response times
+            eager_async=True
         )
-        logger.info(f"File {file.filename} uploaded successfully. URL: {result.get('secure_url')}")
+        logger.info(f"File {filename} uploaded successfully. URL: {result.get('secure_url')}")
         return result
     except Exception as e:
-        logger.error(f"Cloudinary upload error for {file.filename}: {e}", exc_info=True)
+        logger.error(f"Cloudinary upload error for {filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"File upload to Cloudinary failed: {str(e)}")
-
 
 @router.post("/file", summary="Upload any file for chat messages")
 async def upload_generic_file(
     file: UploadFile = File(...),
-    file_type: str = Form(...), # Expected: 'image', 'video', 'document', 'voice_message'
+    payload: str = Form(...),
     current_user: UserPublic = Depends(get_current_active_user), 
 ):
-    """
-    A unified endpoint to handle all file uploads for the chat.
-    It validates the file, uploads it to Cloudinary with appropriate transformations,
-    and returns the necessary URLs and metadata.
-    """
+    try:
+        upload_data = UploadPayload.model_validate_json(payload)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=f"Invalid payload format: {e}")
+
+    file_type = upload_data.file_type
+    eager_transformations = upload_data.eager
+
     logger.info(f"Route /uploads/file called by user {current_user.id} for file '{file.filename}' of type '{file_type}'")
 
     folder = f"kuchlu_chat_media/user_{current_user.id}"
-    response_data = {}
-    
-    file_size = file.size or 0
+    resource_type = "auto"
+    file_to_upload: Any = file.file
+    extracted_metadata = {}
 
     if file_type == 'image':
         validate_image_upload(file)
-        transformations = [{"width": 200, "height": 200, "crop": "limit"}]
-        result = await _upload_to_cloudinary(file, folder, resource_type="image", transformations=transformations)
-        response_data = {
-            "image_url": result.get("secure_url"),
-            "image_thumbnail_url": result.get('eager', [{}])[0].get('secure_url')
-        }
-
+        resource_type = "image"
     elif file_type == 'video':
         validate_clip_upload(file)
-        # Create a video thumbnail (first frame as a JPG)
-        transformations = [{"width": 300, "height": 300, "crop": "limit", "format": "jpg"}]
-        result = await _upload_to_cloudinary(file, folder, resource_type="video", transformations=transformations)
-        response_data = {
-            "file_url": result.get("secure_url"),
-            "clip_type": "video",
-            "thumbnail_url": result.get('eager', [{}])[0].get('secure_url'),
-            "duration_seconds": round(result.get("duration", 0)),
-        }
-
+        resource_type = "video"
     elif file_type == 'document':
         validate_document_upload(file)
-        result = await _upload_to_cloudinary(file, folder, resource_type="raw")
-        response_data = {
-            "file_url": result.get("secure_url"), 
-            "file_name": file.filename,
-            "file_size_bytes": file_size,
-        }
-
-    elif file_type == 'voice_message':
+        resource_type = "raw"
+    elif file_type in ['voice_message', 'audio']:
         validate_clip_upload(file)
-        # Voice notes are stored as video resource type in Cloudinary to get duration
-        result = await _upload_to_cloudinary(file, folder, resource_type="video")
-        response_data = {
-            "file_url": result.get("secure_url"), 
-            "clip_type": "audio",
-            "duration_seconds": round(result.get("duration", 0)),
-            "file_size_bytes": result.get('bytes'),
-            "audio_format": result.get('format')
-        }
-    
+        resource_type = "video"
+        if file_type == 'audio':
+            content = await file.read()
+            extracted_metadata = extract_audio_metadata(content, file.filename or "audio_file")
+            file_to_upload = io.BytesIO(content) # Use bytes for upload after reading
     else:
         raise HTTPException(status_code=400, detail="Invalid file_type provided.")
 
-    return response_data
+    result = await _upload_to_cloudinary(
+        file_to_upload, 
+        folder, 
+        resource_type=resource_type, 
+        transformations=eager_transformations,
+        filename=file.filename or "uploaded_file"
+    )
+    
+    if extracted_metadata:
+        result['file_metadata'] = extracted_metadata
+
+    return result

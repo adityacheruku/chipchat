@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Eye, FileEdit, Mic, CheckCircle2, Info } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Eye, FileEdit, Mic, CheckCircle2, Info, Music } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Tooltip,
@@ -63,7 +63,7 @@ function formatDuration(seconds: number | null | undefined): string {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
-const AudioPlayer = memo(({ message, sender, isCurrentUser }: { message: Message; sender: User; isCurrentUser: boolean; }) => {
+const AudioPlayer = memo(({ message, sender, isCurrentUser, PlayerIcon = Mic }: { message: Message; sender: User; isCurrentUser: boolean; PlayerIcon?: React.ElementType }) => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(message.duration_seconds || 0);
@@ -160,12 +160,12 @@ const AudioPlayer = memo(({ message, sender, isCurrentUser }: { message: Message
                 </Avatar>
                 {!hasBeenPlayed && !isCurrentUser && (
                   <div className={cn("absolute bottom-[-2px] right-[-2px] w-4 h-4 rounded-full flex items-center justify-center border-2", isCurrentUser ? "border-primary" : "border-secondary", micIndicatorBg)}>
-                    <Mic size={10} className={micIndicatorIcon} />
+                    <PlayerIcon size={10} className={micIndicatorIcon} />
                   </div>
                 )}
             </div>
 
-            <Button variant="ghost" size="icon" onClick={handlePlayPause} className={cn("w-10 h-10 rounded-full flex-shrink-0", isCurrentUser ? 'hover:bg-white/20' : 'hover:bg-black/10')} aria-label={isPlaying ? "Pause voice message" : "Play voice message"}>
+            <Button variant="ghost" size="icon" onClick={handlePlayPause} className={cn("w-10 h-10 rounded-full flex-shrink-0", isCurrentUser ? 'hover:bg-white/20' : 'hover:bg-black/10')} aria-label={isPlaying ? "Pause audio" : "Play audio"}>
                 {isPlaying ? <Pause size={20} className={playerColorClass} /> : <Play size={20} className={cn("ml-0.5", playerColorClass)} />}
             </Button>
             
@@ -193,6 +193,24 @@ const AudioPlayer = memo(({ message, sender, isCurrentUser }: { message: Message
     );
 });
 AudioPlayer.displayName = "AudioPlayer";
+
+const AudioFilePlayer = memo(({ message, isCurrentUser }: { message: Message; isCurrentUser: boolean; }) => {
+    const { title, artist } = message.file_metadata || {};
+
+    return (
+        <div className={cn("p-2 w-full max-w-[250px] sm:max-w-xs", isCurrentUser ? "text-primary-foreground" : "text-secondary-foreground")}>
+            <div className="flex items-center gap-3 p-2 border-b" style={{ borderColor: isCurrentUser ? 'hsl(var(--primary-foreground) / 0.2)' : 'hsl(var(--border))' }}>
+                <Music size={20} className="flex-shrink-0" />
+                <div className="flex-grow min-w-0">
+                    <p className="font-semibold text-sm truncate">{title || message.document_name || 'Audio Track'}</p>
+                    <p className="text-xs opacity-80 truncate">{artist || 'Unknown Artist'}</p>
+                </div>
+            </div>
+            <AudioPlayer message={message} sender={allUsers[message.user_id]} isCurrentUser={isCurrentUser} PlayerIcon={Music} />
+        </div>
+    );
+});
+AudioFilePlayer.displayName = 'AudioFilePlayer';
 
 function formatFileSize(bytes?: number | null): string | null {
   if (bytes === null || bytes === undefined) return null;
@@ -289,7 +307,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
   
   const isStickerMessage = message.message_subtype === 'sticker';
   const isEmojiOnlyMessage = message.message_subtype === 'text' && message.text && EMOJI_ONLY_REGEX.test(message.text.trim()) && message.text.trim().length <= 5;
-  const isMediaBubble = isStickerMessage || isEmojiOnlyMessage || message.message_subtype === 'image' || message.message_subtype === 'voice_message' || (message.message_subtype === 'clip' && message.clip_type === 'video');
+  const isMediaBubble = isStickerMessage || isEmojiOnlyMessage || message.message_subtype === 'image' || message.message_subtype === 'voice_message' || message.message_subtype === 'audio' || (message.message_subtype === 'clip' && message.clip_type === 'video');
 
 
   let formattedTime = "sending...";
@@ -320,9 +338,10 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
         switch (message.message_subtype) {
           case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized loading="lazy" /> : null;
           case 'voice_message': return message.clip_url ? <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
+          case 'audio': return message.clip_url ? <AudioFilePlayer message={message} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Audio file unavailable</p>;
           case 'image':
             return message.image_url ? (
-              <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[220px] h-auto aspect-[4/3] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
+              <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-full max-w-[250px] aspect-[4/3] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
                   <Image src={message.preview_url || message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
               </button>
             ) : <p className="text-sm italic">Image unavailable</p>;
@@ -375,7 +394,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
   const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image' && message.message_subtype !== 'document';
   const reactionsDisabled = message.mode === 'incognito' || isSelectionMode;
   const swipeDisabled = isMediaBubble || isSelectionMode;
-  const isVoiceMessage = message.message_subtype === 'voice_message';
+  const isVoiceOrAudioMessage = message.message_subtype === 'voice_message' || message.message_subtype === 'audio';
 
   const RightSwipeIcon = isCurrentUser ? Trash2 : Reply;
   const LeftSwipeIcon = isCurrentUser ? Reply : Trash2;
@@ -431,7 +450,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
                     className={cn(
                       'relative rounded-xl shadow-md transition-all active:scale-95',
                       isMediaBubble || message.message_subtype === 'document' ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
-                      isVoiceMessage && cn(bubbleColorClass, 'p-0'),
+                      isVoiceOrAudioMessage && cn(bubbleColorClass, 'p-0'),
                       !isMediaBubble && message.message_subtype !== 'document' && !repliedToMessage && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
                       !isMediaBubble && message.message_subtype !== 'document' && !repliedToMessage && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
                       message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80',
@@ -465,7 +484,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
             </div>
           </div>
           
-          {!isVoiceMessage && (
+          {!isVoiceOrAudioMessage && (
               <div className={cn('pt-1', isCurrentUser ? 'pr-2' : 'pl-2')}>
               {!reactionsDisabled && message.reactions && Object.keys(message.reactions).length > 0 && (
                   <div className={cn("flex flex-wrap gap-1 mt-1", isCurrentUser ? "justify-end" : "justify-start")}>
