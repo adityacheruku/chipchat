@@ -3,6 +3,7 @@ import { api } from './api';
 import type { UploadItem, UploadProgress, UploadError } from '@/types';
 import { UploadErrorCode, ERROR_MESSAGES } from '@/types/uploadErrors';
 import { validateFile } from '@/utils/fileValidation';
+import { imageProcessor } from './imageProcessor';
 
 // A simple event emitter
 type ProgressListener = (progress: UploadProgress) => void;
@@ -57,23 +58,36 @@ class UploadManager {
   
   private async uploadFile(item: UploadItem): Promise<void> {
     const itemIndex = this.queue.findIndex(q => q.id === item.id);
-    if (itemIndex === -1) return; // Item was removed or not found
+    if (itemIndex === -1) return;
 
-    this.queue[itemIndex].status = 'uploading';
-    emitProgress({ messageId: item.messageId, status: 'uploading', progress: 0 });
+    this.queue[itemIndex].status = 'processing'; // New state for pre-upload work
+    emitProgress({ messageId: item.messageId, status: 'processing', progress: 0 });
 
     try {
       const validation = validateFile(item.file);
       if (!validation.isValid) {
         throw new Error(validation.errors.join(', '), { cause: UploadErrorCode.VALIDATION_FAILED });
       }
-      const mediaType = validation.fileType as 'image' | 'video' | 'audio' | 'document';
       
-      const { xhr, promise } = api.uploadFile(item.file, mediaType, (progress) => {
+      let fileToUpload: Blob = item.file;
+      let mediaType = validation.fileType as 'image' | 'video' | 'audio' | 'document';
+      let thumbnailDataUrl: string | undefined = undefined;
+
+      if (mediaType === 'image') {
+        const variants = await imageProcessor.processImage(item.file);
+        fileToUpload = variants.compressed.blob;
+        thumbnailDataUrl = variants.thumbnail.dataUrl;
+        emitProgress({ messageId: item.messageId, status: 'processing', progress: 0, thumbnailDataUrl });
+      }
+
+      this.queue[itemIndex].status = 'uploading';
+      emitProgress({ messageId: item.messageId, status: 'uploading', progress: 0, thumbnailDataUrl });
+      
+      const { xhr, promise } = api.uploadFile(fileToUpload, mediaType, (progress) => {
         const currentItem = this.queue[itemIndex];
         if (currentItem) {
           currentItem.progress = progress;
-          emitProgress({ messageId: item.messageId, status: 'uploading', progress });
+          emitProgress({ messageId: item.messageId, status: 'uploading', progress, thumbnailDataUrl });
         }
       });
 
@@ -109,7 +123,7 @@ class UploadManager {
   private handleRetryLogic(item: UploadItem): void {
       if (item.error?.retryable && item.retryCount < 3) {
           item.retryCount++;
-          const delay = Math.pow(2, item.retryCount) * 1000; // Exponential backoff
+          const delay = Math.pow(2, item.retryCount) * 1000;
           setTimeout(() => {
               const itemIndex = this.queue.findIndex(q => q.id === item.id);
               if (itemIndex !== -1 && this.queue[itemIndex].status === 'failed') {
@@ -124,7 +138,7 @@ class UploadManager {
     const item = this.queue.find(q => q.messageId === messageId);
     if (item && item.status === 'failed') {
       item.status = 'pending';
-      item.retryCount = 0; // Reset retry count for manual retry
+      item.retryCount = 0;
       this.processQueue();
     }
   }
@@ -146,10 +160,6 @@ class UploadManager {
         this.processQueue();
     }
   }
-
-  public pauseQueue(): void { /* Not implemented */ }
-  public resumeQueue(): void { /* Not implemented */ }
 }
 
-// Ensure singleton instance in browser environment
 export const uploadManager = typeof window !== 'undefined' ? new UploadManager() : {} as UploadManager;

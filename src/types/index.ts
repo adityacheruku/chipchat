@@ -55,7 +55,7 @@ export interface Message {
   sticker_image_url?: string | null;
   client_temp_id: string;
   status: MessageStatus;
-  uploadStatus?: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  uploadStatus?: 'pending' | 'processing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   duration_seconds?: number | null;
   file_size_bytes?: number | null;
   audio_format?: string | null;
@@ -64,6 +64,7 @@ export interface Message {
   uploadProgress?: number;
   uploadError?: UploadError;
   file?: File;
+  thumbnailDataUrl?: string; // For optimistic image previews
 }
 
 export interface Chat {
@@ -110,25 +111,24 @@ export interface PushSubscriptionJSON { endpoint: string; expirationTime?: numbe
 export interface NotificationSettings { user_id: string; messages: boolean; mood_updates: boolean; thinking_of_you: boolean; voice_messages: boolean; media_sharing: boolean; quiet_hours_enabled: boolean; quiet_hours_start: string | null; quiet_hours_end: string | null; quiet_hours_weekdays_only: boolean; timezone: string; }
 export interface PartnerRequest { id: string; sender: User; recipient: User; status: 'pending' | 'accepted' | 'rejected' | 'cancelled'; created_at: string; }
 
-// Corresponds to backend/services/upload_queue.py UploadItem
 export interface UploadItem {
   id: string;
   file: File;
   messageId: string;
   chatId: string;
   priority: number;
-  status: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'processing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   error?: UploadError;
   retryCount: number;
   createdAt: Date;
 }
 
-// Corresponds to frontend hook useUploadProgress
 export interface UploadProgress {
   messageId: string;
-  status: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'processing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   error?: UploadError;
   result?: any;
+  thumbnailDataUrl?: string;
 }

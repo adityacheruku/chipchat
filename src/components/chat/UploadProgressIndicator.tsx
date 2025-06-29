@@ -14,7 +14,7 @@ interface UploadProgressIndicatorProps {
 }
 
 export default function UploadProgressIndicator({ message, onRetry }: UploadProgressIndicatorProps) {
-    if (message.status === 'failed') {
+    if (message.status === 'failed' || message.uploadStatus === 'failed') {
         return (
             <div className="w-[120px] h-[120px] rounded-md border-2 border-dashed border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center p-2 text-center text-destructive">
                 <ImageOff size={28} className="mb-2" />
@@ -33,11 +33,13 @@ export default function UploadProgressIndicator({ message, onRetry }: UploadProg
     }
     
     // Default to uploading view
+    const imageUrl = message.thumbnailDataUrl || message.image_url;
+
     return (
         <div className="w-[120px] h-[120px] rounded-md overflow-hidden bg-muted relative flex items-center justify-center animate-pulse">
-            {message.image_url && (
+            {imageUrl && (
                 <Image
-                    src={message.image_url} // This is the local blob URL
+                    src={imageUrl} // Use local blob URL or data URL
                     alt="Uploading preview"
                     fill
                     className="object-cover"

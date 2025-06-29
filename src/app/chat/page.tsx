@@ -1,11 +1,12 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import dynamic from 'next/dynamic';
-import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData, ChatHistoryClearedEventData } from '@/types';
+import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData, ChatHistoryClearedEventData, UploadProgress } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
 import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
@@ -16,6 +17,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useRealtime } from '@/hooks/useRealtime';
+import { uploadManager } from '@/services/uploadManager';
 import { Wifi, WifiOff, Trash2, Video, File } from 'lucide-react';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
@@ -135,8 +137,76 @@ export default function ChatPage() {
     onMessageReceived: handleNewMessage, onReactionUpdate: (data) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), onPresenceUpdate: handlePresenceUpdate,
     onTypingUpdate: handleTypingUpdate, onThinkingOfYouReceived: handleThinkingOfYou, onUserProfileUpdate: handleProfileUpdate,
     onMessageAck: handleMessageAck, onChatModeChanged: handleChatModeChanged, onMessageDeleted: handleMessageDeleted,
-    onChatHistoryCleared: handleChatHistoryCleared,
+    onChatHistoryCleared: (chatId) => { if (activeChat?.id === chatId) setMessages([]); },
   });
+
+  // Listen to upload progress events
+  useEffect(() => {
+    const handleProgress = (update: UploadProgress) => {
+      setMessages(prev => prev.map(m => {
+        if (m.client_temp_id === update.messageId) {
+          const updatedMessage = { ...m };
+          if (update.status === 'completed' && update.result) {
+            updatedMessage.uploadStatus = 'completed';
+            updatedMessage.status = 'sending'; // Now waiting for WebSocket send
+            // Here you might update the message with final URLs if needed,
+            // but the server message will be the source of truth.
+          } else if (update.status === 'failed') {
+            updatedMessage.uploadStatus = 'failed';
+            updatedMessage.status = 'failed';
+            updatedMessage.uploadError = update.error;
+          } else if (update.status === 'uploading' || update.status === 'processing') {
+            updatedMessage.uploadStatus = update.status;
+            updatedMessage.uploadProgress = update.progress;
+            if(update.thumbnailDataUrl) {
+              updatedMessage.thumbnailDataUrl = update.thumbnailDataUrl;
+            }
+          }
+          return updatedMessage;
+        }
+        return m;
+      }));
+
+      // When upload is completed, send the message via WebSocket
+      if (update.status === 'completed' && update.result) {
+          const originalMessage = messages.find(m => m.client_temp_id === update.messageId);
+          if (!originalMessage) return;
+
+          let payload: any = { 
+              event_type: "send_message", 
+              client_temp_id: update.messageId, 
+              chat_id: originalMessage.chat_id,
+              mode: originalMessage.mode,
+              reply_to_message_id: originalMessage.reply_to_message_id,
+              message_subtype: originalMessage.message_subtype,
+          };
+
+          const result = update.result;
+          if (originalMessage.message_subtype === 'image') {
+            payload.image_url = result.image_url;
+            payload.image_thumbnail_url = result.image_thumbnail_url;
+          } else if (originalMessage.message_subtype === 'clip') {
+            payload.clip_url = result.file_url;
+            payload.clip_type = result.clip_type;
+            payload.image_thumbnail_url = result.thumbnail_url;
+            payload.duration_seconds = result.duration_seconds;
+          } else if (originalMessage.message_subtype === 'document') {
+            payload.document_url = result.file_url;
+            payload.document_name = result.file_name;
+            payload.file_size_bytes = result.file_size_bytes;
+          } else if (originalMessage.message_subtype === 'voice_message') {
+            payload.clip_url = result.file_url;
+            payload.duration_seconds = result.duration_seconds;
+            payload.file_size_bytes = result.file_size_bytes;
+            payload.audio_format = result.audio_format;
+          }
+          sendMessageWithTimeout(payload);
+      }
+    };
+    const unsubscribe = uploadManager.subscribe(handleProgress);
+    return () => unsubscribe();
+  }, [setMessages, sendMessage, messages]);
+
 
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast });
 
@@ -214,7 +284,7 @@ export default function ChatPage() {
   const handleToggleMessageSelection = useCallback((messageId: string) => {
     setSelectedMessageIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(messageId)) {
+      if (newSet.has(newSet)) {
         newSet.delete(messageId);
       } else {
         newSet.add(messageId);
@@ -248,48 +318,43 @@ export default function ChatPage() {
     if (replyToId) setReplyingTo(null);
   }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
   
-  const handleFileUpload = useCallback(async (file: File, subtype: MessageType['message_subtype'], mode: MessageMode, uploadFunction: (file: File, onProgress: (p: number) => void) => Promise<any>) => {
+  const handleFileUpload = useCallback((file: File, mode: MessageMode, subtype: MessageType['message_subtype']) => {
     if (!currentUser || !activeChat) return;
+
     const clientTempId = uuidv4();
-    const isVideo = subtype === 'clip' && file.type.startsWith('video/');
     const optimisticMessage: MessageType = {
-        id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), status: 'uploading', uploadProgress: 0, client_temp_id: clientTempId, message_subtype: subtype, mode, file,
-        image_url: !isVideo && file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
-        document_name: file.name
+        id: clientTempId,
+        user_id: currentUser.id,
+        chat_id: activeChat.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        status: 'uploading',
+        uploadStatus: 'pending',
+        client_temp_id: clientTempId,
+        message_subtype: subtype,
+        mode,
+        file,
+        document_name: file.name,
+        thumbnailDataUrl: subtype === 'image' ? URL.createObjectURL(file) : undefined,
     };
     setMessages(prev => [...prev, optimisticMessage]);
-    try {
-        const onProgress = (p: number) => setMessages(prev => prev.map(m => m.client_temp_id === clientTempId ? { ...m, uploadProgress: p } : m));
-        const res = await uploadFunction(file, onProgress);
-        setMessages(prev => prev.map(m => m.client_temp_id === clientTempId ? { ...m, status: 'sending', uploadProgress: 100 } : m));
-        
-        let payload: any = { event_type: "send_message", client_temp_id: clientTempId, message_subtype: subtype, mode, chat_id: activeChat.id };
-        if (subtype === 'image') {
-          payload.image_url = res.image_url;
-          payload.image_thumbnail_url = res.image_thumbnail_url;
-        } else if (subtype === 'clip') {
-          payload.clip_url = res.file_url;
-          payload.clip_type = res.clip_type;
-          payload.image_thumbnail_url = res.thumbnail_url;
-          payload.duration_seconds = res.duration_seconds;
-        } else if (subtype === 'document') {
-          payload.document_url = res.file_url;
-          payload.document_name = res.file_name;
-          payload.file_size_bytes = res.file_size_bytes;
-        } else if (subtype === 'voice_message') {
-          payload.clip_url = res.file_url;
-          payload.duration_seconds = res.duration_seconds;
-          payload.file_size_bytes = res.file_size_bytes;
-          payload.audio_format = res.audio_format;
-        }
-        sendMessageWithTimeout(payload);
-    } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
-        setMessages(prev => prev.map(m => m.client_temp_id === clientTempId ? { ...m, status: 'failed' } : m));
-    }
-  }, [currentUser, activeChat, sendMessageWithTimeout, toast]);
+    
+    uploadManager.addToQueue({
+      id: uuidv4(),
+      file,
+      messageId: clientTempId,
+      chatId: activeChat.id,
+      priority: 5,
+    });
+  }, [currentUser, activeChat]);
 
-  const handleRetrySend = useCallback((message: MessageType) => setMessages(prev => prev.map(m => m.client_temp_id === message.client_temp_id ? { ...m, status: 'sending' } : m)), []);
+  const handleRetrySend = useCallback((message: MessageType) => {
+    if (message.uploadStatus === 'failed' && message.file) {
+      uploadManager.retryUpload(message.client_temp_id);
+    } else {
+      setMessages(prev => prev.map(m => m.client_temp_id === message.client_temp_id ? { ...m, status: 'sending' } : m));
+    }
+  }, []);
   
   const handleDeleteMessage = useCallback(async (messageId: string, deleteType: DeleteType) => { 
     if (!activeChat) return; 
@@ -351,7 +416,6 @@ export default function ChatPage() {
         toast({ title: "Messages Deleted", description: `${idsToDelete.length} messages deleted for everyone.` });
       } catch (error: any) {
         toast({ variant: 'destructive', title: 'Delete Failed', description: 'Some messages could not be deleted.' });
-        // Potentially add back messages that failed, or refetch
         performLoadChatData();
       }
     } else {
@@ -366,17 +430,17 @@ export default function ChatPage() {
     try {
         await api.clearChatHistory(activeChat.id);
         toast({ title: "Chat Cleared", description: "Your view of this chat has been cleared."});
-        setMessages([]); // Optimistically clear messages
+        setMessages([]);
     } catch (error: any) {
         toast({ variant: "destructive", title: 'Clear Failed', description: error.message });
     }
     setIsClearChatDialogOpen(false);
   }, [activeChat, toast]);
 
-  const handleSendImage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'image', mode, api.uploadChatImage), [handleFileUpload]);
-  const handleSendVideo = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'clip', mode, api.uploadChatVideo), [handleFileUpload]);
-  const handleSendDocument = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'document', mode, api.uploadChatDocument), [handleFileUpload]);
-  const handleSendVoiceMessage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, 'voice_message', mode, api.uploadVoiceMessage), [handleFileUpload]);
+  const handleSendImage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, mode, 'image'), [handleFileUpload]);
+  const handleSendVideo = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, mode, 'clip'), [handleFileUpload]);
+  const handleSendDocument = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, mode, 'document'), [handleFileUpload]);
+  const handleSendVoiceMessage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, mode, 'voice_message'), [handleFileUpload]);
   const handleSendSticker = useCallback((stickerId: string, mode: MessageMode) => { if (!currentUser || !activeChat) return; sendMessageWithTimeout({ event_type: "send_message", sticker_id: stickerId, client_temp_id: uuidv4(), message_subtype: "sticker", mode, chat_id: activeChat.id }); }, [currentUser, activeChat, sendMessageWithTimeout]);
   
   const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
