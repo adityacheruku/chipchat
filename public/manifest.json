@@ -1,4 +1,3 @@
-
 {
   "name": "Kuchlu",
   "short_name": "Kuchlu",
@@ -25,50 +24,22 @@
     {
       "name": "Set My Mood",
       "short_name": "Mood",
-      "description": "Quickly set your current mood",
-      "url": "/quick/mood",
-      "icons": [
-        {
-          "src": "/icons/icon-192x192.png",
-          "sizes": "192x192"
-        }
-      ]
+      "url": "/quick/mood"
     },
     {
       "name": "Send an Image",
       "short_name": "Image",
-      "description": "Share an image with your partner",
-      "url": "/quick/image",
-      "icons": [
-        {
-          "src": "/icons/icon-192x192.png",
-          "sizes": "192x192"
-        }
-      ]
+      "url": "/quick/image"
     },
     {
       "name": "Thinking of You",
       "short_name": "Ping",
-      "description": "Let your partner know you're thinking of them",
-      "url": "/quick/think",
-      "icons": [
-        {
-          "src": "/icons/icon-192x192.png",
-          "sizes": "192x192"
-        }
-      ]
+      "url": "/quick/think"
     },
     {
       "name": "Send a Snap",
       "short_name": "Snap",
-      "description": "Send a disappearing photo or video",
-      "url": "/quick/snap",
-      "icons": [
-        {
-          "src": "/icons/icon-192x192.png",
-          "sizes": "192x192"
-        }
-      ]
+      "url": "/quick/snap"
     }
   ]
 }
