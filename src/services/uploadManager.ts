@@ -5,6 +5,7 @@ import { UploadErrorCode, ERROR_MESSAGES } from '@/types/uploadErrors';
 import { validateFile } from '@/utils/fileValidation';
 import { imageProcessor } from './imageProcessor';
 import { videoCompressor } from './videoCompressor';
+import { indexedDBService } from './indexedDBService';
 
 // A simple event emitter
 type ProgressListener = (progress: UploadProgress) => void;
@@ -18,6 +19,7 @@ class UploadManager {
   private queue: UploadItem[] = [];
   private activeUploads: Map<string, XMLHttpRequest> = new Map();
   private maxConcurrentUploads = 2; // Reduced for potentially heavy compression tasks
+  private isInitialized = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -25,6 +27,28 @@ class UploadManager {
             return (window as any).uploadManagerInstance;
         }
         (window as any).uploadManagerInstance = this;
+        this.init();
+    }
+  }
+
+  private async init(): Promise<void> {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
+    try {
+      const pendingItems = await indexedDBService.getAllPendingUploads();
+      if (pendingItems.length > 0) {
+          console.log(`UploadManager: Resuming ${pendingItems.length} pending uploads.`);
+          // Reset status to 'pending' for items that were interrupted
+          const itemsToRequeue = pendingItems.map(item => ({
+              ...item,
+              status: 'pending',
+              progress: 0,
+          }));
+          this.queue.unshift(...itemsToRequeue);
+          this.processQueue();
+      }
+    } catch (error) {
+        console.error("UploadManager: Failed to initialize and load from IndexedDB", error);
     }
   }
 
@@ -33,7 +57,7 @@ class UploadManager {
     return () => progressListeners.delete(callback);
   }
 
-  public addToQueue(item: Omit<UploadItem, 'status' | 'progress' | 'retryCount' | 'createdAt'>): void {
+  public async addToQueue(item: Omit<UploadItem, 'status' | 'progress' | 'retryCount' | 'createdAt'>): Promise<void> {
     const fullItem: UploadItem = {
       ...item,
       status: 'pending',
@@ -41,6 +65,7 @@ class UploadManager {
       retryCount: 0,
       createdAt: new Date(),
     };
+    await indexedDBService.addUploadItem(fullItem);
     this.queue.push(fullItem);
     this.queue.sort((a, b) => a.priority - b.priority);
     this.processQueue();
@@ -58,10 +83,10 @@ class UploadManager {
   }
   
   private async uploadFile(item: UploadItem): Promise<void> {
-    const itemIndex = this.queue.findIndex(q => q.id === item.id);
-    if (itemIndex === -1) return;
+    const itemInQueue = this.queue.find(q => q.id === item.id);
+    if (!itemInQueue) return;
 
-    this.queue[itemIndex].status = 'processing';
+    itemInQueue.status = 'processing';
     emitProgress({ messageId: item.messageId, status: 'processing', progress: 0 });
 
     try {
@@ -82,26 +107,26 @@ class UploadManager {
         emitProgress({ messageId: item.messageId, status: 'processing', progress: 0, thumbnailDataUrl });
         eagerTransforms = ["w_800,c_limit,q_auto,f_auto"];
       } else if (item.subtype === 'clip') { // Video
-        this.queue[itemIndex].status = 'compressing';
+        itemInQueue.status = 'compressing';
         emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
         fileToUpload = await videoCompressor.compressVideo(item.file, 'medium', (progress) => {
             emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
         });
         eagerTransforms = ["w_400,h_400,c_limit,f_jpg,so_1"]; // Thumbnail
       } else if (item.subtype === 'voice_message') {
-        this.queue[itemIndex].status = 'compressing';
+        itemInQueue.status = 'compressing';
         emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
         fileToUpload = await videoCompressor.compressAudio(item.file, (progress) => {
             emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
         });
       }
 
-      this.queue[itemIndex].status = 'uploading';
+      itemInQueue.status = 'uploading';
       emitProgress({ messageId: item.messageId, status: 'uploading', progress: 0, thumbnailDataUrl });
       
       const payload = { file_type: mediaTypeForBackend, eager: eagerTransforms };
       const { xhr, promise } = api.uploadFile(fileToUpload, payload, (progress) => {
-        const currentItem = this.queue[itemIndex];
+        const currentItem = this.queue.find(q => q.id === item.id);
         if (currentItem) {
           currentItem.progress = progress;
           emitProgress({ messageId: item.messageId, status: 'uploading', progress, thumbnailDataUrl });
@@ -112,12 +137,13 @@ class UploadManager {
       const result = await promise;
 
       this.activeUploads.delete(item.id);
-      this.queue[itemIndex].status = 'completed';
+      itemInQueue.status = 'completed';
       emitProgress({ messageId: item.messageId, status: 'completed', progress: 100, result });
+      await indexedDBService.removeUploadItem(item.id);
       
     } catch (error: any) {
       this.activeUploads.delete(item.id);
-      const currentItem = this.queue[itemIndex];
+      const currentItem = this.queue.find(q => q.id === item.id);
       if (currentItem) {
         currentItem.status = 'failed';
         
@@ -129,6 +155,7 @@ class UploadManager {
         };
         
         currentItem.error = uploadError;
+        await indexedDBService.updateUploadItem(currentItem);
         emitProgress({ messageId: item.messageId, status: 'failed', progress: 0, error: uploadError });
         this.handleRetryLogic(currentItem);
       }
@@ -141,39 +168,41 @@ class UploadManager {
       if (item.error?.retryable && item.retryCount < 3) {
           item.retryCount++;
           const delay = Math.pow(2, item.retryCount) * 1000;
-          setTimeout(() => {
-              const itemIndex = this.queue.findIndex(q => q.id === item.id);
-              if (itemIndex !== -1 && this.queue[itemIndex].status === 'failed') {
-                  this.queue[itemIndex].status = 'pending';
+          setTimeout(async () => {
+              const itemInQueue = this.queue.find(q => q.id === item.id);
+              if (itemInQueue && itemInQueue.status === 'failed') {
+                  itemInQueue.status = 'pending';
+                  await indexedDBService.updateUploadItem(itemInQueue);
                   this.processQueue();
               }
           }, delay);
       }
   }
 
-  public retryUpload(messageId: string): void {
+  public async retryUpload(messageId: string): Promise<void> {
     const item = this.queue.find(q => q.messageId === messageId);
     if (item && item.status === 'failed') {
       item.status = 'pending';
+      item.error = undefined;
       item.retryCount = 0;
+      await indexedDBService.updateUploadItem(item);
       this.processQueue();
     }
   }
 
-  public cancelUpload(messageId: string): void {
-    const item = this.queue.find(q => q.messageId === messageId);
-    if (item) {
+  public async cancelUpload(messageId: string): Promise<void> {
+    const itemIndex = this.queue.findIndex(q => q.messageId === messageId);
+    if (itemIndex !== -1) {
+        const item = this.queue[itemIndex];
         const xhr = this.activeUploads.get(item.id);
         if (xhr) {
           xhr.abort();
           this.activeUploads.delete(item.id);
         }
-        const itemIndex = this.queue.findIndex(q => q.id === item.id);
-        if(itemIndex > -1) {
-            this.queue[itemIndex].status = 'cancelled';
-            emitProgress({ messageId: this.queue[itemIndex].messageId, status: 'cancelled', progress: 0 });
-            this.queue.splice(itemIndex, 1);
-        }
+        item.status = 'cancelled';
+        emitProgress({ messageId: item.messageId, status: 'cancelled', progress: 0 });
+        await indexedDBService.removeUploadItem(item.id);
+        this.queue.splice(itemIndex, 1);
         this.processQueue();
     }
   }
