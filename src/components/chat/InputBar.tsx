@@ -6,8 +6,8 @@ import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, u
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, StopCircle, Trash2, Gift, ShieldAlert, EyeOff, MessageCircle, Reply } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, Gift, ShieldAlert, EyeOff, MessageCircle, Trash2 } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTrigger } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
@@ -15,7 +15,6 @@ import { PICKER_EMOJIS, type MessageMode, type Message, type User } from '@/type
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
-import { useLongPress } from '@/hooks/useLongPress';
 
 interface InputBarProps {
   onSendMessage: (text: string, mode: MessageMode, replyToId?: string) => void;
@@ -77,6 +76,20 @@ const ReplyPreview = ({ message, onCancel, allUsers }: { message: Message, onCan
     );
 };
 
+const SoundWave = () => (
+    <div className="flex items-center justify-center gap-0.5 h-full w-full">
+        <div className="w-1 h-2 rounded-full bg-primary animate-[wave_1.2s_linear_infinite] [animation-delay:-0.8s]"></div>
+        <div className="w-1 h-4 rounded-full bg-primary animate-[wave_1.2s_linear_infinite] [animation-delay:-1.2s]"></div>
+        <div className="w-1 h-5 rounded-full bg-primary animate-[wave_1.2s_linear_infinite] [animation-delay:-0.4s]"></div>
+        <div className="w-1 h-3 rounded-full bg-primary animate-[wave_1.2s_linear_infinite] [animation-delay:-1.0s]"></div>
+        <div className="w-1 h-6 rounded-full bg-primary animate-[wave_1.2s_linear_infinite]"></div>
+        <div className="w-1 h-4 rounded-full bg-primary animate-[wave_1.2s_linear_infinite] [animation-delay:-0.2s]"></div>
+        <div className="w-1 h-2 rounded-full bg-primary animate-[wave_1.2s_linear_infinite] [animation-delay:-0.6s]"></div>
+        <div className="w-1 h-5 rounded-full bg-primary animate-[wave_1.2s_linear_infinite] [animation-delay:-1.4s]"></div>
+        <div className="w-1 h-3 rounded-full bg-primary animate-[wave_1.2s_linear_infinite] [animation-delay:-0.9s]"></div>
+    </div>
+)
+
 function InputBar({
   onSendMessage, onSendSticker, onSendVoiceMessage, onSendImage, onSendDocument,
   isSending = false, onTyping, disabled = false, chatMode, onSelectMode,
@@ -85,21 +98,18 @@ function InputBar({
   const [messageText, setMessageText] = useState('');
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
-  
   const [stagedAttachments, setStagedAttachments] = useState<File[]>([]);
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
   const [emojiSearch, setEmojiSearch] = useState('');
   const [isDragging, setIsDragging] = useState(false);
 
-  type RecordingStatus = 'idle' | 'recording' | 'recorded' | 'sending';
-  const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>('idle');
-  const [audioURL, setAudioURL] = useState<string | null>(null);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  // New state for voice recording
+  const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const imageInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null); 
@@ -121,6 +131,20 @@ function InputBar({
       const savedEmojis = localStorage.getItem('chirpChat_recentEmojis');
       if (savedEmojis) setRecentEmojis(JSON.parse(savedEmojis));
     }
+    // Add keyframes for wave animation to the document head
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = `
+        @keyframes wave {
+            0% { height: 10px; }
+            50% { height: 25px; }
+            100% { height: 10px; }
+        }
+    `;
+    document.head.appendChild(styleSheet);
+    return () => {
+        document.head.removeChild(styleSheet);
+    };
+
   }, []);
 
   const addRecentEmoji = useCallback((emoji: string) => {
@@ -180,55 +204,60 @@ function InputBar({
   const cleanupRecording = useCallback(() => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop();
-      if (audioURL) URL.revokeObjectURL(audioURL);
       mediaRecorderRef.current = null; audioChunksRef.current = [];
-      setRecordingStatus('idle'); setAudioBlob(null); setAudioURL(null); setRecordingSeconds(0);
-  }, [audioURL]);
+      setIsRecording(false); setRecordingSeconds(0);
+  }, []);
 
   const handleStartRecording = useCallback(async () => {
-    if (recordingStatus !== 'idle') return;
+    if (isRecording) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       toast({ variant: 'destructive', title: 'Unsupported Device', description: 'Your browser does not support voice recording.' }); return;
     }
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         if (navigator.vibrate) navigator.vibrate(50);
+        
         mediaRecorderRef.current = new MediaRecorder(stream);
         audioChunksRef.current = [];
         mediaRecorderRef.current.ondataavailable = (event) => audioChunksRef.current.push(event.data);
+        
         mediaRecorderRef.current.onstop = () => {
-            const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            setAudioBlob(blob); setAudioURL(URL.createObjectURL(blob));
-            setRecordingStatus('recorded');
-            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            if (audioBlob.size > 0) {
+              const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
+              onSendVoiceMessage(audioFile, chatMode);
+            }
             stream.getTracks().forEach(track => track.stop());
-            if (navigator.vibrate) navigator.vibrate(50);
+            cleanupRecording();
         };
+
         mediaRecorderRef.current.start();
-        setRecordingStatus('recording');
+        setIsRecording(true);
+        setRecordingSeconds(0);
         timerIntervalRef.current = setInterval(() => setRecordingSeconds(prev => prev + 1), 1000);
+        
         setTimeout(() => {
             if (mediaRecorderRef.current?.state === "recording") {
               toast({ title: "Recording Limit Reached", description: `Maximum duration is ${MAX_RECORDING_SECONDS} seconds.`});
               mediaRecorderRef.current.stop();
             }
         }, MAX_RECORDING_SECONDS * 1000);
+
     } catch (err) {
         toast({ variant: 'destructive', title: 'Microphone Access Denied', description: 'Please enable microphone permissions in your browser settings.' });
         cleanupRecording();
     }
-  }, [cleanupRecording, recordingStatus, toast]);
+  }, [isRecording, toast, cleanupRecording, onSendVoiceMessage, chatMode]);
 
-  const handleStageVoiceMessage = useCallback(() => {
-      if (audioBlob) {
-        const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
-        setStagedAttachments(prev => [...prev, audioFile]);
-        cleanupRecording(); setIsAttachmentOpen(false);
-      }
-  }, [audioBlob, cleanupRecording]);
+  const handleStopAndSendRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    cleanupRecording();
+  }, [cleanupRecording]);
 
-  const handleCompositeSend = useCallback((e: FormEvent) => {
-    e.preventDefault();
+  const handleCompositeSend = useCallback((e?: FormEvent) => {
+    e?.preventDefault();
     if (disabled || isSending) return;
     if (messageText.trim()) onSendMessage(messageText.trim(), chatMode, replyingTo?.id);
     stagedAttachments.forEach(file => {
@@ -255,39 +284,21 @@ function InputBar({
     return filtered;
   }, [emojiSearch]);
 
-  const recordButtonLongPress = useLongPress(handleStartRecording, {
-    onFinish: () => { if(mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop() },
-    threshold: 250
-  });
-
   const modeDetails = useMemo(() => ({
-    normal: {
-      icon: MessageCircle,
-      title: "Normal Mode",
-      description: "Standard chat. Messages are saved to history.",
-    },
-    fight: {
-      icon: ShieldAlert,
-      title: "Fight Mode",
-      description: "For arguments. Distinct look, saved to history.",
-    },
-    incognito: {
-      icon: EyeOff,
-      title: "Incognito Mode",
-      description: "Messages disappear after 30s. Not saved.",
-    },
+    normal: { icon: MessageCircle, title: "Normal Mode", description: "Standard chat. Messages are saved to history." },
+    fight: { icon: ShieldAlert, title: "Fight Mode", description: "For arguments. Distinct look, saved to history." },
+    incognito: { icon: EyeOff, title: "Incognito Mode", description: "Messages disappear after 30s. Not saved." },
   }), []);
 
   const handleModeButtonClick = useCallback((mode: MessageMode) => {
     onSelectMode(mode);
-    setIsAttachmentOpen(false); // Close the sheet after selection
+    setIsAttachmentOpen(false);
   }, [onSelectMode]);
 
   const AttachmentPicker = useCallback(() => (
     <Tabs defaultValue="media" className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="media">Media & Files</TabsTrigger>
-        <TabsTrigger value="audio">Voice Note</TabsTrigger>
         <TabsTrigger value="mode">Chat Mode</TabsTrigger>
       </TabsList>
       <TabsContent value="media" className="p-4">
@@ -303,45 +314,16 @@ function InputBar({
             </Button>
         </div>
       </TabsContent>
-      <TabsContent value="audio" className="p-4 h-80 flex flex-col items-center justify-center">
-        {recordingStatus === 'recording' ? (
-          <>
-            <div className="text-destructive text-2xl font-mono mb-4">{new Date(recordingSeconds * 1000).toISOString().substr(14, 5)}</div>
-            <div className="relative h-16 w-16"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span><Mic className="relative h-16 w-16 text-destructive" /></div>
-            <p className="text-muted-foreground mt-4">Release to stop...</p>
-          </>
-        ) : recordingStatus === 'recorded' && audioURL ? (
-          <>
-            <p className="text-muted-foreground mb-4">Voice message ready</p><audio src={audioURL} controls className="w-full" />
-            <div className="flex w-full justify-between mt-8">
-              <Button variant="ghost" onClick={cleanupRecording}><Trash2 className="mr-2"/> Discard</Button>
-              <Button onClick={handleStageVoiceMessage}><Send className="mr-2"/> Add to message</Button>
-            </div>
-          </>
-        ) : (
-          <>
-              <Mic className="h-16 w-16 text-muted-foreground mb-4"/><p className="text-muted-foreground mb-8 text-center">Press and hold to start recording your voice note.</p>
-              <Button variant="default" size="lg" className="rounded-full bg-primary hover:bg-primary/90" {...recordButtonLongPress}>Hold to Record</Button>
-          </>
-        )}
-      </TabsContent>
       <TabsContent value="mode" className="p-4">
         <div className="grid gap-4">
           {Object.entries(modeDetails).map(([mode, details]) => {
             const isSelected = mode === chatMode;
             return (
-              <Button
-                key={mode}
-                variant={isSelected ? "default" : "outline"}
-                className="h-auto p-4 w-full justify-start text-left"
-                onClick={() => handleModeButtonClick(mode as MessageMode)}
-              >
+              <Button key={mode} variant={isSelected ? "default" : "outline"} className="h-auto p-4 w-full justify-start text-left" onClick={() => handleModeButtonClick(mode as MessageMode)}>
                 <details.icon className={cn("mr-4 h-6 w-6 flex-shrink-0", mode === 'fight' && 'text-destructive', mode === 'incognito' && 'text-muted-foreground')} />
                 <div className="flex flex-col">
                   <span className="font-semibold">{details.title}</span>
-                  <span className="text-xs text-muted-foreground font-normal">
-                    {details.description}
-                  </span>
+                  <span className="text-xs text-muted-foreground font-normal">{details.description}</span>
                 </div>
               </Button>
             );
@@ -349,7 +331,7 @@ function InputBar({
         </div>
       </TabsContent>
     </Tabs>
-  ), [recordingStatus, recordingSeconds, audioURL, cleanupRecording, handleStageVoiceMessage, recordButtonLongPress, modeDetails, chatMode, handleModeButtonClick]);
+  ), [modeDetails, chatMode, handleModeButtonClick]);
 
   const ToolsPicker = useCallback(() => (
     <Tabs defaultValue="emoji" className="w-full flex flex-col h-full">
@@ -375,6 +357,16 @@ function InputBar({
     </Tabs>
   ), [emojiSearch, recentEmojis, filteredEmojis, handleEmojiSelect, handleStickerSelect]);
 
+  const handleActionButtonClick = () => {
+    if (isRecording) {
+      handleStopAndSendRecording();
+    } else if (showSendButton) {
+      handleCompositeSend();
+    } else {
+      handleStartRecording();
+    }
+  }
+
   return (
     <div className={cn("p-3 border-t border-border bg-card transition-colors duration-300", isDragging && "bg-primary/20 border-primary")}
         onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragEvents} onDrop={handleDrop}>
@@ -387,30 +379,55 @@ function InputBar({
           </div>
       )}
 
-      <form onSubmit={handleCompositeSend} className="flex items-end space-x-2">
-        <Sheet open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file or change mode" disabled={isSending || disabled}><Paperclip size={22} /></Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="p-0 border-t bg-card h-auto rounded-t-lg"><AttachmentPicker /></SheetContent>
-        </Sheet>
-        
-        <div className="flex-grow relative flex items-end">
-             <Textarea ref={textareaRef} placeholder={replyingTo ? "Type your reply..." : "Type a message..."} value={messageText} onChange={handleTypingChange} onBlur={handleBlur} className="w-full bg-card border-input focus-visible:ring-ring pr-10 resize-none min-h-[44px] max-h-[120px] pt-[11px]" autoComplete="off" disabled={isSending || disabled} rows={1} aria-label="Message input"/>
-             <Sheet open={isToolsOpen} onOpenChange={setIsToolsOpen}>
-                <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}><Smile size={22} /></Button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col"><ToolsPicker /></SheetContent>
+      <div className="flex items-end space-x-2">
+        {!isRecording && (
+            <Sheet open={isAttachmentOpen} onOpenChange={setIsAttachmentOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file or change mode" disabled={isSending || disabled}><Paperclip size={22} /></Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="p-0 border-t bg-card h-auto rounded-t-lg"><AttachmentPicker /></SheetContent>
             </Sheet>
+        )}
+        
+        <div className="flex-grow relative flex items-end min-h-[44px] bg-input rounded-2xl">
+            {isRecording ? (
+                 <div className="flex items-center w-full px-3 h-[44px]">
+                     <Button type="button" variant="ghost" size="icon" onClick={cleanupRecording} className="text-destructive h-8 w-8"><Trash2 size={20} /></Button>
+                     <div className="flex-grow flex items-center justify-center h-full"><SoundWave /></div>
+                     <span className="font-mono text-sm text-muted-foreground w-12 text-center">{new Date(recordingSeconds * 1000).toISOString().substr(14, 5)}</span>
+                 </div>
+            ) : (
+                <>
+                    <Textarea ref={textareaRef} placeholder={replyingTo ? "Type your reply..." : "Type a message..."} value={messageText} onChange={handleTypingChange} onBlur={handleBlur} className="w-full bg-transparent border-none focus-visible:ring-0 pr-10 resize-none min-h-[44px] max-h-[120px] pt-[11px]" autoComplete="off" disabled={isSending || disabled} rows={1} aria-label="Message input"/>
+                    <Sheet open={isToolsOpen} onOpenChange={setIsToolsOpen}>
+                        <SheetTrigger asChild>
+                            <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}><Smile size={22} /></Button>
+                        </SheetTrigger>
+                        <SheetContent side="bottom" className="p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col"><ToolsPicker /></SheetContent>
+                    </Sheet>
+                </>
+            )}
         </div>
         
-        {showSendButton && (
-          <Button type="submit" size="icon" className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-full w-11 h-11 flex-shrink-0 animate-pop" disabled={isSending || disabled} aria-label="Send message">
-            {isSending ? <Loader2 size={22} className="animate-spin" /> : <Send size={22} />}
-          </Button>
-        )}
-      </form>
+        <Button 
+          type="button" 
+          onClick={handleActionButtonClick} 
+          size="icon" 
+          className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-full w-11 h-11 flex-shrink-0 animate-pop" 
+          disabled={isSending || disabled} 
+          aria-label={isRecording ? "Send voice message" : showSendButton ? "Send message" : "Record voice message"}
+        >
+          {isSending ? (
+            <Loader2 size={22} className="animate-spin" />
+          ) : isRecording ? (
+            <Send size={22} />
+          ) : showSendButton ? (
+            <Send size={22} />
+          ) : (
+            <Mic size={22} />
+          )}
+        </Button>
+      </div>
       
       <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture className="hidden" onChange={handleFileSelect} />
       <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={handleFileSelect} multiple />
