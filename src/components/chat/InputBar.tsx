@@ -215,6 +215,15 @@ function InputBar({
       setIsRecording(false); setRecordingSeconds(0);
   }, []);
 
+  const handleStopAndSendRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    setRecordingSeconds(0);
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+  }, []);
+
   const handleStartRecording = useCallback(async () => {
     if (isRecording) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -253,16 +262,7 @@ function InputBar({
         toast({ variant: 'destructive', title: 'Microphone Access Denied', description: 'Please enable microphone permissions in your browser settings.' });
         cleanupRecording();
     }
-  }, [isRecording, toast, cleanupRecording, onSendVoiceMessage, chatMode]);
-
-  const handleStopAndSendRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
-    setRecordingSeconds(0);
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-  }, []);
+  }, [isRecording, toast, cleanupRecording, onSendVoiceMessage, chatMode, handleStopAndSendRecording]);
 
   const handleCompositeSend = useCallback((e?: FormEvent) => {
     e?.preventDefault();
@@ -438,7 +438,7 @@ function InputBar({
         </Button>
       </div>
       
-      <input type="file" ref={cameraInputRef} accept="image/*,video/*" className="hidden" onChange={handleFileSelect} />
+      <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture="environment" className="hidden" onChange={handleFileSelect} />
       <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={handleFileSelect} multiple />
       <input type="file" ref={documentInputRef} className="hidden" onChange={handleFileSelect} multiple />
     </div>

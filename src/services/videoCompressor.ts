@@ -90,6 +90,59 @@ class VideoCompressor {
     }
   }
 
+  async compressAudio(
+    file: File,
+    onProgress: (progress: CompressionProgress) => void
+  ): Promise<Blob> {
+    if (!this.isInitialized) {
+      await this.initialize(onProgress);
+    }
+    if (!this.ffmpeg) throw new Error("FFmpeg not available.");
+
+    const inputName = 'input.' + (file.name.split('.').pop() || 'webm');
+    const outputName = 'output.mp4'; // Using mp4 container with AAC audio is very compatible
+
+    try {
+      this.ffmpeg.FS('writeFile', inputName, await fetchFile(file));
+
+      this.ffmpeg.setProgress(({ ratio }) => {
+        onProgress({
+          progress: Math.round(ratio * 100),
+          stage: 'compressing',
+        });
+      });
+
+      // Command for audio conversion to AAC in an MP4 container
+      const command = [
+        '-i', inputName,
+        '-c:a', 'aac',      // Use the AAC audio codec
+        '-b:a', '96k',       // Set audio bitrate to 96kbps, good for voice
+        '-vn',               // No video output
+        '-movflags', '+faststart',
+        outputName
+      ];
+
+      await this.ffmpeg.run(...command);
+
+      const data = this.ffmpeg.FS('readFile', outputName);
+      
+      onProgress({ progress: 100, stage: 'done' });
+      return new Blob([data.buffer], { type: 'audio/mp4' });
+
+    } catch (error: any) {
+      console.error("Audio compression failed:", error);
+      throw new Error(`Audio compression failed: ${error.message}`);
+    } finally {
+      try {
+        this.ffmpeg.FS('unlink', inputName);
+        this.ffmpeg.FS('unlink', outputName);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    }
+  }
+
+
   private getCompressionSettings(level: 'light' | 'medium' | 'heavy'): CompressionSettings {
     switch (level) {
       case 'light':

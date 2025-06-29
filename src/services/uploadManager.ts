@@ -80,20 +80,21 @@ class UploadManager {
         fileToUpload = variants.compressed.blob;
         thumbnailDataUrl = variants.thumbnail.dataUrl;
         emitProgress({ messageId: item.messageId, status: 'processing', progress: 0, thumbnailDataUrl });
-        // Define standard transformations for images
-        eagerTransforms = [
-            "w_800,c_limit,q_auto,f_auto", // Preview version
-        ];
+        eagerTransforms = ["w_800,c_limit,q_auto,f_auto"];
       } else if (mediaType === 'video') {
         this.queue[itemIndex].status = 'compressing';
         emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
         fileToUpload = await videoCompressor.compressVideo(item.file, 'medium', (progress) => {
             emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
         });
-        // Define standard transformations for videos (e.g., a thumbnail)
-        eagerTransforms = [
-            "w_400,h_400,c_limit,f_jpg,so_1" // Thumbnail from 1st second
-        ];
+        eagerTransforms = ["w_400,h_400,c_limit,f_jpg,so_1"];
+      } else if (mediaType === 'audio') {
+        this.queue[itemIndex].status = 'compressing';
+        emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
+        fileToUpload = await videoCompressor.compressAudio(item.file, (progress) => {
+            emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
+        });
+        mediaType = 'voice_message'; // Use specific type for backend
       }
 
       this.queue[itemIndex].status = 'uploading';
