@@ -3,7 +3,7 @@ import type {
   AuthResponse, User, UserInToken, Chat, Message, ApiErrorResponse, SupportedEmoji,
   StickerPackResponse, StickerListResponse, PushSubscriptionJSON,
   NotificationSettings, PartnerRequest, EventPayload, VerifyOtpResponse,
-  CompleteRegistrationRequest, PasswordChangeRequest, DeleteAccountRequest
+  CompleteRegistrationRequest, PasswordChangeRequest, DeleteAccountRequest, FileAnalyticsPayload
 } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
@@ -245,6 +245,19 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/events/sync?since=${since}`, { headers: getApiHeaders() });
     return handleResponse<EventPayload[]>(response);
   },
+  sendFileAnalytics: async (payload: FileAnalyticsPayload): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/analytics/file`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify(payload),
+        // No need to handle the response for fire-and-forget
+      });
+      if (!response.ok) {
+        console.warn('Failed to send file analytics', response.statusText);
+      }
+    } catch (error) {
+      console.warn('Error sending file analytics', error);
+    }
+  },
 };
-
-    

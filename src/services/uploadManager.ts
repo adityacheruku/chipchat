@@ -1,6 +1,6 @@
 
 import { api } from './api';
-import type { UploadItem, UploadProgress, UploadError, MessageSubtype } from '@/types';
+import type { UploadItem, UploadProgress, UploadError, MessageSubtype, FileAnalyticsPayload } from '@/types';
 import { UploadErrorCode, ERROR_MESSAGES } from '@/types/uploadErrors';
 import { validateFile } from '@/utils/fileValidation';
 import { imageProcessor } from './imageProcessor';
@@ -123,6 +123,8 @@ class UploadManager {
   private async uploadFile(item: UploadItem): Promise<void> {
     const itemInQueue = this.queue.find(q => q.id === item.id);
     if (!itemInQueue) return;
+    
+    const startTime = Date.now();
 
     itemInQueue.status = 'processing';
     emitProgress({ messageId: item.messageId, status: 'processing', progress: 0 });
@@ -186,6 +188,17 @@ class UploadManager {
       itemInQueue.status = 'completed';
       emitProgress({ messageId: item.messageId, status: 'completed', progress: 100, result });
       await storageService.removeUploadItem(item.id);
+
+      // Fire-and-forget analytics event
+      const analyticsPayload: FileAnalyticsPayload = {
+        message_id: item.messageId,
+        upload_duration_seconds: (Date.now() - startTime) / 1000,
+        file_size_bytes: item.file.size,
+        compressed_size_bytes: fileToUpload.size,
+        network_quality: networkMonitor.getQuality(),
+        file_type: item.subtype,
+      };
+      api.sendFileAnalytics(analyticsPayload);
       
     } catch (error: any) {
       this.activeUploads.delete(item.id);

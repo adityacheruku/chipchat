@@ -1,6 +1,7 @@
 
 
 import type { UploadError } from './uploadErrors';
+import type { NetworkQuality } from '@/services/networkMonitor';
 
 export type Mood = string;
 export const ALL_MOODS: Mood[] = ["Happy", "Sad", "Neutral", "Excited", "Thoughtful", "Chilling", "Angry", "Anxious", "Content"];
@@ -135,4 +136,13 @@ export interface UploadProgress {
   error?: UploadError;
   result?: any;
   thumbnailDataUrl?: string;
+}
+
+export interface FileAnalyticsPayload {
+  message_id: string;
+  upload_duration_seconds: number;
+  file_size_bytes: number;
+  compressed_size_bytes?: number;
+  network_quality: NetworkQuality;
+  file_type: MessageSubtype | 'unknown';
 }
