@@ -6,6 +6,7 @@ import { validateFile } from '@/utils/fileValidation';
 import { imageProcessor } from './imageProcessor';
 import { videoCompressor } from './videoCompressor';
 import { storageService } from './storageService';
+import { networkMonitor, type NetworkQuality } from './networkMonitor';
 
 // A simple event emitter
 type ProgressListener = (progress: UploadProgress) => void;
@@ -18,7 +19,7 @@ const emitProgress = (progress: UploadProgress) => {
 class UploadManager {
   private queue: UploadItem[] = [];
   private activeUploads: Map<string, XMLHttpRequest> = new Map();
-  private maxConcurrentUploads = 2; // Reduced for potentially heavy compression tasks
+  private maxConcurrentUploads = 3; // Default, will be updated by network monitor
   private isInitialized = false;
 
   constructor() {
@@ -28,6 +29,8 @@ class UploadManager {
         }
         (window as any).uploadManagerInstance = this;
         this.init();
+        networkMonitor.subscribe(this.handleNetworkChange);
+        this.handleNetworkChange(networkMonitor.getQuality());
     }
   }
 
@@ -52,6 +55,37 @@ class UploadManager {
     }
   }
 
+  private handleNetworkChange = (quality: NetworkQuality) => {
+    console.log(`UploadManager: Network quality changed to ${quality}`);
+    this.updateConcurrency(quality);
+    
+    if (quality === 'offline') {
+        console.log("UploadManager: Network is offline. Pausing new uploads.");
+        // Note: In-flight uploads are not cancelled here, they will likely fail and be retried.
+        // To pause them, we would need to abort active XHRs.
+    } else {
+        console.log("UploadManager: Network is online. Resuming queue processing.");
+        this.processQueue();
+    }
+  }
+
+  private updateConcurrency = (quality: NetworkQuality) => {
+      switch (quality) {
+          case 'excellent':
+              this.maxConcurrentUploads = 5;
+              break;
+          case 'good':
+              this.maxConcurrentUploads = 3;
+              break;
+          case 'poor':
+              this.maxConcurrentUploads = 1;
+              break;
+          case 'offline':
+              this.maxConcurrentUploads = 0;
+              break;
+      }
+  }
+
   public subscribe(callback: ProgressListener): () => void {
     progressListeners.add(callback);
     return () => progressListeners.delete(callback);
@@ -72,6 +106,10 @@ class UploadManager {
   }
 
   private processQueue(): void {
+    if (networkMonitor.getQuality() === 'offline') {
+        return;
+    }
+    
     if (this.activeUploads.size >= this.maxConcurrentUploads) {
       return;
     }
@@ -107,9 +145,17 @@ class UploadManager {
         emitProgress({ messageId: item.messageId, status: 'processing', progress: 0, thumbnailDataUrl });
         eagerTransforms = ["w_800,c_limit,q_auto,f_auto"];
       } else if (item.subtype === 'clip') { // Video
+        const networkQuality = networkMonitor.getQuality();
+        let videoCompressionLevel: 'light' | 'medium' | 'heavy' = 'medium';
+        switch (networkQuality) {
+            case 'excellent': videoCompressionLevel = 'light'; break;
+            case 'good': videoCompressionLevel = 'medium'; break;
+            case 'poor': videoCompressionLevel = 'heavy'; break;
+        }
+
         itemInQueue.status = 'compressing';
         emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
-        fileToUpload = await videoCompressor.compressVideo(item.file, 'medium', (progress) => {
+        fileToUpload = await videoCompressor.compressVideo(item.file, videoCompressionLevel, (progress) => {
             emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
         });
         eagerTransforms = ["w_400,h_400,c_limit,f_jpg,so_1"]; // Thumbnail
