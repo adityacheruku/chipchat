@@ -5,13 +5,27 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { SmilePlus, Loader2 } from 'lucide-react';
-import type { Mood, User } from '@/types';
+import { Input } from '@/components/ui/input';
+import { Smile, Frown, Meh, PartyPopper, Brain, Glasses, Angry, HelpCircle, SmilePlus, Loader2 } from 'lucide-react';
+import type { Mood } from '@/types';
 import { ALL_MOODS } from '@/types';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
+import { cn } from '@/lib/utils';
+
+const moodIcons: Record<string, React.ElementType> = {
+  Happy: Smile,
+  Sad: Frown,
+  Neutral: Meh,
+  Excited: PartyPopper,
+  Thoughtful: Brain,
+  Chilling: Glasses,
+  Angry: Angry,
+  Anxious: HelpCircle,
+  Content: Smile,
+};
+
 
 export default function QuickMoodPage() {
   const router = useRouter();
@@ -43,7 +57,7 @@ export default function QuickMoodPage() {
       toast({ variant: "destructive", title: "Error", description: "User profile not loaded." });
       return;
     }
-    if (!selectedMood) {
+    if (!selectedMood || selectedMood.trim().length === 0) {
       toast({ variant: "destructive", title: "No Mood Selected", description: "Please select a mood." });
       return;
     }
@@ -111,18 +125,34 @@ export default function QuickMoodPage() {
         <CardContent className="space-y-6">
           <p className="text-sm text-muted-foreground">This page was accessed via a PWA shortcut.</p>
           
-          <Select value={selectedMood} onValueChange={(value) => setSelectedMood(value as Mood)} disabled={isSubmitting}>
-            <SelectTrigger className="w-full bg-card focus:ring-primary text-foreground">
-              <SelectValue placeholder="Select your mood" />
-            </SelectTrigger>
-            <SelectContent>
-              {ALL_MOODS.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              {ALL_MOODS.map(mood => {
+                const Icon = moodIcons[mood] || Smile;
+                return (
+                  <Button
+                    key={mood}
+                    variant={selectedMood === mood ? 'default' : 'outline'}
+                    onClick={() => setSelectedMood(mood)}
+                    className={cn(
+                      'flex items-center justify-center gap-2 h-12',
+                      selectedMood === mood && 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{mood}</span>
+                  </Button>
+                );
+              })}
+            </div>
+             <Input
+                id="custom-mood"
+                placeholder="Or type a custom mood..."
+                value={selectedMood}
+                onChange={(e) => setSelectedMood(e.target.value)}
+                className="bg-card focus:ring-primary text-center"
+              />
+          </div>
 
           <Button onClick={handleSetMood} className="w-full" disabled={!selectedMood || isSubmitting}>
             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Set Mood & Go to Chat"}

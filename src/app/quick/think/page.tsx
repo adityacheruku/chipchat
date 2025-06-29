@@ -10,6 +10,7 @@ import type { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
+import { cn } from '@/lib/utils';
 
 export default function QuickThinkPage() {
   const router = useRouter();
@@ -92,7 +93,7 @@ export default function QuickThinkPage() {
       <Card className="w-full max-w-md shadow-xl text-center">
         <CardHeader>
           <div className="flex justify-center mb-4">
-            <Heart className={`w-16 h-16 text-primary ${pingSent ? 'animate-pulse-subtle' : ''}`} />
+            <Heart className={cn("w-16 h-16 text-primary", pingSent && 'animate-pulse-subtle')} />
           </div>
           <CardTitle className="text-2xl font-headline text-primary text-center">Thinking of You</CardTitle>
           {pingSent && partner ? (
