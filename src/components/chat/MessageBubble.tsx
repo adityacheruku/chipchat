@@ -34,6 +34,7 @@ const EMOJI_ONLY_REGEX = /^(?:[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud8
 
 interface MessageBubbleProps {
   message: Message;
+  messages: Message[];
   sender: User;
   isCurrentUser: boolean;
   currentUserId: string;
@@ -212,7 +213,7 @@ function formatFileSize(bytes?: number | null): string | null {
 }
 
 
-function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, onShowDocumentPreview, allUsers, onRetrySend, onDelete, onSetReplyingTo, wrapperId, isSelectionMode, isSelected, onEnterSelectionMode, onToggleSelection }: MessageBubbleProps) {
+function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, onShowDocumentPreview, allUsers, onRetrySend, onDelete, onSetReplyingTo, wrapperId, isSelectionMode, isSelected, onEnterSelectionMode, onToggleSelection }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
@@ -298,6 +299,9 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
   if (message.message_subtype === 'history_cleared_marker') {
       return null;
   }
+  
+  const repliedToMessage = message.reply_to_message_id ? messages.find(m => m.id === message.reply_to_message_id) : null;
+  const repliedToSender = repliedToMessage ? allUsers[repliedToMessage.user_id] : null;
 
   const renderMessageContent = () => {
     if (message.status === 'uploading') {
@@ -334,63 +338,77 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
       );
     }
     
-    switch (message.message_subtype) {
-      case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized loading="lazy" /> : null;
-      case 'voice_message': return message.clip_url ? <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
-      case 'image':
-        if (message.status === 'failed') {
-          return (
-             <div className="w-[120px] h-[120px] rounded-md border-2 border-dashed border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center p-2 text-center text-destructive">
-                <ImageOff size={28} className="mb-2" />
-                <p className="text-xs font-semibold mb-2">Upload Failed</p>
-                <Button variant="destructive" size="sm" onClick={() => handleRetry(message)} className="h-auto px-2 py-1 text-xs">
-                  <RefreshCw size={12} className="mr-1" />
-                  Retry
-                </Button>
-              </div>
-          );
-        }
-        return message.image_url ? (
-          <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
-              <Image src={message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
-          </button>
-        ) : <p className="text-sm italic">Image unavailable</p>;
-      case 'clip': return message.clip_url ? (
-         <button onClick={() => onShowMedia(message.clip_url!, 'video')} className="flex items-center gap-2 group/media">
-              <PlayCircle size={32} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80", "group-hover/media:scale-110 transition-transform")} />
-              <span className="text-sm italic underline hover:opacity-80">{message.clip_placeholder_text || `View ${message.clip_type} clip`}</span>
-         </button>
-      ) : <p className="text-sm italic">Clip unavailable</p>;
-      case 'document':
-        if (message.status === 'failed') {
-          return (
-            <button className={cn(buttonVariants({ variant: 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-destructive/20 text-destructive border-destructive/50 hover:bg-destructive/30')} onClick={() => handleRetry(message)}>
-              <AlertTriangle size={24} className="mr-3 flex-shrink-0" />
-              <div className="flex flex-col text-left min-w-0">
-                  <span className="font-medium text-sm">Upload Failed</span>
-                  <span className="text-xs">Click to retry</span>
-              </div>
+    const content = (() => {
+        switch (message.message_subtype) {
+          case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized loading="lazy" /> : null;
+          case 'voice_message': return message.clip_url ? <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
+          case 'image':
+            if (message.status === 'failed') {
+              return (
+                 <div className="w-[120px] h-[120px] rounded-md border-2 border-dashed border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center p-2 text-center text-destructive">
+                    <ImageOff size={28} className="mb-2" />
+                    <p className="text-xs font-semibold mb-2">Upload Failed</p>
+                    <Button variant="destructive" size="sm" onClick={() => handleRetry(message)} className="h-auto px-2 py-1 text-xs">
+                      <RefreshCw size={12} className="mr-1" />
+                      Retry
+                    </Button>
+                  </div>
+              );
+            }
+            return message.image_url ? (
+              <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
+                  <Image src={message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
+              </button>
+            ) : <p className="text-sm italic">Image unavailable</p>;
+          case 'clip': return message.clip_url ? (
+             <button onClick={() => onShowMedia(message.clip_url!, 'video')} className="flex items-center gap-2 group/media">
+                  <PlayCircle size={32} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80", "group-hover/media:scale-110 transition-transform")} />
+                  <span className="text-sm italic underline hover:opacity-80">{message.clip_placeholder_text || `View ${message.clip_type} clip`}</span>
+             </button>
+          ) : <p className="text-sm italic">Clip unavailable</p>;
+          case 'document':
+            if (message.status === 'failed') {
+              return (
+                <button className={cn(buttonVariants({ variant: 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-destructive/20 text-destructive border-destructive/50 hover:bg-destructive/30')} onClick={() => handleRetry(message)}>
+                  <AlertTriangle size={24} className="mr-3 flex-shrink-0" />
+                  <div className="flex flex-col text-left min-w-0">
+                      <span className="font-medium text-sm">Upload Failed</span>
+                      <span className="text-xs">Click to retry</span>
+                  </div>
+                </button>
+              );
+            }
+            return message.document_url ? (
+              <button onClick={() => onShowDocumentPreview(message)} className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')} aria-label={`Preview document: ${message.document_name}`}>
+                <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
+                <div className="flex flex-col text-left min-w-0">
+                    <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
+                    <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to preview'}</span>
+                </div>
             </button>
+          ) : (
+              <div className="flex items-center p-3 text-destructive">
+                <AlertTriangle className="w-6 h-6 mr-2" />
+                <span className="text-sm">Cannot load document</span>
+              </div>
           );
+          case 'text':
+          case 'emoji_only':
+          default: return message.text ? <p className={cn("text-sm whitespace-pre-wrap break-words", isEmojiOnlyMessage && "text-5xl")}>{message.text}</p> : <p className="text-sm italic">Message unavailable</p>;
         }
-        return message.document_url ? (
-          <button onClick={() => onShowDocumentPreview(message)} className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')} aria-label={`Preview document: ${message.document_name}`}>
-            <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
-            <div className="flex flex-col text-left min-w-0">
-                <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
-                <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to preview'}</span>
+    })();
+    
+    return (
+      <div className="space-y-1">
+        {repliedToMessage && repliedToSender && (
+            <div className={cn("p-2 rounded-md mb-0 bg-black/10 dark:bg-white/10 border-l-2 border-accent", isCurrentUser ? "bg-primary-foreground/20" : "bg-secondary-foreground/10")}>
+                <p className="font-bold text-accent text-sm">{repliedToSender.display_name}</p>
+                <p className={cn("text-sm opacity-90 truncate", isCurrentUser ? "text-primary-foreground/90" : "text-secondary-foreground/90")}>{repliedToMessage.text || 'Attachment'}</p>
             </div>
-        </button>
-      ) : (
-          <div className="flex items-center p-3 text-destructive">
-            <AlertTriangle className="w-6 h-6 mr-2" />
-            <span className="text-sm">Cannot load document</span>
-          </div>
-      );
-      case 'text':
-      case 'emoji_only':
-      default: return message.text ? <p className={cn("text-sm whitespace-pre-wrap break-words", isEmojiOnlyMessage && "text-5xl")}>{message.text}</p> : <p className="text-sm italic">Message unavailable</p>;
-    }
+        )}
+        {content}
+      </div>
+    );
   };
 
   const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image' && message.message_subtype !== 'document';
@@ -448,8 +466,8 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
                       'relative rounded-xl shadow-md transition-all active:scale-95',
                       isMediaBubble || message.message_subtype === 'document' ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
                       isVoiceMessage && cn(bubbleColorClass, 'p-0'),
-                      !isMediaBubble && message.message_subtype !== 'document' && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
-                      !isMediaBubble && message.message_subtype !== 'document' && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
+                      !isMediaBubble && message.message_subtype !== 'document' && !repliedToMessage && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
+                      !isMediaBubble && message.message_subtype !== 'document' && !repliedToMessage && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
                       message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80',
                       (message.mode === 'incognito' && message.status !== 'sending') && 'border-2 border-dashed border-muted-foreground/50'
                     )}
@@ -483,7 +501,7 @@ function MessageBubble({ message, sender, isCurrentUser, currentUserId, onToggle
           {!isVoiceMessage && (
               <div className={cn('pt-1', isCurrentUser ? 'pr-2' : 'pl-2')}>
               {!reactionsDisabled && message.reactions && Object.keys(message.reactions).length > 0 && (
-                  <div className={cn("flex flex-wrap gap-1", isCurrentUser ? "justify-end" : "justify-start")}>
+                  <div className={cn("flex flex-wrap gap-1 mt-1", isCurrentUser ? "justify-end" : "justify-start")}>
                   {(Object.keys(message.reactions) as SupportedEmoji[]).map(emoji => {
                       const reactors = message.reactions?.[emoji];
                       if (!reactors || reactors.length === 0) return null;

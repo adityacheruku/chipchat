@@ -77,6 +77,7 @@ function MessageArea({
               key={msg.client_temp_id}
               wrapperId={`message-${msg.id}`}
               message={msg}
+              messages={messages}
               sender={sender}
               isCurrentUser={msg.user_id === currentUser.id}
               currentUserId={currentUser.id}
@@ -101,5 +102,3 @@ function MessageArea({
 }
 
 export default memo(MessageArea);
-
-    

@@ -84,12 +84,20 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
         await ws_manager.broadcast_chat_message(str(chat_id), incognito_message)
         return
 
-    message_data = {
+    message_data_to_insert = message_create.model_dump(exclude_unset=True, exclude={'chat_id', 'recipient_id', 'client_temp_id'})
+    message_data_to_insert.update({
         "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
         "status": MessageStatusEnum.SENT.value, "created_at": "now()", "updated_at": "now()", "reactions": {},
-        **message_create.model_dump(exclude={'chat_id', 'recipient_id'})
-    }
-    await db_manager.get_table("messages").insert(message_data).execute()
+        "client_temp_id": client_temp_id
+    })
+    
+    # Ensure UUIDs are strings for DB insert if they exist
+    if 'sticker_id' in message_data_to_insert and message_data_to_insert['sticker_id']:
+        message_data_to_insert['sticker_id'] = str(message_data_to_insert['sticker_id'])
+    if 'reply_to_message_id' in message_data_to_insert and message_data_to_insert['reply_to_message_id']:
+        message_data_to_insert['reply_to_message_id'] = str(message_data_to_insert['reply_to_message_id'])
+
+    await db_manager.get_table("messages").insert(message_data_to_insert).execute()
     await ws_manager.mark_message_as_processed(client_temp_id)
     await ws_manager.send_ack(websocket, client_temp_id, str(message_db_id))
     await db_manager.get_table("chats").update({"updated_at": "now()"}).eq("id", str(chat_id)).execute()

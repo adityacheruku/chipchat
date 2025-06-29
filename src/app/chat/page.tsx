@@ -8,7 +8,7 @@ import dynamic from 'next/dynamic';
 import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
-import { useMoodSuggestion } from '@/hooks/useMoodSuggestion';
+import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { THINKING_OF_YOU_DURATION, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { buttonVariants } from '@/components/ui/button';
 
 
 const MemoizedMessageArea = memo(MessageArea);
@@ -123,11 +124,13 @@ export default function ChatPage() {
   const handleTypingUpdate = useCallback((data: TypingIndicatorEventData) => { if (activeChat?.id === data.chat_id) setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }))}, [activeChat]);
   const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => { if (activeChat?.id === data.chat_id) setChatMode(data.mode); }, [activeChat]);
   const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => { if (otherUser?.id === data.sender_id) toast({ title: "❤️ Thinking of You!", description: `${otherUser.display_name} is thinking of you.` })}, [otherUser, toast]);
+  const handleChatHistoryCleared = useCallback((chatId: string) => { if(activeChat?.id === chatId) setMessages([]); }, [activeChat]);
 
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     onMessageReceived: handleNewMessage, onReactionUpdate: (data) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), onPresenceUpdate: handlePresenceUpdate,
     onTypingUpdate: handleTypingUpdate, onThinkingOfYouReceived: handleThinkingOfYou, onUserProfileUpdate: handleProfileUpdate,
     onMessageAck: handleMessageAck, onChatModeChanged: handleChatModeChanged, onMessageDeleted: handleMessageDeleted,
+    onChatHistoryCleared: handleChatHistoryCleared,
   });
 
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast });
@@ -213,7 +216,7 @@ export default function ChatPage() {
     if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) { lastMessageTextRef.current = text; aiSuggestMood(text); }
     if (isPushApiSupported && !isSubscribed && permissionStatus === 'default' && !localStorage.getItem(FIRST_MESSAGE_SENT_KEY)) { localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true'); setTimeout(() => setShowNotificationPrompt(true), 2000); }
     if (replyToId) setReplyingTo(null);
-  }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
+  }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus, replyingTo]);
 
   const handleFileUpload = useCallback(async (file: File, subtype: MessageType['message_subtype'], mode: MessageMode, uploadFunction: (file: File, onProgress: (p: number) => void) => Promise<any>) => {
     if (!currentUser || !activeChat) return;
@@ -313,8 +316,6 @@ export default function ChatPage() {
         await api.clearChatHistory(activeChat.id);
         toast({ title: "Chat Cleared", description: "Your view of this chat has been cleared."});
         setMessages([]); // Optimistically clear messages
-        // performLoadChatData will be called automatically by some other logic or can be called here
-        // to confirm from server. For now, local clear is faster UX.
     } catch (error: any) {
         toast({ variant: "destructive", title: 'Clear Failed', description: error.message });
     }

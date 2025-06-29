@@ -203,7 +203,11 @@ function InputBar({
 
   const cleanupRecording = useCallback(() => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        // Stop without triggering onstop's sending logic
+        mediaRecorderRef.current.onstop = null;
+        mediaRecorderRef.current.stop();
+      }
       mediaRecorderRef.current = null; audioChunksRef.current = [];
       setIsRecording(false); setRecordingSeconds(0);
   }, []);
@@ -228,7 +232,7 @@ function InputBar({
               onSendVoiceMessage(audioFile, chatMode);
             }
             stream.getTracks().forEach(track => track.stop());
-            cleanupRecording();
+            // No need to call cleanup here, it's handled by the stop process
         };
 
         mediaRecorderRef.current.start();
@@ -239,7 +243,7 @@ function InputBar({
         setTimeout(() => {
             if (mediaRecorderRef.current?.state === "recording") {
               toast({ title: "Recording Limit Reached", description: `Maximum duration is ${MAX_RECORDING_SECONDS} seconds.`});
-              mediaRecorderRef.current.stop();
+              handleStopAndSendRecording();
             }
         }, MAX_RECORDING_SECONDS * 1000);
 
@@ -253,8 +257,10 @@ function InputBar({
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.stop();
     }
-    cleanupRecording();
-  }, [cleanupRecording]);
+    setIsRecording(false);
+    setRecordingSeconds(0);
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+  }, []);
 
   const handleCompositeSend = useCallback((e?: FormEvent) => {
     e?.preventDefault();
