@@ -1,7 +1,8 @@
 
 "use client";
 
-import { FFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile } from '@ffmpeg/util';
 
 export interface CompressionSettings {
   maxWidth: number;
@@ -79,7 +80,7 @@ class VideoCompressor {
       const data = await this.ffmpeg.readFile(outputName);
       
       onProgress({ progress: 100, stage: 'done' });
-      return new Blob([data], { type: 'video/mp4' });
+      return new Blob([data.buffer], { type: 'video/mp4' });
 
     } catch (error: any) {
       console.error("Video compression failed:", error);
@@ -131,7 +132,7 @@ class VideoCompressor {
       const data = await this.ffmpeg.readFile(outputName);
       
       onProgress({ progress: 100, stage: 'done' });
-      return new Blob([data], { type: 'audio/mp4' });
+      return new Blob([data.buffer], { type: 'audio/mp4' });
 
     } catch (error: any) {
       console.error("Audio compression failed:", error);
