@@ -40,6 +40,8 @@ import Spinner from '@/components/common/Spinner';
 const MemoizedMessageArea = memo(MessageArea);
 const MemoizedChatHeader = memo(ChatHeader);
 const MemoizedInputBar = memo(InputBar);
+
+const MOOD_PROMPT_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const FIRST_MESSAGE_SENT_KEY = 'kuchlu_firstMessageSent';
 const MESSAGE_SEND_TIMEOUT_MS = 15000;
 
@@ -124,7 +126,7 @@ export default function ChatPage() {
   const handleTypingUpdate = useCallback((data: TypingIndicatorEventData) => { if (activeChat?.id === data.chat_id) setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }))}, [activeChat]);
   const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => { if (activeChat?.id === data.chat_id) setChatMode(data.mode); }, [activeChat]);
   const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => { if (otherUser?.id === data.sender_id) toast({ title: "❤️ Thinking of You!", description: `${otherUser.display_name} is thinking of you.` })}, [otherUser, toast]);
-  const handleChatHistoryCleared = useCallback((chatId: string) => { if(activeChat?.id === chatId) setMessages([]); }, [activeChat]);
+  const handleChatHistoryCleared = useCallback((data: ChatHistoryClearedEventData) => { if(activeChat?.id === data.chat_id) setMessages([]); }, [activeChat]);
 
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
     onMessageReceived: handleNewMessage, onReactionUpdate: (data) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), onPresenceUpdate: handlePresenceUpdate,
@@ -148,7 +150,14 @@ export default function ChatPage() {
         const messagesData = await api.getMessages(chatSession.id, 50);
         setHasMoreMessages(messagesData.messages.length >= 50);
         setMessages(messagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' })));
-        if (typeof window !== 'undefined' && currentUser.mood && !sessionStorage.getItem('moodPromptedThisSession')) { setInitialMoodOnLoad(currentUser.mood); setIsMoodModalOpen(true); }
+        
+        if (typeof window !== 'undefined' && currentUser.mood) {
+          const lastPromptTimestamp = localStorage.getItem('kuchlu_lastMoodPromptTimestamp');
+          if (!lastPromptTimestamp || (Date.now() - parseInt(lastPromptTimestamp, 10)) > MOOD_PROMPT_INTERVAL_MS) {
+            setInitialMoodOnLoad(currentUser.mood); 
+            setIsMoodModalOpen(true);
+          }
+        }
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'API Error', description: `Failed to load chat data: ${error.message}` });
         setChatSetupErrorMessage(error.message);
@@ -381,8 +390,25 @@ export default function ChatPage() {
 
   const onProfileClick = useCallback(() => router.push('/settings'), [router]);
   const handleOtherUserAvatarClick = useCallback(() => { if (otherUser) { setFullScreenUserData(otherUser); setIsFullScreenAvatarOpen(true); } }, [otherUser]);
-  const handleSetMoodFromModal = useCallback(async (newMood: Mood) => { if (currentUser) try { await api.updateUserProfile({ mood: newMood }); await fetchAndUpdateUser(); toast({ title: "Mood Updated!" }); } catch (e: any) { toast({ variant: 'destructive', title: 'Update Failed' }) } if (typeof window !== 'undefined') sessionStorage.setItem('moodPromptedThisSession', 'true'); setIsMoodModalOpen(false); }, [currentUser, fetchAndUpdateUser, toast]);
-  const handleContinueWithCurrentMood = useCallback(() => { if (typeof window !== 'undefined') sessionStorage.setItem('moodPromptedThisSession', 'true'); setIsMoodModalOpen(false); }, []);
+  
+  const handleSetMoodFromModal = useCallback(async (newMood: Mood) => { 
+    if (currentUser) 
+      try { 
+        await api.updateUserProfile({ mood: newMood }); 
+        await fetchAndUpdateUser(); 
+        toast({ title: "Mood Updated!" }); 
+      } catch (e: any) { 
+        toast({ variant: 'destructive', title: 'Update Failed' }) 
+      } 
+    if (typeof window !== 'undefined') localStorage.setItem('kuchlu_lastMoodPromptTimestamp', Date.now().toString());
+    setIsMoodModalOpen(false); 
+  }, [currentUser, fetchAndUpdateUser, toast]);
+  
+  const handleContinueWithCurrentMood = useCallback(() => { 
+    if (typeof window !== 'undefined') localStorage.setItem('kuchlu_lastMoodPromptTimestamp', Date.now().toString());
+    setIsMoodModalOpen(false); 
+  }, []);
+
   const handleShowReactions = useCallback((message: MessageType, allUsers: Record<string, User>) => { if (message.reactions) setReactionModalData({ reactions: message.reactions, allUsers }) }, []);
   const handleEnableNotifications = useCallback(() => { subscribeToPush(); setShowNotificationPrompt(false); }, [subscribeToPush]);
   const handleDismissNotificationPrompt = useCallback(() => { setShowNotificationPrompt(false); sessionStorage.setItem('notificationPromptDismissed', 'true'); }, []);
@@ -469,7 +495,7 @@ export default function ChatPage() {
         </div>
         {fullScreenUserData && <FullScreenAvatarModal isOpen={isFullScreenAvatarOpen} onClose={() => setIsFullScreenAvatarOpen(false)} user={fullScreenUserData}/>}
         {mediaModalData && <FullScreenMediaModal isOpen={!!mediaModalData} onClose={() => setMediaModalData(null)} mediaUrl={mediaModalData.url} mediaType={mediaModalData.type}/>}
-        {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={() => setIsMoodModalOpen(false)} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}
+        {currentUser && initialMoodOnLoad && <MoodEntryModal isOpen={isMoodModalOpen} onClose={handleContinueWithCurrentMood} onSetMood={handleSetMoodFromModal} currentMood={initialMoodOnLoad} onContinueWithCurrent={handleContinueWithCurrentMood}/>}
         <ReasoningDialog />
         {reactionModalData && <ReactionSummaryModal isOpen={!!reactionModalData} onClose={() => setReactionModalData(null)} reactions={reactionModalData.reactions} allUsers={reactionModalData.allUsers}/>}
         {documentPreview && <DocumentPreviewModal isOpen={!!documentPreview} onClose={() => setDocumentPreview(null)} message={documentPreview} />}
