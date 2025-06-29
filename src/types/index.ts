@@ -44,6 +44,7 @@ export interface Message {
   mode?: MessageMode | null;
   clip_type?: MessageClipType | null;
   clip_url?: string | null;
+  clip_placeholder_text?: string | null;
   image_url?: string | null;
   image_thumbnail_url?: string | null;
   document_url?: string | null;
@@ -52,6 +53,7 @@ export interface Message {
   sticker_image_url?: string | null;
   client_temp_id: string;
   status: MessageStatus;
+  uploadStatus?: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   duration_seconds?: number | null;
   file_size_bytes?: number | null;
   audio_format?: string | null;
@@ -104,3 +106,25 @@ export interface StickerListResponse { stickers: Sticker[]; }
 export interface PushSubscriptionJSON { endpoint: string; expirationTime?: number | null; keys: { p256dh: string; auth: string; }; }
 export interface NotificationSettings { user_id: string; messages: boolean; mood_updates: boolean; thinking_of_you: boolean; voice_messages: boolean; media_sharing: boolean; quiet_hours_enabled: boolean; quiet_hours_start: string | null; quiet_hours_end: string | null; quiet_hours_weekdays_only: boolean; timezone: string; }
 export interface PartnerRequest { id: string; sender: User; recipient: User; status: 'pending' | 'accepted' | 'rejected' | 'cancelled'; created_at: string; }
+
+// Upload System Types
+export interface UploadItem {
+  id: string; // Unique ID for the queue item
+  file: File;
+  messageId: string; // The client_temp_id of the optimistic message
+  chatId: string;
+  priority: number;
+  status: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  error?: string;
+  retryCount: number;
+  createdAt: Date;
+}
+
+export interface UploadProgress {
+  messageId: string;
+  status: 'uploading' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  error?: string;
+  result?: any; // The result from the API on completion
+}
