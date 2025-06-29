@@ -44,7 +44,6 @@ export interface Message {
   mode?: MessageMode | null;
   clip_type?: MessageClipType | null;
   clip_url?: string | null;
-  clip_placeholder_text?: string | null;
   image_url?: string | null;
   image_thumbnail_url?: string | null;
   document_url?: string | null;
@@ -78,6 +77,7 @@ export interface PasswordChangeRequest { current_password: string; new_password:
 export interface DeleteAccountRequest { password: string; }
 export interface DocumentUploadResponse { file_url: string; file_name: string; file_size_bytes: number; }
 export interface VoiceMessageUploadResponse { file_url: string; clip_type: 'audio'; duration_seconds: number | null; file_size_bytes: number | null; audio_format: string | null; }
+export interface VideoUploadResponse { file_url: string; clip_type: 'video'; thumbnail_url: string | null; duration_seconds: number | null; }
 
 export type NewMessageEventData = { event_type: "new_message"; message: Message; chat_id: string; };
 export type MessageDeletedEventData = { event_type: "message_deleted"; message_id: string; chat_id: string; };

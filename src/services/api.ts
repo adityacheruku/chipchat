@@ -3,7 +3,8 @@ import type {
   AuthResponse, User, UserInToken, Chat, Message, ApiErrorResponse, SupportedEmoji,
   VoiceMessageUploadResponse, StickerPackResponse, StickerListResponse, PushSubscriptionJSON,
   NotificationSettings, PartnerRequest, EventPayload, VerifyOtpResponse,
-  CompleteRegistrationRequest, DocumentUploadResponse, PasswordChangeRequest, DeleteAccountRequest
+  CompleteRegistrationRequest, DocumentUploadResponse, PasswordChangeRequest, DeleteAccountRequest,
+  VideoUploadResponse,
 } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
@@ -182,6 +183,11 @@ export const api = {
     const fd = new FormData();
     fd.append('file', file);
     return uploadWithProgress<{ image_url: string; image_thumbnail_url: string | null; }>(`${API_BASE_URL}/uploads/chat_image`, fd, onProgress);
+  },
+  uploadChatVideo: async (file: File, onProgress: (p: number) => void): Promise<VideoUploadResponse> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return uploadWithProgress<VideoUploadResponse>(`${API_BASE_URL}/uploads/chat_video`, fd, onProgress);
   },
   uploadMoodClip: async (file: File, type: string, onProgress: (p: number) => void): Promise<{ file_url: string; clip_type: string; }> => {
     const fd = new FormData();

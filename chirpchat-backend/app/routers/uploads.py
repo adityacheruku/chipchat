@@ -101,6 +101,43 @@ async def upload_chat_image(
         logger.error(f"Cloudinary chat image upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat image upload failed: {str(e)}")
 
+@router.post("/chat_video", summary="Upload a video for chat messages, returns URL and metadata")
+async def upload_chat_video(
+    file: UploadFile = File(...),
+    current_user: UserPublic = Depends(get_current_active_user),
+):
+    logger.info(f"Route /uploads/chat_video called by user {current_user.id} for file {file.filename}")
+    validate_clip_upload(file)
+
+    eager_transformations = [
+      {"width": 300, "height": 300, "crop": "limit", "format": "jpg"}
+    ]
+
+    try:
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder=f"chirpchat_chat_videos/user_{current_user.id}",
+            resource_type="video",
+            eager=eager_transformations,
+            eager_async=True
+        )
+        logger.info(f"Cloudinary chat video response for user {current_user.id}: {result}")
+
+        thumbnail_url = None
+        if 'eager' in result and len(result['eager']) > 0:
+          thumbnail_url = result['eager'][0].get('secure_url')
+
+        return {
+            "file_url": result.get("secure_url"),
+            "clip_type": "video",
+            "thumbnail_url": thumbnail_url,
+            "duration_seconds": result.get('duration')
+        }
+    except Exception as e:
+        logger.error(f"Cloudinary chat video upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Chat video upload failed: {str(e)}")
+
+
 @router.post("/chat_document", summary="Upload a document for chat messages, returns URL and filename")
 async def upload_chat_document(
     file: UploadFile = File(...),

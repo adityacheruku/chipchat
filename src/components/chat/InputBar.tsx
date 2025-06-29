@@ -22,6 +22,7 @@ interface InputBarProps {
   onSendSticker: (stickerId: string, mode: MessageMode) => void;
   onSendVoiceMessage: (file: File, mode: MessageMode) => void;
   onSendImage: (file: File, mode: MessageMode) => void;
+  onSendVideo: (file: File, mode: MessageMode) => void;
   onSendDocument: (file: File, mode: MessageMode) => void;
   isSending?: boolean;
   onTyping: (isTyping: boolean) => void;
@@ -92,7 +93,7 @@ const SoundWave = () => (
 )
 
 function InputBar({
-  onSendMessage, onSendSticker, onSendVoiceMessage, onSendImage, onSendDocument,
+  onSendMessage, onSendSticker, onSendVoiceMessage, onSendImage, onSendVideo, onSendDocument,
   isSending = false, onTyping, disabled = false, chatMode, onSelectMode,
   replyingTo, onCancelReply, allUsers
 }: InputBarProps) {
@@ -205,9 +206,10 @@ function InputBar({
   const cleanupRecording = useCallback(() => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        // Stop without triggering onstop's sending logic
         mediaRecorderRef.current.onstop = null;
         mediaRecorderRef.current.stop();
+        // Stop the media stream tracks
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       }
       mediaRecorderRef.current = null; audioChunksRef.current = [];
       setIsRecording(false); setRecordingSeconds(0);
@@ -233,7 +235,6 @@ function InputBar({
               onSendVoiceMessage(audioFile, chatMode);
             }
             stream.getTracks().forEach(track => track.stop());
-            // No need to call cleanup here, it's handled by the stop process
         };
 
         mediaRecorderRef.current.start();
@@ -269,11 +270,12 @@ function InputBar({
     if (messageText.trim()) onSendMessage(messageText.trim(), chatMode, replyingTo?.id);
     stagedAttachments.forEach(file => {
       if (file.type.startsWith('image/')) onSendImage(file, chatMode);
+      else if (file.type.startsWith('video/')) onSendVideo(file, chatMode);
       else if (file.type.startsWith('audio/')) onSendVoiceMessage(file, chatMode);
       else onSendDocument(file, chatMode);
     });
     setMessageText(''); setStagedAttachments([]); setEmojiSearch(''); onTyping(false);
-  }, [disabled, isSending, messageText, stagedAttachments, onSendMessage, onSendImage, onSendVoiceMessage, onSendDocument, onTyping, chatMode, replyingTo]);
+  }, [disabled, isSending, messageText, stagedAttachments, onSendMessage, onSendImage, onSendVideo, onSendVoiceMessage, onSendDocument, onTyping, chatMode, replyingTo]);
   
   const showSendButton = useMemo(() => messageText.trim() !== '' || stagedAttachments.length > 0, [messageText, stagedAttachments]);
 
@@ -436,7 +438,7 @@ function InputBar({
         </Button>
       </div>
       
-      <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture className="hidden" onChange={handleFileSelect} />
+      <input type="file" ref={cameraInputRef} accept="image/*" capture className="hidden" onChange={handleFileSelect} />
       <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={handleFileSelect} multiple />
       <input type="file" ref={documentInputRef} className="hidden" onChange={handleFileSelect} multiple />
     </div>

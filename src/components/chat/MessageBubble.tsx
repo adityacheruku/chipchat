@@ -249,10 +249,14 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
     }
   }, [message.id, message.status, message.mode, onToggleReaction, isSelectionMode]);
   
-  const doubleTapEvents = useDoubleTap(handleDoubleTap, { timeout: 300 });
+  const doubleTapEvents = useDoubleTap(handleDoubleTap);
   
   const handleBubbleClick = (e: React.MouseEvent) => {
-    if (swipeHandlers.isSwiping() || longPressHandlers.isLongPressing()) {
+    if (swipeHandlers.isSwiping()) {
+      e.preventDefault();
+      return;
+    }
+    if (longPressHandlers.isLongPressing()) {
       e.preventDefault();
       return;
     }
@@ -262,6 +266,8 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
     }
     if (message.message_subtype === 'image' && message.image_url && message.status !== 'failed') {
         onShowMedia(message.image_url, 'image');
+    } else if (message.message_subtype === 'clip' && message.clip_type === 'video' && message.clip_url && message.status !== 'failed') {
+        onShowMedia(message.clip_url, 'video');
     } else if (message.message_subtype === 'document' && message.document_url && message.status !== 'failed') {
         onShowDocumentPreview(message);
     }
@@ -293,7 +299,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
   
   const isStickerMessage = message.message_subtype === 'sticker';
   const isEmojiOnlyMessage = message.message_subtype === 'text' && message.text && EMOJI_ONLY_REGEX.test(message.text.trim()) && message.text.trim().length <= 5;
-  const isMediaBubble = isStickerMessage || isEmojiOnlyMessage || message.message_subtype === 'image' || message.message_subtype === 'voice_message';
+  const isMediaBubble = isStickerMessage || isEmojiOnlyMessage || message.message_subtype === 'image' || message.message_subtype === 'voice_message' || (message.message_subtype === 'clip' && message.clip_type === 'video');
 
 
   let formattedTime = "sending...";
@@ -320,7 +326,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
           </div>
         );
       }
-      if (message.message_subtype === 'image') {
+      if (message.message_subtype === 'image' || message.message_subtype === 'clip') {
         return (
           <div className="w-[120px] h-[120px] rounded-md overflow-hidden bg-muted relative flex items-center justify-center animate-pulse">
             {message.image_url && (
@@ -367,12 +373,18 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
                   <Image src={message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
               </button>
             ) : <p className="text-sm italic">Image unavailable</p>;
-          case 'clip': return message.clip_url ? (
-             <button onClick={() => onShowMedia(message.clip_url!, 'video')} className="flex items-center gap-2 group/media">
-                  <PlayCircle size={32} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80", "group-hover/media:scale-110 transition-transform")} />
-                  <span className="text-sm italic underline hover:opacity-80">{message.clip_placeholder_text || `View ${message.clip_type} clip`}</span>
-             </button>
-          ) : <p className="text-sm italic">Clip unavailable</p>;
+          case 'clip':
+            if (message.clip_type === 'video') {
+                return message.clip_url ? (
+                  <button onClick={() => onShowMedia(message.clip_url!, 'video')} className="block w-full max-w-[250px] aspect-video relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View video sent at ${formattedTime}`}>
+                      <Image src={message.image_thumbnail_url || "https://placehold.co/250x140.png"} alt={`Video thumbnail from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="video thumbnail" loading="lazy"/>
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                        <PlayCircle size={48} className="text-white/80 transition-transform group-hover/media:scale-110" />
+                      </div>
+                  </button>
+                ) : <p className="text-sm italic">Video unavailable</p>;
+            }
+            return <p className="text-sm italic">Clip unavailable</p>;
           case 'document':
             if (message.status === 'failed') {
               return (
