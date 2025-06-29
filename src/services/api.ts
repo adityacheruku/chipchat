@@ -1,12 +1,10 @@
 
 import type {
   AuthResponse, User, UserInToken, Chat, Message, ApiErrorResponse, SupportedEmoji,
-  VoiceMessageUploadResponse, StickerPackResponse, StickerListResponse, PushSubscriptionJSON,
+  StickerPackResponse, StickerListResponse, PushSubscriptionJSON,
   NotificationSettings, PartnerRequest, EventPayload, VerifyOtpResponse,
-  CompleteRegistrationRequest, DocumentUploadResponse, PasswordChangeRequest, DeleteAccountRequest,
-  VideoUploadResponse,
+  CompleteRegistrationRequest, PasswordChangeRequest, DeleteAccountRequest
 } from '@/types';
-import { validateFile, FileValidationResult } from '@/utils/fileValidation';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
 let currentAuthToken: string | null = null;
@@ -59,7 +57,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
 }
 
-interface UploadRequest {
+export interface UploadRequest {
     xhr: XMLHttpRequest;
     promise: Promise<any>;
 }
@@ -117,19 +115,11 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/users/me/profile`, { method: 'PUT', headers: getApiHeaders(), body: JSON.stringify(data) });
     return handleResponse<UserInToken>(response);
   },
-  uploadFile: (file: File, mediaType: string, onProgress: (progress: number) => void): UploadRequest => {
+  uploadFile: (file: Blob, fileType: string, onProgress: (p: number) => void): UploadRequest => {
     const formData = new FormData();
     formData.append('file', file);
-    let endpoint = '';
-    switch(mediaType) {
-        case 'image': endpoint = '/uploads/chat_image'; break;
-        case 'video': endpoint = '/uploads/chat_video'; break;
-        case 'audio':
-        case 'voice_message': endpoint = '/uploads/voice_message'; break;
-        case 'document': endpoint = '/uploads/chat_document'; break;
-        default: throw new Error("Unsupported media type for upload.");
-    }
-    return createUploadRequest(`${API_BASE_URL}${endpoint}`, formData, onProgress);
+    formData.append('file_type', fileType);
+    return createUploadRequest(`${API_BASE_URL}/uploads/file`, formData, onProgress);
   },
   uploadAvatar: async (file: File, onProgress: (p: number) => void): Promise<{ file_url: string }> => {
     const formData = new FormData();
