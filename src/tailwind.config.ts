@@ -106,7 +106,12 @@ export default {
         'toast-in': {
           'from': { opacity: '0', transform: 'translateY(20px) scale(0.98)' },
           'to': { opacity: '1', transform: 'translateY(0) scale(1)' },
-        }
+        },
+        wave: {
+            '0%': { height: '10px' },
+            '50%': { height: '25px' },
+            '100%': { height: '10px' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -115,6 +120,7 @@ export default {
         'pop': 'pop 0.2s ease-out',
         'shake': 'shake 0.6s cubic-bezier(.36,.07,.19,.97) both',
         'toast-in': 'toast-in 0.25s ease-out',
+        'wave': 'wave 1.2s linear infinite',
       },
     },
   },
