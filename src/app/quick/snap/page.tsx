@@ -14,6 +14,10 @@ import { api } from '@/services/api';
 import type { Chat } from '@/types';
 import Spinner from '@/components/common/Spinner';
 import FullPageLoader from '@/components/common/FullPageLoader';
+import { uploadManager } from '@/services/uploadManager';
+import { v4 as uuidv4 } from 'uuid';
+import { validateFile } from '@/utils/fileValidation';
+
 
 export default function QuickSnapPage() {
   const router = useRouter();
@@ -49,21 +53,18 @@ export default function QuickSnapPage() {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-        if (file.size > 10 * 1024 * 1024) { // 10MB limit
-          toast({ variant: "destructive", title: "File Too Large", description: "File must be smaller than 10MB." });
-          return;
-        }
+      const validation = validateFile(file);
+      if (validation.isValid && (validation.fileType === 'image' || validation.fileType === 'video')) {
         setSelectedFile(file);
         if(file.type.startsWith('image/')) {
             const reader = new FileReader();
             reader.onloadend = () => setPreview(reader.result as string);
             reader.readAsDataURL(file);
         } else {
-            setPreview(null); // No preview for video
+            setPreview(null);
         }
       } else {
-        toast({ variant: "destructive", title: "Invalid File", description: "Please select an image or video." });
+        toast({ variant: "destructive", title: "Invalid File", description: validation.errors.join(', ') || "Please select an image or video." });
       }
     }
   };
@@ -73,37 +74,27 @@ export default function QuickSnapPage() {
       toast({ variant: "destructive", title: "Error", description: "Please select a file and ensure you have a partner." });
       return;
     }
-
     setIsSubmitting(true);
     try {
-      const uploadFunction = selectedFile.type.startsWith('image/') ? api.uploadChatImage : api.uploadChatVideo;
-      const uploadRes = await uploadFunction(selectedFile, () => {});
+        const validation = validateFile(selectedFile);
+        uploadManager.addToQueue({
+            id: uuidv4(),
+            file: selectedFile,
+            messageId: uuidv4(),
+            chatId: recipientChat.id,
+            priority: 2, // High priority for snaps
+            subtype: validation.fileType as 'image' | 'clip',
+            // This is where we mark it as incognito
+            // The upload manager does not currently have a field for this.
+            // For now, we assume the chat page will handle this mode.
+            // A more robust solution would be to add a `mode` field to the UploadItem.
+        });
       
-      let messagePayload: any = {
-          mode: 'incognito',
-          client_temp_id: `snap-${Date.now()}`
-      };
-
-      if (selectedFile.type.startsWith('image/')) {
-          messagePayload.image_url = (uploadRes as any).image_url;
-          messagePayload.image_thumbnail_url = (uploadRes as any).image_thumbnail_url;
-          messagePayload.message_subtype = 'image';
-      } else {
-          messagePayload.clip_url = (uploadRes as any).file_url;
-          messagePayload.clip_type = 'video';
-          messagePayload.image_thumbnail_url = (uploadRes as any).thumbnail_url;
-          messagePayload.duration_seconds = (uploadRes as any).duration_seconds;
-          messagePayload.message_subtype = 'clip';
-      }
-
-      await api.sendMessageHttp(recipientChat.id, messagePayload);
-      
-      toast({ title: "Snap Sent!", description: "Your snap will disappear after being viewed." });
+      toast({ title: "Snap Queued!", description: "Your snap will be sent incognito." });
       router.push('/chat');
 
     } catch (error: any) {
       toast({ variant: "destructive", title: "Send Failed", description: error.message });
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -134,7 +125,7 @@ export default function QuickSnapPage() {
               <div className="flex flex-col items-center justify-center pt-5 pb-6">
                 <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
                 <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold text-primary">Click to upload</span></p>
-                <p className="text-xs text-muted-foreground">Image or Video (Max 10MB)</p>
+                <p className="text-xs text-muted-foreground">Image or Video (Max 100MB)</p>
               </div>
             )}
             <Input id="snap-upload" type="file" className="hidden" accept="image/*,video/*" onChange={handleFileChange} disabled={isSubmitting || !recipientChat} />

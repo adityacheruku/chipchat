@@ -5,7 +5,7 @@ import { UploadErrorCode, ERROR_MESSAGES } from '@/types/uploadErrors';
 import { validateFile } from '@/utils/fileValidation';
 import { imageProcessor } from './imageProcessor';
 import { videoCompressor } from './videoCompressor';
-import { indexedDBService } from './indexedDBService';
+import { storageService } from './storageService';
 
 // A simple event emitter
 type ProgressListener = (progress: UploadProgress) => void;
@@ -35,7 +35,7 @@ class UploadManager {
     if (this.isInitialized) return;
     this.isInitialized = true;
     try {
-      const pendingItems = await indexedDBService.getAllPendingUploads();
+      const pendingItems = await storageService.getAllPendingUploads();
       if (pendingItems.length > 0) {
           console.log(`UploadManager: Resuming ${pendingItems.length} pending uploads.`);
           // Reset status to 'pending' for items that were interrupted
@@ -48,7 +48,7 @@ class UploadManager {
           this.processQueue();
       }
     } catch (error) {
-        console.error("UploadManager: Failed to initialize and load from IndexedDB", error);
+        console.error("UploadManager: Failed to initialize and load from storage", error);
     }
   }
 
@@ -65,7 +65,7 @@ class UploadManager {
       retryCount: 0,
       createdAt: new Date(),
     };
-    await indexedDBService.addUploadItem(fullItem);
+    await storageService.addUploadItem(fullItem);
     this.queue.push(fullItem);
     this.queue.sort((a, b) => a.priority - b.priority);
     this.processQueue();
@@ -139,7 +139,7 @@ class UploadManager {
       this.activeUploads.delete(item.id);
       itemInQueue.status = 'completed';
       emitProgress({ messageId: item.messageId, status: 'completed', progress: 100, result });
-      await indexedDBService.removeUploadItem(item.id);
+      await storageService.removeUploadItem(item.id);
       
     } catch (error: any) {
       this.activeUploads.delete(item.id);
@@ -155,7 +155,7 @@ class UploadManager {
         };
         
         currentItem.error = uploadError;
-        await indexedDBService.updateUploadItem(currentItem);
+        await storageService.updateUploadItem(currentItem);
         emitProgress({ messageId: item.messageId, status: 'failed', progress: 0, error: uploadError });
         this.handleRetryLogic(currentItem);
       }
@@ -172,7 +172,7 @@ class UploadManager {
               const itemInQueue = this.queue.find(q => q.id === item.id);
               if (itemInQueue && itemInQueue.status === 'failed') {
                   itemInQueue.status = 'pending';
-                  await indexedDBService.updateUploadItem(itemInQueue);
+                  await storageService.updateUploadItem(itemInQueue);
                   this.processQueue();
               }
           }, delay);
@@ -185,7 +185,7 @@ class UploadManager {
       item.status = 'pending';
       item.error = undefined;
       item.retryCount = 0;
-      await indexedDBService.updateUploadItem(item);
+      await storageService.updateUploadItem(item);
       this.processQueue();
     }
   }
@@ -201,7 +201,7 @@ class UploadManager {
         }
         item.status = 'cancelled';
         emitProgress({ messageId: item.messageId, status: 'cancelled', progress: 0 });
-        await indexedDBService.removeUploadItem(item.id);
+        await storageService.removeUploadItem(item.id);
         this.queue.splice(itemIndex, 1);
         this.processQueue();
     }

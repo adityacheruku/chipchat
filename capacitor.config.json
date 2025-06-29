@@ -3,5 +3,23 @@
   "appId": "com.kuchlu.app",
   "appName": "Kuchlu",
   "webDir": "out",
-  "bundledWebRuntime": false
+  "bundledWebRuntime": false,
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 3000,
+      "launchAutoHide": true,
+      "backgroundColor": "#000000",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "CapacitorSQLite": {
+      "iosDatabaseLocation": "Library/CapacitorDatabase",
+      "iosIsEncryption": false,
+      "androidIsEncryption": false,
+      "electronIsEncryption": false
+    }
+  }
 }

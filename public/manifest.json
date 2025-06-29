@@ -5,41 +5,38 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#000000",
+  "theme_color": "#ffd700",
   "icons": [
-    {
-      "src": "/icons/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "/icons/icon-72x72.png", "sizes": "72x72", "type": "image/png" },
+    { "src": "/icons/icon-96x96.png", "sizes": "96x96", "type": "image/png" },
+    { "src": "/icons/icon-128x128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "/icons/icon-144x144.png", "sizes": "144x144", "type": "image/png" },
+    { "src": "/icons/icon-152x152.png", "sizes": "152x152", "type": "image/png" },
+    { "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-384x384.png", "sizes": "384x384", "type": "image/png" },
+    { "src": "/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png" }
   ],
   "shortcuts": [
     {
       "name": "Set My Mood",
       "short_name": "Mood",
-      "url": "/quick/mood"
-    },
-    {
-      "name": "Send an Image",
-      "short_name": "Image",
-      "url": "/quick/image"
-    },
-    {
-      "name": "Thinking of You",
-      "short_name": "Ping",
-      "url": "/quick/think"
+      "description": "Quickly set your current mood",
+      "url": "/quick/mood",
+      "icons": [{ "src": "/icons/quick-mood.png", "sizes": "96x96" }]
     },
     {
       "name": "Send a Snap",
       "short_name": "Snap",
-      "url": "/quick/snap"
+      "description": "Send a disappearing photo or video",
+      "url": "/quick/snap",
+      "icons": [{ "src": "/icons/quick-snap.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Thinking of You",
+      "short_name": "Ping",
+      "description": "Send a 'Thinking of You' ping to your partner",
+      "url": "/quick/think",
+      "icons": [{ "src": "/icons/quick-think.png", "sizes": "96x96" }]
     }
   ]
 }
