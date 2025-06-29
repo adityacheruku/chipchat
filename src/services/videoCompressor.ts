@@ -80,6 +80,7 @@ class VideoCompressor {
       const data = await this.ffmpeg.readFile(outputName);
       
       onProgress({ progress: 100, stage: 'done' });
+      // The data is a Uint8Array, which is a valid BlobPart
       return new Blob([data], { type: 'video/mp4' });
 
     } catch (error: any) {
