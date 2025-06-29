@@ -359,13 +359,13 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
             return <p className="text-sm italic">Clip unavailable</p>;
           case 'document':
             return message.document_url ? (
-              <button onClick={() => onShowDocumentPreview(message)} className={cn(buttonVariants({ variant: isCurrentUser ? 'secondary' : 'outline' }), 'h-auto py-2 w-full max-w-[250px] bg-card/80')} aria-label={`Preview document: ${message.document_name}`}>
-                <FileText size={24} className="mr-3 flex-shrink-0 text-foreground/80" />
+               <div onClick={() => onShowDocumentPreview(message)} className={cn('flex items-center gap-3 p-3 rounded-lg cursor-pointer w-full max-w-[280px]', isCurrentUser ? 'bg-primary-foreground/10 hover:bg-primary-foreground/20' : 'bg-muted hover:bg-muted/80')} aria-label={`Preview document: ${message.document_name}`}>
+                <div className="flex-shrink-0 p-2 bg-background rounded-md"><FileText size={24} className="text-primary" /></div>
                 <div className="flex flex-col text-left min-w-0">
                     <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
                     <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to preview'}</span>
                 </div>
-            </button>
+              </div>
           ) : (
               <div className="flex items-center p-3 text-destructive">
                 <AlertTriangle className="w-6 h-6 mr-2" />
@@ -393,7 +393,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
 
   const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image' && message.message_subtype !== 'document';
   const reactionsDisabled = message.mode === 'incognito' || isSelectionMode;
-  const swipeDisabled = isMediaBubble || isSelectionMode;
+  const swipeDisabled = isMediaBubble || isSelectionMode || message.message_subtype === 'document';
   const isVoiceOrAudioMessage = message.message_subtype === 'voice_message' || message.message_subtype === 'audio';
 
   const RightSwipeIcon = isCurrentUser ? Trash2 : Reply;

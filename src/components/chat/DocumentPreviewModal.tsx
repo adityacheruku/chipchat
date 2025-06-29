@@ -48,65 +48,60 @@ export default function DocumentPreviewModal({ isOpen, onClose, message }: Docum
   const handleOpenIn = async () => {
     if (!message?.document_url || !message.document_name) return;
 
-    // Use Web Share API if available
-    if (navigator.share) {
-        try {
+    try {
+        const response = await fetch(message.document_url);
+        const blob = await response.blob();
+        const file = new File([blob], message.document_name, { type: blob.type });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
+                files: [file],
                 title: message.document_name,
-                url: message.document_url,
                 text: `Check out this document: ${message.document_name}`,
             });
-        } catch (error) {
-            // This error is often thrown when the user cancels the share dialog.
-            if ((error as Error).name !== 'AbortError') {
-                console.error("Share failed:", error);
-                // As a fallback, open in a new tab
-                window.open(message.document_url, '_blank', 'noopener,noreferrer');
-            }
+        } else {
+             window.open(message.document_url, '_blank', 'noopener,noreferrer');
         }
-    } else {
-        // Fallback for browsers that don't support the Web Share API
-        window.open(message.document_url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error("Share failed, falling back:", error);
+          window.open(message.document_url, '_blank', 'noopener,noreferrer');
+        }
     }
   };
 
   if (!message) return null;
 
-  const Content = () => (
-    <>
-      <SheetHeader className="text-left sm:text-center">
-        <SheetTitle className="flex items-center gap-2 sm:justify-center">
-            <FileText className="h-6 w-6 text-primary" />
-            Document Preview
-        </SheetTitle>
-        <SheetDescription>
-          Download the document or use the share menu to open it in another app.
-        </SheetDescription>
-      </SheetHeader>
-      <div className="flex flex-col items-center justify-center p-6 text-center space-y-4">
-        <FileText className="w-24 h-24 text-muted-foreground/50" />
-        <p className="font-semibold text-foreground break-all">{message.document_name}</p>
-        {message.file_size_bytes && (
-            <p className="text-sm text-muted-foreground">{formatFileSize(message.file_size_bytes)}</p>
-        )}
-      </div>
-       <div className="flex flex-col sm:flex-row gap-2 p-4 pt-0">
-          <Button onClick={handleDownload} className="w-full">
-            <Download className="mr-2 h-4 w-4" />
-            Download
-          </Button>
-          <Button onClick={handleOpenIn} variant="outline" className="w-full">
-             <ArrowUpRightFromSquare className="mr-2 h-4 w-4" />
-            Open In…
-          </Button>
-        </div>
-    </>
-  );
-  
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="bottom" className="rounded-t-lg p-0">
-        <Content />
+        <SheetHeader className="p-6 pb-2 text-center">
+            <SheetTitle className="flex items-center gap-2 justify-center">
+                <FileText className="h-6 w-6 text-primary" />
+                Document
+            </SheetTitle>
+        </SheetHeader>
+        <div className="flex flex-col items-center justify-center p-6 text-center space-y-4 border-y">
+            <div className="p-4 bg-muted rounded-full">
+                <FileText className="w-16 h-16 text-muted-foreground" />
+            </div>
+            <div className="max-w-full">
+                <p className="font-semibold text-lg text-foreground break-words">{message.document_name}</p>
+                {message.file_size_bytes && (
+                    <p className="text-sm text-muted-foreground">{formatFileSize(message.file_size_bytes)}</p>
+                )}
+            </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 p-4">
+            <Button onClick={handleDownload} className="w-full">
+                <Download className="mr-2 h-4 w-4" />
+                Download
+            </Button>
+            <Button onClick={handleOpenIn} variant="secondary" className="w-full">
+                <ArrowUpRightFromSquare className="mr-2 h-4 w-4" />
+                Open In…
+            </Button>
+        </div>
       </SheetContent>
     </Sheet>
   );
