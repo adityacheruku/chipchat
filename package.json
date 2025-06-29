@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "cap:sync": "npx cap sync",
     "build-mobile": "npm run build && npm run cap:sync",
-    "postinstall": "patch-package && (test -d node_modules/@ffmpeg/core/dist && cp -R ./node_modules/@ffmpeg/core/dist/ ./public/ffmpeg || echo 'ffmpeg-core not found, skipping copy')"
+    "postinstall": "patch-package && (test -d node_modules/@ffmpeg/core/dist && cp -R ./node_modules/@ffmpeg/core/dist/ ./public/ffmpeg || echo 'ffmpeg-core not found, skipping copy') && (mkdir -p public/assets && test -f node_modules/sql.js/dist/sql-wasm.wasm && cp node_modules/sql.js/dist/sql-wasm.wasm public/assets/sql-wasm.wasm || echo 'sql.js wasm not found, skipping copy')"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^6.0.0-1",
@@ -58,6 +58,7 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.54.2",
     "recharts": "^2.15.1",
+    "sql.js": "^1.10.3",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^9.0.1",
