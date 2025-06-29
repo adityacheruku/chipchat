@@ -43,22 +43,30 @@ def verify_registration_token(token: str) -> Optional[str]:
     except (JWTError, ExpiredSignatureError):
         return None
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-ALLOWED_CLIP_TYPES = {"audio/mpeg", "audio/wav", "audio/webm", "audio/ogg", "audio/mp4", "video/mp4", "video/quicktime", "video/webm"}
+# Based on fileValidation.ts on the frontend
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/heic"}
+ALLOWED_CLIP_TYPES = {"audio/mpeg", "audio/wav", "audio/webm", "audio/ogg", "audio/mp4", "video/mp4", "video/quicktime", "video/webm", "audio/x-m4a"}
 ALLOWED_DOCUMENT_TYPES = {"application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"}
-MAX_FILE_SIZE = 10 * 1024 * 1024
+
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_CLIP_SIZE = 100 * 1024 * 1024 # 100MB
+MAX_DOCUMENT_SIZE = 50 * 1024 * 1024 # 50MB
 
 def _validate_file(file: UploadFile, allowed_types: set, max_size: int):
     if file.content_type not in allowed_types:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}")
+        logger.warning(f"Invalid file type: {file.content_type}. Allowed: {allowed_types}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid file type: {file.content_type}.")
+    
+    # file.size might not be available for all streams, but we check if it is
     if file.size and file.size > max_size:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"File too large. Max size is {max_size/1024/1024}MB.")
+        logger.warning(f"File too large: {file.size} bytes. Max size: {max_size} bytes.")
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=f"File too large. Max size is {max_size/1024/1024:.0f}MB.")
 
 def validate_image_upload(file: UploadFile):
-    _validate_file(file, ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE)
+    _validate_file(file, ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE)
 
 def validate_clip_upload(file: UploadFile):
-    _validate_file(file, ALLOWED_CLIP_TYPES, MAX_FILE_SIZE)
+    _validate_file(file, ALLOWED_CLIP_TYPES, MAX_CLIP_SIZE)
 
 def validate_document_upload(file: UploadFile):
-    _validate_file(file, ALLOWED_DOCUMENT_TYPES, MAX_FILE_SIZE)
+    _validate_file(file, ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_SIZE)

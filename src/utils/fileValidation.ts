@@ -17,7 +17,7 @@ export interface FileTypeConfig {
   allowedExtensions: string[];
 }
 
-export const FILE_TYPE_CONFIGS: Record<string, FileTypeConfig> = {
+export const FILE_TYPE_CONFIGS: Record<'image' | 'video' | 'audio' | 'document', FileTypeConfig> = {
   image: {
     maxSize: 10 * 1024 * 1024, // 10MB
     allowedTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic'],
@@ -47,7 +47,7 @@ export function getFileExtension(filename: string): string {
 export function detectFileType(file: File): 'image' | 'video' | 'audio' | 'document' | 'unknown' {
   const extension = getFileExtension(file.name);
   for (const type in FILE_TYPE_CONFIGS) {
-    const config = FILE_TYPE_CONFIGS[type];
+    const config = FILE_TYPE_CONFIGS[type as keyof typeof FILE_TYPE_CONFIGS];
     if (config.allowedTypes.includes(file.type) || config.allowedExtensions.includes(extension)) {
       return type as 'image' | 'video' | 'audio' | 'document';
     }

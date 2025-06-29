@@ -6,6 +6,7 @@ import type {
   CompleteRegistrationRequest, DocumentUploadResponse, PasswordChangeRequest, DeleteAccountRequest,
   VideoUploadResponse,
 } from '@/types';
+import { validateFile, FileValidationResult } from '@/utils/fileValidation';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
 let currentAuthToken: string | null = null;
@@ -58,25 +59,31 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
 }
 
+interface UploadRequest {
+    xhr: XMLHttpRequest;
+    promise: Promise<any>;
+}
 
-async function uploadWithProgress<T>(url: string, formData: FormData, onProgress: (progress: number) => void): Promise<T> {
-  return new Promise((resolve, reject) => {
+function createUploadRequest(url: string, formData: FormData, onProgress: (progress: number) => void): UploadRequest {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', url, true);
-    const token = getAuthToken();
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
-    xhr.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100)); };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) { try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(new Error('Failed to parse server response.')); }
-      } else {
-        let errorData: ApiErrorResponse = {}; try { errorData = JSON.parse(xhr.responseText); } catch (e) {}
-        reject(new Error(typeof errorData.detail === 'string' ? errorData.detail : `Upload failed with status ${xhr.status}`));
-      }
-    };
-    xhr.onerror = () => reject(new Error('Network error during upload.'));
-    xhr.send(formData);
-  });
+    const promise = new Promise((resolve, reject) => {
+        xhr.open('POST', url, true);
+        const token = getAuthToken();
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
+        xhr.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100)); };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) { try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(new Error('Failed to parse server response.')); }
+          } else {
+            let errorData: ApiErrorResponse = {}; try { errorData = JSON.parse(xhr.responseText); } catch (e) {}
+            reject(new Error(typeof errorData.detail === 'string' ? errorData.detail : `Upload failed with status ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload.'));
+        xhr.onabort = () => reject(new Error('Upload cancelled'));
+        xhr.send(formData);
+    });
+    return { xhr, promise };
 }
 
 export const api = {
@@ -110,10 +117,24 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/users/me/profile`, { method: 'PUT', headers: getApiHeaders(), body: JSON.stringify(data) });
     return handleResponse<UserInToken>(response);
   },
+  uploadFile: (file: File, mediaType: string, onProgress: (progress: number) => void): UploadRequest => {
+    const formData = new FormData();
+    formData.append('file', file);
+    let endpoint = '';
+    switch(mediaType) {
+        case 'image': endpoint = '/uploads/chat_image'; break;
+        case 'video': endpoint = '/uploads/chat_video'; break;
+        case 'audio':
+        case 'voice_message': endpoint = '/uploads/voice_message'; break;
+        case 'document': endpoint = '/uploads/chat_document'; break;
+        default: throw new Error("Unsupported media type for upload.");
+    }
+    return createUploadRequest(`${API_BASE_URL}${endpoint}`, formData, onProgress);
+  },
   uploadAvatar: async (file: File, onProgress: (p: number) => void): Promise<{ file_url: string }> => {
     const formData = new FormData();
     formData.append('file', file);
-    return uploadWithProgress<{ file_url: string }>(`${API_BASE_URL}/users/me/avatar`, formData, onProgress);
+    return createUploadRequest(`${API_BASE_URL}/users/me/avatar`, formData, onProgress).promise;
   },
   changePassword: async (passwordData: PasswordChangeRequest): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/users/me/password`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(passwordData) });
@@ -178,32 +199,6 @@ export const api = {
   clearChatHistory: async (chatId: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/chats/${chatId}/clear`, { method: 'POST', headers: getApiHeaders() });
     await handleResponse<void>(response);
-  },
-  uploadChatImage: async (file: File, onProgress: (p: number) => void): Promise<{ image_url: string; image_thumbnail_url: string | null; }> => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return uploadWithProgress<{ image_url: string; image_thumbnail_url: string | null; }>(`${API_BASE_URL}/uploads/chat_image`, fd, onProgress);
-  },
-  uploadChatVideo: async (file: File, onProgress: (p: number) => void): Promise<VideoUploadResponse> => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return uploadWithProgress<VideoUploadResponse>(`${API_BASE_URL}/uploads/chat_video`, fd, onProgress);
-  },
-  uploadMoodClip: async (file: File, type: string, onProgress: (p: number) => void): Promise<{ file_url: string; clip_type: string; }> => {
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('clip_type', type);
-    return uploadWithProgress<{ file_url: string; clip_type: string; }>(`${API_BASE_URL}/uploads/mood_clip`, fd, onProgress);
-  },
-  uploadChatDocument: async (file: File, onProgress: (p: number) => void): Promise<DocumentUploadResponse> => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return uploadWithProgress<DocumentUploadResponse>(`${API_BASE_URL}/uploads/chat_document`, fd, onProgress);
-  },
-  uploadVoiceMessage: async (file: File, onProgress: (p: number) => void): Promise<VoiceMessageUploadResponse> => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return uploadWithProgress<VoiceMessageUploadResponse>(`${API_BASE_URL}/uploads/voice_message`, fd, onProgress);
   },
   getStickerPacks: async (): Promise<StickerPackResponse> => {
     const response = await fetch(`${API_BASE_URL}/stickers/packs`, { headers: getApiHeaders() });

@@ -107,11 +107,11 @@ export interface PushSubscriptionJSON { endpoint: string; expirationTime?: numbe
 export interface NotificationSettings { user_id: string; messages: boolean; mood_updates: boolean; thinking_of_you: boolean; voice_messages: boolean; media_sharing: boolean; quiet_hours_enabled: boolean; quiet_hours_start: string | null; quiet_hours_end: string | null; quiet_hours_weekdays_only: boolean; timezone: string; }
 export interface PartnerRequest { id: string; sender: User; recipient: User; status: 'pending' | 'accepted' | 'rejected' | 'cancelled'; created_at: string; }
 
-// Upload System Types
+// Corresponds to backend/services/upload_queue.py UploadItem
 export interface UploadItem {
-  id: string; // Unique ID for the queue item
+  id: string;
   file: File;
-  messageId: string; // The client_temp_id of the optimistic message
+  messageId: string;
   chatId: string;
   priority: number;
   status: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
@@ -121,10 +121,11 @@ export interface UploadItem {
   createdAt: Date;
 }
 
+// Corresponds to frontend hook useUploadProgress
 export interface UploadProgress {
   messageId: string;
-  status: 'uploading' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   error?: string;
-  result?: any; // The result from the API on completion
+  result?: any;
 }

@@ -84,18 +84,39 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
         await ws_manager.broadcast_chat_message(str(chat_id), incognito_message)
         return
 
-    message_data_to_insert = message_create.model_dump(exclude_none=True, exclude={'chat_id', 'recipient_id', 'client_temp_id'})
-    message_data_to_insert.update({
-        "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
-        "status": MessageStatusEnum.SENT.value, "created_at": "now()", "updated_at": "now()", "reactions": {},
-        "client_temp_id": client_temp_id
-    })
-    
-    # Ensure UUIDs are strings for DB insert if they exist
-    if 'sticker_id' in message_data_to_insert and message_data_to_insert['sticker_id']:
-        message_data_to_insert['sticker_id'] = str(message_data_to_insert['sticker_id'])
-    if 'reply_to_message_id' in message_data_to_insert and message_data_to_insert['reply_to_message_id']:
-        message_data_to_insert['reply_to_message_id'] = str(message_data_to_insert['reply_to_message_id'])
+    # Map frontend schema to new DB schema
+    message_data_to_insert = {
+        "id": str(message_db_id),
+        "chat_id": str(chat_id),
+        "user_id": str(user_id),
+        "text": message_create.text,
+        "media_type": message_create.message_subtype.value if message_create.message_subtype else 'text',
+        "mode": message_create.mode.value if message_create.mode else MessageModeEnum.NORMAL.value,
+        "status": MessageStatusEnum.SENT.value,
+        "upload_status": "completed", # Since this is after upload
+        "created_at": "now()",
+        "updated_at": "now()",
+        "reactions": {},
+        "client_temp_id": client_temp_id,
+        "reply_to_message_id": str(message_create.reply_to_message_id) if message_create.reply_to_message_id else None,
+        "sticker_id": str(message_create.sticker_id) if message_create.sticker_id else None,
+    }
+
+    # Handle media-specific fields
+    file_metadata = {}
+    if message_create.message_subtype in ['image', 'video', 'audio', 'document', 'voice_message', 'clip']:
+        message_data_to_insert["media_url"] = message_create.image_url or message_create.clip_url or message_create.document_url
+        message_data_to_insert["thumbnail_url"] = message_create.image_thumbnail_url
+        
+        file_metadata = {
+            "duration_seconds": message_create.duration_seconds,
+            "file_size_bytes": message_create.file_size_bytes,
+            "audio_format": message_create.audio_format,
+            "document_name": message_create.document_name,
+            "clip_type": message_create.clip_type.value if message_create.clip_type else None,
+        }
+        message_data_to_insert["file_metadata"] = json.dumps({k: v for k, v in file_metadata.items() if v is not None})
+        message_data_to_insert["file_size"] = message_create.file_size_bytes
 
     await db_manager.get_table("messages").insert(message_data_to_insert).execute()
     await ws_manager.mark_message_as_processed(client_temp_id)
