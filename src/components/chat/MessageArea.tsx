@@ -18,6 +18,7 @@ interface MessageAreaProps {
   onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
   onShowMedia: (url: string, type: 'image' | 'video') => void;
   onShowDocumentPreview: (message: Message) => void;
+  onShowInfo: (message: Message) => void;
   onLoadMore: () => void;
   hasMore: boolean;
   isLoadingMore: boolean;
@@ -38,6 +39,7 @@ function MessageArea({
   onShowReactions, 
   onShowMedia,
   onShowDocumentPreview,
+  onShowInfo,
   viewportRef,
   onLoadMore,
   hasMore,
@@ -93,6 +95,7 @@ function MessageArea({
               isSelected={selectedMessageIds.has(msg.id)}
               onEnterSelectionMode={onEnterSelectionMode}
               onToggleSelection={onToggleMessageSelection}
+              onShowInfo={onShowInfo}
             />
           );
         })}

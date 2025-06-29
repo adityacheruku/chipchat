@@ -78,13 +78,13 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
     
     now, message_db_id = datetime.now(timezone.utc), uuid4()
     if message_create.mode == MessageModeEnum.INCOGNITO:
-        incognito_message = MessageInDB(id=message_db_id, chat_id=chat_id, user_id=user_id, status=MessageStatusEnum.SENT, created_at=now, updated_at=now, reactions={}, **message_create.model_dump(exclude={'chat_id', 'recipient_id'}))
+        incognito_message = MessageInDB(id=message_db_id, chat_id=chat_id, user_id=user_id, status=MessageStatusEnum.SENT, created_at=now, updated_at=now, reactions={}, **message_create.model_dump(exclude={'chat_id', 'recipient_id'}), client_temp_id=client_temp_id)
         await ws_manager.mark_message_as_processed(client_temp_id)
         await ws_manager.send_ack(websocket, client_temp_id, str(message_db_id))
         await ws_manager.broadcast_chat_message(str(chat_id), incognito_message)
         return
 
-    message_data_to_insert = message_create.model_dump(exclude_unset=True, exclude={'chat_id', 'recipient_id', 'client_temp_id'})
+    message_data_to_insert = message_create.model_dump(exclude_none=True, exclude={'chat_id', 'recipient_id', 'client_temp_id'})
     message_data_to_insert.update({
         "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
         "status": MessageStatusEnum.SENT.value, "created_at": "now()", "updated_at": "now()", "reactions": {},

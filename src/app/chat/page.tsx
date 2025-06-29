@@ -36,6 +36,7 @@ import {
 import { buttonVariants } from '@/components/ui/button';
 import FullPageLoader from '@/components/common/FullPageLoader';
 import Spinner from '@/components/common/Spinner';
+import MessageInfoModal from '@/components/chat/MessageInfoModal';
 
 
 const MemoizedMessageArea = memo(MessageArea);
@@ -83,6 +84,7 @@ export default function ChatPage() {
   const [selectedMessageIds, setSelectedMessageIds] = useState(new Set<string>());
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isClearChatDialogOpen, setIsClearChatDialogOpen] = useState(false);
+  const [messageInfo, setMessageInfo] = useState<MessageType | null>(null);
 
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -133,7 +135,7 @@ export default function ChatPage() {
     onMessageReceived: handleNewMessage, onReactionUpdate: (data) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), onPresenceUpdate: handlePresenceUpdate,
     onTypingUpdate: handleTypingUpdate, onThinkingOfYouReceived: handleThinkingOfYou, onUserProfileUpdate: handleProfileUpdate,
     onMessageAck: handleMessageAck, onChatModeChanged: handleChatModeChanged, onMessageDeleted: handleMessageDeleted,
-    onChatHistoryCleared,
+    onChatHistoryCleared: handleChatHistoryCleared,
   });
 
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast });
@@ -415,6 +417,7 @@ export default function ChatPage() {
   const handleDismissNotificationPrompt = useCallback(() => { setShowNotificationPrompt(false); sessionStorage.setItem('notificationPromptDismissed', 'true'); }, []);
   const handleShowMedia = useCallback((url: string, type: 'image' | 'video') => setMediaModalData({ url, type }), []);
   const handleShowDocumentPreview = useCallback((message: MessageType) => setDocumentPreview(message), []);
+  const handleShowInfo = useCallback((message: MessageType) => setMessageInfo(message), []);
   const handleSelectMode = useCallback((mode: MessageMode) => { if (activeChat) { setChatMode(mode); sendMessage({ event_type: "change_chat_mode", chat_id: activeChat.id, mode }); toast({ title: `Switched to ${mode} Mode` }); }}, [activeChat, sendMessage, toast]);
   const handleCancelReply = useCallback(() => setReplyingTo(null), []);
   const handleSetReplyingTo = useCallback((message: MessageType | null) => setReplyingTo(message), []);
@@ -478,17 +481,18 @@ export default function ChatPage() {
                 onToggleReaction={handleToggleReaction} 
                 onShowReactions={(m, u) => handleShowReactions(m, u)} 
                 onShowMedia={handleShowMedia} 
+                onShowDocumentPreview={handleShowDocumentPreview} 
                 onLoadMore={loadMoreMessages} 
                 hasMore={hasMoreMessages} 
                 isLoadingMore={isLoadingMore} 
                 onRetrySend={handleRetrySend} 
                 onDeleteMessage={handleDeleteMessage} 
-                onShowDocumentPreview={handleShowDocumentPreview} 
                 onSetReplyingTo={handleSetReplyingTo}
                 isSelectionMode={isSelectionMode}
                 selectedMessageIds={selectedMessageIds}
                 onEnterSelectionMode={handleEnterSelectionMode}
                 onToggleMessageSelection={handleToggleMessageSelection}
+                onShowInfo={handleShowInfo}
               />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendVideo={handleSendVideo} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} replyingTo={replyingTo} onCancelReply={handleCancelReply} allUsers={allUsersForMessageArea} />
             </div>
@@ -501,6 +505,7 @@ export default function ChatPage() {
         <ReasoningDialog />
         {reactionModalData && <ReactionSummaryModal isOpen={!!reactionModalData} onClose={() => setReactionModalData(null)} reactions={reactionModalData.reactions} allUsers={reactionModalData.allUsers}/>}
         {documentPreview && <DocumentPreviewModal isOpen={!!documentPreview} onClose={() => setDocumentPreview(null)} message={documentPreview} />}
+        {messageInfo && <MessageInfoModal isOpen={!!messageInfo} onClose={() => setMessageInfo(null)} message={messageInfo} />}
         <DeleteMessageDialog
           isOpen={isDeleteDialogOpen}
           onClose={() => setIsDeleteDialogOpen(false)}

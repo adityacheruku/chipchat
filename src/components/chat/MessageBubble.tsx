@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Eye, FileEdit, Mic, CheckCircle2 } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Eye, FileEdit, Mic, CheckCircle2, Info } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Tooltip,
@@ -43,6 +43,7 @@ interface MessageBubbleProps {
   onShowReactions: (message: Message, allUsers: Record<string, User>) => void;
   onShowMedia: (url: string, type: 'image' | 'video') => void;
   onShowDocumentPreview: (message: Message) => void;
+  onShowInfo: (message: Message) => void;
   allUsers: Record<string, User>;
   onRetrySend: (message: Message) => void;
   onDelete: (messageId: string, deleteType: DeleteType) => void;
@@ -186,23 +187,11 @@ const AudioPlayer = memo(({ message, sender, isCurrentUser }: { message: Message
 
             <div className="self-end text-xs opacity-70 whitespace-nowrap pl-2 flex items-center">
                 <span>{formattedTime}</span>
-                {isCurrentUser && <MessageStatusIndicator status={message.status} />}
             </div>
         </div>
     );
 });
 AudioPlayer.displayName = "AudioPlayer";
-
-const MessageStatusIndicator = ({ status }: { status: Message['status'] }) => {
-    switch (status) {
-        case 'sending': return <Clock size={12} className="inline-block ml-1" />;
-        case 'sent': return <Check size={14} className="inline-block ml-1" />;
-        case 'delivered': return <CheckCheck size={14} className="inline-block ml-1" />;
-        case 'read': return <CheckCheck size={14} className="inline-block ml-1 text-blue-500" />;
-        case 'failed': return <AlertTriangle size={12} className="inline-block ml-1 text-destructive" />;
-        default: return null;
-    }
-};
 
 function formatFileSize(bytes?: number | null): string | null {
   if (bytes === null || bytes === undefined) return null;
@@ -214,7 +203,7 @@ function formatFileSize(bytes?: number | null): string | null {
 }
 
 
-function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, onShowDocumentPreview, allUsers, onRetrySend, onDelete, onSetReplyingTo, wrapperId, isSelectionMode, isSelected, onEnterSelectionMode, onToggleSelection }: MessageBubbleProps) {
+function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId, onToggleReaction, onShowReactions, onShowMedia, onShowDocumentPreview, onShowInfo, allUsers, onRetrySend, onDelete, onSetReplyingTo, wrapperId, isSelectionMode, isSelected, onEnterSelectionMode, onToggleSelection }: MessageBubbleProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
@@ -249,7 +238,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
     }
   }, [message.id, message.status, message.mode, onToggleReaction, isSelectionMode]);
   
-  const doubleTapEvents = useDoubleTap(handleDoubleTap);
+  const doubleTapEvents = useDoubleTap(handleDoubleTap, { timeout: 300 });
   
   const handleBubbleClick = (e: React.MouseEvent) => {
     if (swipeHandlers.isSwiping()) {
@@ -454,7 +443,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
           <div className="flex items-center justify-center flex-shrink-0">
               <button onClick={() => onToggleSelection(message.id)} className="h-full px-2" aria-label={`Select message from ${sender.display_name}`}>
                   <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all", isSelected ? "bg-primary border-primary" : "border-muted-foreground")}>
-                      {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                      {isSelected && <CheckCircle2 className="w-5 h-5 text-primary" />}
                   </div>
               </button>
           </div>
@@ -515,6 +504,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => onSetReplyingTo(message)}><Reply className="mr-2 h-4 w-4" /> Reply</DropdownMenuItem>
+                    {isCurrentUser && <DropdownMenuItem onSelect={() => onShowInfo(message)}><Info className="mr-2 h-4 w-4" /> Info</DropdownMenuItem>}
                     <DropdownMenuItem onSelect={handleCopy} disabled={!message.text}><Copy className="mr-2 h-4 w-4" /> Copy</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
                 </DropdownMenuContent>
@@ -558,7 +548,6 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
                       </div>
                   )}
                   <span>{formattedTime}</span>
-                  {isCurrentUser && <MessageStatusIndicator status={message.status} />}
               </div>
               </div>
           )}

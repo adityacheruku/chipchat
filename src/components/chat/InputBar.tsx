@@ -438,7 +438,7 @@ function InputBar({
         </Button>
       </div>
       
-      <input type="file" ref={cameraInputRef} accept="image/*,video/*" capture className="hidden" onChange={handleFileSelect} />
+      <input type="file" ref={cameraInputRef} accept="image/*,video/*" className="hidden" onChange={handleFileSelect} />
       <input type="file" ref={imageInputRef} accept="image/*,video/*" className="hidden" onChange={handleFileSelect} multiple />
       <input type="file" ref={documentInputRef} className="hidden" onChange={handleFileSelect} multiple />
     </div>

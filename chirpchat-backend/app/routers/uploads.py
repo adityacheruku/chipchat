@@ -131,7 +131,7 @@ async def upload_chat_video(
             "file_url": result.get("secure_url"),
             "clip_type": "video",
             "thumbnail_url": thumbnail_url,
-            "duration_seconds": result.get('duration')
+            "duration_seconds": round(result.get("duration")) if result.get("duration") is not None else None,
         }
     except Exception as e:
         logger.error(f"Cloudinary chat video upload error for user {current_user.id}, file {file.filename}: {e}", exc_info=True)
