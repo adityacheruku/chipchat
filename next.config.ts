@@ -40,6 +40,16 @@ const nextConfig: NextConfig = {
         ...config.experiments,
         asyncWebAssembly: true,
     };
+    
+    // Blacklist Stencil's dynamic loader from SSR builds
+    if (isServer) {
+      config.module = config.module || {};
+      config.module.rules = config.module.rules || [];
+      config.module.rules.push({
+        test: /@stencil\/core\/internal\/client\/index\.js$/,
+        use: 'null-loader',
+      });
+    }
 
     return config;
   },
