@@ -78,19 +78,36 @@ async def handle_send_message(data: Dict[str, Any], websocket: WebSocket, curren
     
     now, message_db_id = datetime.now(timezone.utc), uuid4()
     if message_create.mode == MessageModeEnum.INCOGNITO:
-        incognito_message = MessageInDB(id=message_db_id, chat_id=chat_id, user_id=user_id, status=MessageStatusEnum.SENT, created_at=now, updated_at=now, reactions={}, **message_create.model_dump())
+        incognito_message = MessageInDB(id=message_db_id, chat_id=chat_id, user_id=user_id, status=MessageStatusEnum.SENT, created_at=now, updated_at=now, reactions={}, **message_create.model_dump(exclude={'chat_id', 'recipient_id'}), client_temp_id=client_temp_id)
         await ws_manager.mark_message_as_processed(client_temp_id)
         await ws_manager.send_ack(websocket, client_temp_id, str(message_db_id))
         await ws_manager.broadcast_chat_message(str(chat_id), incognito_message)
         return
 
-    message_data = message_create.model_dump(exclude_unset=True)
-    message_data.update({
-        "id": str(message_db_id), "chat_id": str(chat_id), "user_id": str(user_id),
-        "status": MessageStatusEnum.SENT.value, "created_at": "now()", "updated_at": "now()", "reactions": {},
-    })
-    
-    await db_manager.get_table("messages").insert(message_data).execute()
+    # Map frontend schema to new DB schema
+    message_data_to_insert = {
+        "id": str(message_db_id),
+        "chat_id": str(chat_id),
+        "user_id": str(user_id),
+        "text": message_create.text,
+        "media_type": message_create.message_subtype.value if message_create.message_subtype else 'text',
+        "mode": message_create.mode.value if message_create.mode else MessageModeEnum.NORMAL.value,
+        "status": MessageStatusEnum.SENT.value,
+        "upload_status": "completed", # Since this is after upload
+        "created_at": "now()",
+        "updated_at": "now()",
+        "reactions": {},
+        "client_temp_id": client_temp_id,
+        "reply_to_message_id": str(message_create.reply_to_message_id) if message_create.reply_to_message_id else None,
+        "sticker_id": str(message_create.sticker_id) if message_create.sticker_id else None,
+        "media_url": message_create.image_url or message_create.clip_url or message_create.document_url,
+        "thumbnail_url": message_create.image_thumbnail_url,
+        "preview_url": message_create.preview_url,
+        "file_metadata": json.dumps(message_create.file_metadata) if message_create.file_metadata else None,
+        "file_size": message_create.file_size_bytes
+    }
+
+    await db_manager.get_table("messages").insert(message_data_to_insert).execute()
     await ws_manager.mark_message_as_processed(client_temp_id)
     await ws_manager.send_ack(websocket, client_temp_id, str(message_db_id))
     await db_manager.get_table("chats").update({"updated_at": "now()"}).eq("id", str(chat_id)).execute()
@@ -131,5 +148,3 @@ async def handle_change_chat_mode(data: Dict[str, Any], current_user: UserPublic
     chat_id, mode = UUID(data["chat_id"]), data["mode"]
     if mode not in [m.value for m in MessageModeEnum] or not await ws_manager.is_user_in_chat(current_user.id, chat_id): return
     await ws_manager.broadcast_chat_mode_update(str(chat_id), mode)
-
-    

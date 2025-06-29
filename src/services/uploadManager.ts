@@ -73,24 +73,34 @@ class UploadManager {
       let fileToUpload: Blob = item.file;
       let mediaType = validation.fileType;
       let thumbnailDataUrl: string | undefined = undefined;
+      let eagerTransforms: string[] = [];
 
       if (mediaType === 'image') {
         const variants = await imageProcessor.processImage(item.file);
         fileToUpload = variants.compressed.blob;
         thumbnailDataUrl = variants.thumbnail.dataUrl;
         emitProgress({ messageId: item.messageId, status: 'processing', progress: 0, thumbnailDataUrl });
+        // Define standard transformations for images
+        eagerTransforms = [
+            "w_800,c_limit,q_auto,f_auto", // Preview version
+        ];
       } else if (mediaType === 'video') {
         this.queue[itemIndex].status = 'compressing';
         emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
         fileToUpload = await videoCompressor.compressVideo(item.file, 'medium', (progress) => {
             emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
         });
+        // Define standard transformations for videos (e.g., a thumbnail)
+        eagerTransforms = [
+            "w_400,h_400,c_limit,f_jpg,so_1" // Thumbnail from 1st second
+        ];
       }
 
       this.queue[itemIndex].status = 'uploading';
       emitProgress({ messageId: item.messageId, status: 'uploading', progress: 0, thumbnailDataUrl });
       
-      const { xhr, promise } = api.uploadFile(fileToUpload, mediaType, (progress) => {
+      const payload = { file_type: mediaType, eager: eagerTransforms };
+      const { xhr, promise } = api.uploadFile(fileToUpload, payload, (progress) => {
         const currentItem = this.queue[itemIndex];
         if (currentItem) {
           currentItem.progress = progress;

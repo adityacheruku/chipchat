@@ -322,8 +322,8 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
           case 'voice_message': return message.clip_url ? <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
           case 'image':
             return message.image_url ? (
-              <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[120px] h-[120px] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
-                  <Image src={message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
+              <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-[220px] h-auto aspect-[4/3] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
+                  <Image src={message.preview_url || message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
               </button>
             ) : <p className="text-sm italic">Image unavailable</p>;
           case 'clip':
@@ -396,7 +396,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
           <div className="flex items-center justify-center flex-shrink-0">
               <button onClick={() => onToggleSelection(message.id)} className="h-full px-2" aria-label={`Select message from ${sender.display_name}`}>
                   <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all", isSelected ? "bg-primary border-primary" : "border-muted-foreground")}>
-                      {isSelected && <CheckCircle2 className="w-5 h-5 text-primary" />}
+                      {isSelected && <CheckCircle2 className="w-5 h-5 text-primary-foreground" />}
                   </div>
               </button>
           </div>
@@ -440,7 +440,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
                   >
                     {renderMessageContent()}
                     {message.mode === 'incognito' && <Eye className="absolute top-1 right-1 h-3 w-3 text-muted-foreground/80" />}
-                    {isSelected && <div className="absolute inset-0 bg-primary/20 rounded-xl border-2 border-primary pointer-events-none" />}
+                    {isSelected && <div className="absolute inset-0 bg-primary/30 rounded-xl border-2 border-primary pointer-events-none" />}
                   </div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>

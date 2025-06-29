@@ -49,6 +49,7 @@ export interface Message {
   clip_placeholder_text?: string | null;
   image_url?: string | null;
   image_thumbnail_url?: string | null;
+  preview_url?: string | null; // For higher-quality inline previews
   document_url?: string | null;
   document_name?: string | null;
   sticker_id?: string | null;
@@ -58,6 +59,7 @@ export interface Message {
   uploadStatus?: 'pending' | 'processing' | 'compressing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   duration_seconds?: number | null;
   file_size_bytes?: number | null;
+  file_metadata?: Record<string, any> | null;
   audio_format?: string | null;
   transcription?: string | null;
   reply_to_message_id?: string | null;

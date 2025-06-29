@@ -145,17 +145,15 @@ export default function ChatPage() {
     const handleProgress = (update: UploadProgress) => {
       setMessages(prev => prev.map(m => {
         if (m.client_temp_id === update.messageId) {
-          const updatedMessage = { ...m };
+          const updatedMessage: Message = { ...m };
           if (update.status === 'completed' && update.result) {
             updatedMessage.uploadStatus = 'completed';
             updatedMessage.status = 'sending'; // Now waiting for WebSocket send
-            // Here you might update the message with final URLs if needed,
-            // but the server message will be the source of truth.
           } else if (update.status === 'failed') {
             updatedMessage.uploadStatus = 'failed';
             updatedMessage.status = 'failed';
             updatedMessage.uploadError = update.error;
-          } else if (update.status === 'uploading' || update.status === 'processing') {
+          } else { // pending, processing, compressing, uploading
             updatedMessage.uploadStatus = update.status;
             updatedMessage.uploadProgress = update.progress;
             if(update.thumbnailDataUrl) {
@@ -167,11 +165,13 @@ export default function ChatPage() {
         return m;
       }));
 
-      // When upload is completed, send the message via WebSocket
+      // When upload is completed, find the message and send its final data via WebSocket
       if (update.status === 'completed' && update.result) {
           const originalMessage = messages.find(m => m.client_temp_id === update.messageId);
           if (!originalMessage) return;
 
+          const result = update.result;
+          
           let payload: any = { 
               event_type: "send_message", 
               client_temp_id: update.messageId, 
@@ -179,27 +179,34 @@ export default function ChatPage() {
               mode: originalMessage.mode,
               reply_to_message_id: originalMessage.reply_to_message_id,
               message_subtype: originalMessage.message_subtype,
+              file_metadata: {
+                  name: result.original_filename,
+                  size: result.bytes,
+                  format: result.format,
+                  resource_type: result.resource_type,
+              }
           };
 
-          const result = update.result;
           if (originalMessage.message_subtype === 'image') {
-            payload.image_url = result.image_url;
-            payload.image_thumbnail_url = result.image_thumbnail_url;
-          } else if (originalMessage.message_subtype === 'clip') {
-            payload.clip_url = result.file_url;
-            payload.clip_type = result.clip_type;
-            payload.image_thumbnail_url = result.thumbnail_url;
-            payload.duration_seconds = result.duration_seconds;
+              payload.image_url = result.secure_url;
+              payload.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
+              payload.image_thumbnail_url = originalMessage.thumbnailDataUrl; // Keep local thumb for perf
+          } else if (originalMessage.message_subtype === 'clip' || originalMessage.message_subtype === 'voice_message') {
+              payload.clip_url = result.secure_url;
+              payload.image_thumbnail_url = result.eager?.[0]?.secure_url;
+              payload.duration_seconds = result.duration;
+              if (originalMessage.message_subtype === 'voice_message') {
+                 payload.clip_type = 'audio';
+                 payload.audio_format = result.format;
+              } else {
+                 payload.clip_type = 'video';
+              }
           } else if (originalMessage.message_subtype === 'document') {
-            payload.document_url = result.file_url;
-            payload.document_name = result.file_name;
-            payload.file_size_bytes = result.file_size_bytes;
-          } else if (originalMessage.message_subtype === 'voice_message') {
-            payload.clip_url = result.file_url;
-            payload.duration_seconds = result.duration_seconds;
-            payload.file_size_bytes = result.file_size_bytes;
-            payload.audio_format = result.audio_format;
+              payload.document_url = result.secure_url;
+              payload.document_name = result.original_filename;
+              payload.file_size_bytes = result.bytes;
           }
+          
           sendMessageWithTimeout(payload);
       }
     };
@@ -284,7 +291,7 @@ export default function ChatPage() {
   const handleToggleMessageSelection = useCallback((messageId: string) => {
     setSelectedMessageIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(newSet)) {
+      if (newSet.has(messageId)) {
         newSet.delete(messageId);
       } else {
         newSet.add(messageId);

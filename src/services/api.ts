@@ -115,16 +115,17 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/users/me/profile`, { method: 'PUT', headers: getApiHeaders(), body: JSON.stringify(data) });
     return handleResponse<UserInToken>(response);
   },
-  uploadFile: (file: Blob, fileType: string, onProgress: (p: number) => void): UploadRequest => {
+  uploadFile: (file: Blob, payload: { file_type: string, eager?: string[] }, onProgress: (p: number) => void): UploadRequest => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('file_type', fileType);
+    formData.append('payload', JSON.stringify(payload));
     return createUploadRequest(`${API_BASE_URL}/uploads/file`, formData, onProgress);
   },
   uploadAvatar: async (file: File, onProgress: (p: number) => void): Promise<{ file_url: string }> => {
     const formData = new FormData();
     formData.append('file', file);
-    return createUploadRequest(`${API_BASE_URL}/users/me/avatar`, formData, onProgress).promise;
+    formData.append('payload', JSON.stringify({ file_type: 'image' })); // Use the unified endpoint
+    return createUploadRequest(`${API_BASE_URL}/uploads/file`, formData, onProgress).promise;
   },
   changePassword: async (passwordData: PasswordChangeRequest): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/users/me/password`, { method: 'POST', headers: getApiHeaders(), body: JSON.stringify(passwordData) });
