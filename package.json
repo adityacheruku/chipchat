@@ -11,9 +11,12 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "cap:sync": "npx cap sync",
-    "build-mobile": "npm run build && npm run cap:sync"
+    "build-mobile": "npm run build && npm run cap:sync",
+    "postinstall": "patch-package && (test -d node_modules/@ffmpeg/core/dist && cp -R ./node_modules/@ffmpeg/core/dist/ ./public/ffmpeg || echo 'ffmpeg-core not found, skipping copy')"
   },
   "dependencies": {
+    "@ffmpeg/core": "^0.12.6",
+    "@ffmpeg/ffmpeg": "^0.12.10",
     "@genkit-ai/googleai": "^1.8.0",
     "@genkit-ai/next": "^1.8.0",
     "@hookform/resolvers": "^4.1.3",

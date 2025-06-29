@@ -55,7 +55,7 @@ export interface Message {
   sticker_image_url?: string | null;
   client_temp_id: string;
   status: MessageStatus;
-  uploadStatus?: 'pending' | 'processing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  uploadStatus?: 'pending' | 'processing' | 'compressing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   duration_seconds?: number | null;
   file_size_bytes?: number | null;
   audio_format?: string | null;
@@ -117,7 +117,7 @@ export interface UploadItem {
   messageId: string;
   chatId: string;
   priority: number;
-  status: 'pending' | 'processing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'processing' | 'compressing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   error?: UploadError;
   retryCount: number;
@@ -126,7 +126,7 @@ export interface UploadItem {
 
 export interface UploadProgress {
   messageId: string;
-  status: 'pending' | 'processing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'processing' | 'compressing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   error?: UploadError;
   result?: any;

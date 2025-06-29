@@ -4,6 +4,7 @@ import type { UploadItem, UploadProgress, UploadError } from '@/types';
 import { UploadErrorCode, ERROR_MESSAGES } from '@/types/uploadErrors';
 import { validateFile } from '@/utils/fileValidation';
 import { imageProcessor } from './imageProcessor';
+import { videoCompressor } from './videoCompressor';
 
 // A simple event emitter
 type ProgressListener = (progress: UploadProgress) => void;
@@ -16,7 +17,7 @@ const emitProgress = (progress: UploadProgress) => {
 class UploadManager {
   private queue: UploadItem[] = [];
   private activeUploads: Map<string, XMLHttpRequest> = new Map();
-  private maxConcurrentUploads = 3;
+  private maxConcurrentUploads = 2; // Reduced for potentially heavy compression tasks
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -60,7 +61,7 @@ class UploadManager {
     const itemIndex = this.queue.findIndex(q => q.id === item.id);
     if (itemIndex === -1) return;
 
-    this.queue[itemIndex].status = 'processing'; // New state for pre-upload work
+    this.queue[itemIndex].status = 'processing';
     emitProgress({ messageId: item.messageId, status: 'processing', progress: 0 });
 
     try {
@@ -70,7 +71,7 @@ class UploadManager {
       }
       
       let fileToUpload: Blob = item.file;
-      let mediaType = validation.fileType as 'image' | 'video' | 'audio' | 'document';
+      let mediaType = validation.fileType;
       let thumbnailDataUrl: string | undefined = undefined;
 
       if (mediaType === 'image') {
@@ -78,6 +79,12 @@ class UploadManager {
         fileToUpload = variants.compressed.blob;
         thumbnailDataUrl = variants.thumbnail.dataUrl;
         emitProgress({ messageId: item.messageId, status: 'processing', progress: 0, thumbnailDataUrl });
+      } else if (mediaType === 'video') {
+        this.queue[itemIndex].status = 'compressing';
+        emitProgress({ messageId: item.messageId, status: 'compressing', progress: 0 });
+        fileToUpload = await videoCompressor.compressVideo(item.file, 'medium', (progress) => {
+            emitProgress({ messageId: item.messageId, status: 'compressing', progress: progress.progress });
+        });
       }
 
       this.queue[itemIndex].status = 'uploading';
