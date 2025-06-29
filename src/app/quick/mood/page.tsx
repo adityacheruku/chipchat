@@ -6,13 +6,15 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Smile, Frown, Meh, PartyPopper, Brain, Glasses, Angry, HelpCircle, SmilePlus, Loader2 } from 'lucide-react';
+import { Smile, Frown, Meh, PartyPopper, Brain, Glasses, Angry, HelpCircle, SmilePlus } from 'lucide-react';
 import type { Mood } from '@/types';
 import { ALL_MOODS } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { cn } from '@/lib/utils';
+import Spinner from '@/components/common/Spinner';
+import FullPageLoader from '@/components/common/FullPageLoader';
 
 const moodIcons: Record<string, React.ElementType> = {
   Happy: Smile,
@@ -41,7 +43,7 @@ export default function QuickMoodPage() {
       toast({
         variant: "destructive",
         title: "Not Logged In",
-        description: "Please log in to ChirpChat first to set your mood.",
+        description: "Please log in to Kuchlu first to set your mood.",
         duration: 5000,
       });
       router.replace('/'); // Use replace to prevent back navigation to this page
@@ -82,12 +84,7 @@ export default function QuickMoodPage() {
   const isLoadingPage = isAuthLoading || (isAuthenticated && !currentUser);
 
   if (isLoadingPage) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
-        <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-        <p className="text-foreground">Loading your mood settings...</p>
-      </main>
-    );
+    return <FullPageLoader />;
   }
   
   if (!isAuthenticated || !currentUser) {
@@ -99,7 +96,7 @@ export default function QuickMoodPage() {
             <CardTitle className="text-2xl font-headline text-primary text-center">Access Denied</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-red-600 py-4">Please log in via the main ChirpChat app to use this feature.</p>
+            <p className="text-red-600 py-4">Please log in via the main Kuchlu app to use this feature.</p>
             <Button onClick={() => router.push('/')} className="w-full" variant="outline">
               Go to Login
             </Button>
@@ -155,7 +152,7 @@ export default function QuickMoodPage() {
           </div>
 
           <Button onClick={handleSetMood} className="w-full" disabled={!selectedMood || isSubmitting}>
-            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Set Mood & Go to Chat"}
+            {isSubmitting ? <Spinner /> : "Set Mood & Go to Chat"}
           </Button>
           <Button onClick={() => router.push('/chat')} className="w-full" variant="outline" disabled={isSubmitting}>
             Cancel & Go to Chat

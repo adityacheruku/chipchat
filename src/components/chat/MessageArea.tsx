@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRef } from 'react';
 import { useAutoScroll } from '@/hooks/useAutoScroll';
 import { Button } from '../ui/button';
-import { Loader2 } from 'lucide-react';
+import Spinner from '../common/Spinner';
 
 interface MessageAreaProps {
   viewportRef: RefObject<HTMLDivElement>;
@@ -61,7 +61,7 @@ function MessageArea({
         {hasMore && (
             <div className="text-center">
                 <Button variant="outline" size="sm" onClick={onLoadMore} disabled={isLoadingMore}>
-                    {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isLoadingMore && <Spinner className="mr-2 h-4 w-4" />}
                     Load Older Messages
                 </Button>
             </div>

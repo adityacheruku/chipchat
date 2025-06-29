@@ -12,7 +12,7 @@ import { useAvatar } from '@/hooks/useAvatar';
 import { MAX_AVATAR_SIZE_KB } from '@/config/app-config';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Camera } from 'lucide-react';
+import { Camera } from 'lucide-react';
 import SettingsHeader from '@/components/settings/SettingsHeader';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,6 +21,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useState, useRef, useEffect, type ChangeEvent } from 'react';
 import type { User } from '@/types';
+import FullPageLoader from '@/components/common/FullPageLoader';
+import Spinner from '@/components/common/Spinner';
 
 const profileFormSchema = z.object({
   display_name: z.string().min(2, "Name must be at least 2 characters.").max(50),
@@ -94,7 +96,7 @@ export default function AccountSettingsPage() {
         } finally { setIsDisconnecting(false); }
     }
 
-    if (isAuthLoading || !currentUser) return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+    if (isAuthLoading || !currentUser) return <FullPageLoader />;
 
     return (
         <div className="min-h-screen bg-muted/40 pb-16">
@@ -114,7 +116,7 @@ export default function AccountSettingsPage() {
                                      <FormField control={profileForm.control} name="display_name" render={({ field }) => (<FormItem className="flex-grow"><FormLabel>Display Name</FormLabel><FormControl><Input placeholder="Your display name" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                 </div>
                                 <FormField control={profileForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" placeholder="your@email.com" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                <Button type="submit" disabled={isSubmittingProfile}>{isSubmittingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes</Button>
+                                <Button type="submit" disabled={isSubmittingProfile}>{isSubmittingProfile && <Spinner className="mr-2 h-4 w-4" />} Save Changes</Button>
                             </form>
                         </Form>
                     </CardContent>
@@ -132,7 +134,7 @@ export default function AccountSettingsPage() {
                                          <FormField control={passwordForm.control} name="new_password" render={({ field }) => (<FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                          <DialogFooter>
                                             <DialogClose asChild><Button id="close-password-dialog" type="button" variant="ghost">Cancel</Button></DialogClose>
-                                            <Button type="submit" disabled={isSubmittingPassword}>{isSubmittingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Update Password</Button>
+                                            <Button type="submit" disabled={isSubmittingPassword}>{isSubmittingPassword && <Spinner className="mr-2 h-4 w-4" />} Update Password</Button>
                                          </DialogFooter>
                                     </form>
                                 </Form>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -8,8 +9,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Loader2 } from 'lucide-react';
 import SettingsHeader from '@/components/settings/SettingsHeader';
+import FullPageLoader from '@/components/common/FullPageLoader';
 
 const SettingsItem = ({ children }: { children: React.ReactNode }) => {
     return <div className="flex items-center justify-between py-4">{children}</div>;
@@ -33,7 +34,7 @@ export default function NotificationSettingsPage() {
     };
 
      if (isAuthLoading || !currentUser) {
-        return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+        return <FullPageLoader />;
     }
 
     const masterNotificationsEnabled = isSubscribed && permissionStatus === 'granted';

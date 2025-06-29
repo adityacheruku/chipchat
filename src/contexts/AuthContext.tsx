@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const isAuthenticated = !!token && !!currentUser;
 
   const handleAuthSuccess = useCallback((data: AuthResponse) => {
-    localStorage.setItem('chirpChatToken', data.access_token);
+    localStorage.setItem('kuchluToken', data.access_token);
     api.setAuthToken(data.access_token);
     setCurrentUser(data.user);
     setToken(data.access_token);
@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setCurrentUser(null);
     setToken(null);
     api.setAuthToken(null);
-    localStorage.removeItem('chirpChatToken');
+    localStorage.removeItem('kuchluToken');
     if (pathname !== '/') {
         router.push('/');
     }
@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [router, toast, pathname]);
   
   useEffect(() => {
-    const storedToken = localStorage.getItem('chirpChatToken');
+    const storedToken = localStorage.getItem('kuchluToken');
     if (storedToken) {
       const loadUserFromToken = async (tokenToLoad: string) => {
         try {
@@ -88,7 +88,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const data: AuthResponse = await api.completeRegistration(userData);
       handleAuthSuccess(data);
-       toast({ title: 'Registration Successful!', description: 'Welcome to ChirpChat.' });
+       toast({ title: 'Registration Successful!', description: 'Welcome to Kuchlu.' });
     } catch (error: any)
     {
       toast({ variant: 'destructive', title: 'Registration Failed', description: error.message || 'Please try again.' });

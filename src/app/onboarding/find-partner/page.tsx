@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
-import { Loader2, UserPlus, Mail, Share2, Check, X, BellRing, Send, Clock, LogOut } from 'lucide-react';
+import { UserPlus, Mail, Share2, Check, X, BellRing, Send, Clock, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import FullPageLoader from '@/components/common/FullPageLoader';
 
 export default function FindPartnerPage() {
     const { currentUser, isLoading: isAuthLoading, isAuthenticated, fetchAndUpdateUser, logout } = useAuth();
@@ -106,7 +107,7 @@ export default function FindPartnerPage() {
         if (navigator.share) {
             try {
                 await navigator.share({
-                    title: 'Join me on ChirpChat!',
+                    title: 'Join me on Kuchlu!',
                     text: inviteMessage,
                     url: window.location.origin,
                 });
@@ -121,11 +122,7 @@ export default function FindPartnerPage() {
     };
 
     if (isAuthLoading || isLoading) {
-        return (
-            <div className="flex min-h-screen items-center justify-center bg-background">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-        );
+        return <FullPageLoader />;
     }
     
     const filteredSuggestions = suggestions.filter(user => 

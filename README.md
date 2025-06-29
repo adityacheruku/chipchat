@@ -1,9 +1,9 @@
 
-# ChirpChat: Comprehensive Project Documentation
+# Kuchlu: Comprehensive Project Documentation
 
 ## 1. Project Overview
 
-ChirpChat is a modern, real-time messaging application designed to foster deep emotional connection between two partners. It goes beyond simple text messaging by integrating features like shared moods, "thinking of you" pings, and dynamic chat interfaces that reflect the users' emotional states.
+Kuchlu is a modern, real-time messaging application designed to foster deep emotional connection between two partners. It goes beyond simple text messaging by integrating features like shared moods, "thinking of you" pings, and dynamic chat interfaces that reflect the users' emotional states.
 
 The application is built as a Progressive Web App (PWA), ensuring a seamless, native-like experience on both desktop and mobile devices, with offline capabilities and push notifications.
 
@@ -26,7 +26,7 @@ The application is built as a Progressive Web App (PWA), ensuring a seamless, na
 
 ## 2. Technical Architecture
 
-ChirpChat uses a modern, decoupled architecture with a Next.js frontend and a FastAPI backend. This separation of concerns allows for independent development, scaling, and maintenance.
+Kuchlu uses a modern, decoupled architecture with a Next.js frontend and a FastAPI backend. This separation of concerns allows for independent development, scaling, and maintenance.
 
 ### 2.1. Frontend (Next.js)
 
@@ -98,7 +98,7 @@ The real-time system is designed to be robust and resilient.
 
 ### 4.1. Environment Variables
 
-Create a `.env` file in the `chirpchat-backend` directory and populate it with the following keys. These are essential for connecting to Supabase, Redis, and Cloudinary.
+Create a `.env` file in the `kuchlu-backend` directory and populate it with the following keys. These are essential for connecting to Supabase, Redis, and Cloudinary.
 
 ```env
 # Supabase
@@ -130,7 +130,7 @@ VAPID_ADMIN_EMAIL=mailto:your-admin-email@example.com
 
 **Backend (FastAPI)**
 
-1.  Navigate to the `chirpchat-backend` directory.
+1.  Navigate to the `kuchlu-backend` directory.
 2.  Install dependencies: `pip install -r requirements.txt`
 3.  Run the server: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
 

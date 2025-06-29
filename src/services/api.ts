@@ -11,7 +11,7 @@ let currentAuthToken: string | null = null;
 
 function getAuthToken(): string | null {
   if (currentAuthToken) return currentAuthToken;
-  if (typeof window !== 'undefined') return localStorage.getItem('chirpChatToken');
+  if (typeof window !== 'undefined') return localStorage.getItem('kuchluToken');
   return null;
 }
 

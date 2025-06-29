@@ -1,6 +1,7 @@
-# ChirpChat Backend: In-Depth Documentation
 
-This document provides a comprehensive technical guide to the ChirpChat backend API. It covers the architecture, core systems, and a detailed reference for every API endpoint.
+# Kuchlu Backend: In-Depth Documentation
+
+This document provides a comprehensive technical guide to the Kuchlu backend API. It covers the architecture, core systems, and a detailed reference for every API endpoint.
 
 ## 1. Technical Architecture
 
@@ -175,7 +176,7 @@ The WebSocket connection is the primary real-time communication channel.
 ## 4. Developer Setup
 
 ### 4.1. Environment Variables
-Create a `.env` file in this directory (`chirpchat-backend`) and populate it with the required keys from `.env.example`.
+Create a `.env` file in this directory (`kuchlu-backend`) and populate it with the required keys from `.env.example`.
 
 ### 4.2. Running the Application
 1.  Install dependencies: `pip install -r requirements.txt`

@@ -1,6 +1,7 @@
+
 {
-  "appId": "com.chirpchat.app",
-  "appName": "ChirpChat",
+  "appId": "com.kuchlu.app",
+  "appName": "Kuchlu",
   "webDir": "out",
   "bundledWebRuntime": false
 }

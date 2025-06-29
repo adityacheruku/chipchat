@@ -8,7 +8,7 @@ import dynamic from 'next/dynamic';
 import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData, ChatHistoryClearedEventData } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
-import { useMoodSuggestion } from '@/hooks/useMoodSuggestion';
+import { useMoodSuggestion } from '@/hooks/useMoodSuggestion.tsx';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { THINKING_OF_YOU_DURATION, ENABLE_AI_MOOD_SUGGESTION } from '@/config/app-config';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useRealtime } from '@/hooks/useRealtime';
-import { Loader2, Wifi, WifiOff, Trash2 } from 'lucide-react';
+import { Wifi, WifiOff, Trash2 } from 'lucide-react';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
@@ -33,21 +33,21 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from '@/components/ui/button';
+import FullPageLoader from '@/components/common/FullPageLoader';
+import Spinner from '@/components/common/Spinner';
 
 
 const MemoizedMessageArea = memo(MessageArea);
 const MemoizedChatHeader = memo(ChatHeader);
 const MemoizedInputBar = memo(InputBar);
-const FIRST_MESSAGE_SENT_KEY = 'chirpChat_firstMessageSent';
+const FIRST_MESSAGE_SENT_KEY = 'kuchlu_firstMessageSent';
 const MESSAGE_SEND_TIMEOUT_MS = 15000;
 
-const ModalLoader = () => <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>;
-
-const FullScreenAvatarModal = dynamic(() => import('@/components/chat/FullScreenAvatarModal'), { ssr: false, loading: () => <ModalLoader /> });
-const FullScreenMediaModal = dynamic(() => import('@/components/chat/FullScreenMediaModal'), { ssr: false, loading: () => <ModalLoader /> });
-const MoodEntryModal = dynamic(() => import('@/components/chat/MoodEntryModal'), { ssr: false, loading: () => <ModalLoader /> });
-const ReactionSummaryModal = dynamic(() => import('@/components/chat/ReactionSummaryModal'), { ssr: false, loading: () => <ModalLoader /> });
-const DocumentPreviewModal = dynamic(() => import('@/components/chat/DocumentPreviewModal'), { ssr: false, loading: () => <ModalLoader /> });
+const FullScreenAvatarModal = dynamic(() => import('@/components/chat/FullScreenAvatarModal'), { ssr: false, loading: () => <FullPageLoader /> });
+const FullScreenMediaModal = dynamic(() => import('@/components/chat/FullScreenMediaModal'), { ssr: false, loading: () => <FullPageLoader /> });
+const MoodEntryModal = dynamic(() => import('@/components/chat/MoodEntryModal'), { ssr: false, loading: () => <FullPageLoader /> });
+const ReactionSummaryModal = dynamic(() => import('@/components/chat/ReactionSummaryModal'), { ssr: false, loading: () => <FullPageLoader /> });
+const DocumentPreviewModal = dynamic(() => import('@/components/chat/DocumentPreviewModal'), { ssr: false, loading: () => <FullPageLoader /> });
 
 
 export default function ChatPage() {
@@ -276,7 +276,7 @@ export default function ChatPage() {
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'ChirpChat Conversation', text: selectedText });
+        await navigator.share({ title: 'Kuchlu Conversation', text: selectedText });
       } catch (error) {
         if ((error as Error).name !== 'AbortError') console.error('Share failed:', error);
       }
@@ -372,12 +372,12 @@ export default function ChatPage() {
   const ConnectionStatusBanner = () => {
     if (protocol === 'disconnected' && !isBrowserOnline) return <div className="fixed top-0 left-0 right-0 bg-destructive text-destructive-foreground p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><WifiOff size={16} />You are offline. Features may be limited.</div>;
     if (protocol === 'sse' || protocol === 'fallback') return <div className="fixed top-0 left-0 right-0 bg-amber-500 text-black p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Wifi size={16} />Connected via fallback. Some features may be slower.</div>;
-    if (protocol === 'connecting' || protocol === 'syncing') return <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" />{protocol === 'syncing' ? 'Syncing...' : 'Connecting...'}</div>;
+    if (protocol === 'connecting' || protocol === 'syncing') return <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white p-2 text-center text-sm z-50 flex items-center justify-center gap-2"><Spinner />{protocol === 'syncing' ? 'Syncing...' : 'Connecting...'}</div>;
     return null;
   };
 
-  if (isLoadingPage || !currentUser) return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-4">Loading your chat...</p></div>;
-  if (!otherUser || !activeChat) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}</div></div>;
+  if (isLoadingPage || !currentUser) return <FullPageLoader />;
+  if (!otherUser || !activeChat) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><FullPageLoader /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}</div></div>;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">

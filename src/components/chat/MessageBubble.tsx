@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Loader2, Eye, FileEdit, Mic, CheckCircle2 } from 'lucide-react';
+import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, Check, CheckCheck, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Eye, FileEdit, Mic, CheckCircle2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Tooltip,
@@ -29,6 +29,7 @@ import { useDoubleTap } from '@/hooks/useDoubleTap';
 import DeleteMessageDialog from './DeleteMessageDialog';
 import { useSwipe } from '@/hooks/useSwipe';
 import { useLongPress } from '@/hooks/useLongPress';
+import Spinner from '../common/Spinner';
 
 const EMOJI_ONLY_REGEX = /^(?:[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\udbff][\udc00-\udfff]|[\u0023-\u0039]\ufe0f?\u20e3|\u3299|\u3297|\u303d|\u3030|\u24c2|\ud83c[\udd70-\udd71]|\ud83c[\udd7e-\udd7f]|\ud83c\udd8e|\ud83c[\udd91-\udd9a]|\ud83c[\udde6-\uddff]|\ud83c[\ude01-\ude02]|\ud83c\ude1a|\ud83c\ude2f|\ud83c[\ude32-\ude3a]|\ud83c[\ude50-\ude51]|\u203c|\u2049|[\u25aa-\u25ab]|\u25b6|\u25c0|[\u25fb-\u25fe]|\u00a9|\u00ae|\u2122|\u2139|\ud83c\udc04|[\u2600-\u26FF]|\u2b05|\u2b06|\u2b07|\u2b1b|\u2b1c|\u2b50|\u2b55|\u231a|\u231b|\u2328|\u23cf|[\u23e9-\u23f3]|[\u23f8-\u23fa]|\ud83c\udccf|\u2934|\u2935|[\u2190-\u21ff])+$/;
 
@@ -308,7 +309,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
       if (message.message_subtype === 'document') {
         return (
           <div className="w-48 flex items-center gap-2 opacity-50">
-            <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin text-muted-foreground" />
+            <Spinner />
             <span className="truncate">{message.file?.name || 'Uploading...'}</span>
           </div>
         );
@@ -326,13 +327,13 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
               />
             )}
             <div className="absolute inset-0 bg-black/20" />
-            <Loader2 className="animate-spin h-8 w-8 text-white/90 relative z-10" />
+            <Spinner />
           </div>
         );
       }
       return (
         <div className="w-48 flex items-center gap-2">
-          <Loader2 className="w-6 h-6 flex-shrink-0 animate-spin text-muted-foreground opacity-50" />
+          <Spinner />
           <p className="text-xs font-semibold truncate opacity-50">{message.file?.name || 'File'}</p>
         </div>
       );
@@ -363,7 +364,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
           case 'clip': return message.clip_url ? (
              <button onClick={() => onShowMedia(message.clip_url!, 'video')} className="flex items-center gap-2 group/media">
                   <PlayCircle size={32} className={cn(isCurrentUser ? "text-primary-foreground/80" : "text-secondary-foreground/80", "group-hover/media:scale-110 transition-transform")} />
-                  <span className="text-sm italic underline hover:opacity-80">{message.clip_placeholder_text || `View ${message.clip_type} clip`}</span>
+                  <span className="text-sm italic underline hover:opacity-80">{message.text || `View ${message.clip_type} clip`}</span>
              </button>
           ) : <p className="text-sm italic">Clip unavailable</p>;
           case 'document':

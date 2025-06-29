@@ -6,11 +6,13 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Image as ImageIcon, UploadCloud, Loader2 } from 'lucide-react';
+import { Image as ImageIcon, UploadCloud } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import type { DefaultChatPartnerResponse, Chat } from '@/types';
+import Spinner from '@/components/common/Spinner';
+import FullPageLoader from '@/components/common/FullPageLoader';
 
 export default function QuickImagePage() {
   const router = useRouter();
@@ -30,7 +32,7 @@ export default function QuickImagePage() {
       toast({
         variant: "destructive",
         title: "Not Logged In",
-        description: "Please log in to ChirpChat first to send an image.",
+        description: "Please log in to Kuchlu first to send an image.",
         duration: 5000,
       });
       router.replace('/');
@@ -112,12 +114,7 @@ export default function QuickImagePage() {
   const isLoadingPage = isAuthLoading || (isAuthenticated && isLoadingRecipient);
 
   if (isLoadingPage) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
-        <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-        <p className="text-foreground">Loading image sender...</p>
-      </main>
-    );
+    return <FullPageLoader />;
   }
 
    if (!isAuthenticated || !currentUser) {
@@ -126,7 +123,7 @@ export default function QuickImagePage() {
         <Card className="w-full max-w-md shadow-xl text-center">
            <CardHeader><CardTitle className="text-center">Access Denied</CardTitle></CardHeader>
            <CardContent>
-             <p className="text-red-600 py-4">Please log in via the main ChirpChat app.</p>
+             <p className="text-red-600 py-4">Please log in via the main Kuchlu app.</p>
              <Button onClick={() => router.push('/')} className="w-full" variant="outline">Go to Login</Button>
            </CardContent>
         </Card>
@@ -175,7 +172,7 @@ export default function QuickImagePage() {
           </div>
           
           <Button onClick={handleSendImage} className="w-full" disabled={!selectedFile || isSubmitting || !recipientChat}>
-            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Send Image"}
+            {isSubmitting ? <Spinner /> : "Send Image"}
           </Button>
           <Button onClick={() => router.push('/chat')} className="w-full" variant="outline" disabled={isSubmitting}>
             Back to Chat

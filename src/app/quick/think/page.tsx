@@ -5,12 +5,13 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Heart, Loader2 } from 'lucide-react';
+import { Heart } from 'lucide-react';
 import type { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { cn } from '@/lib/utils';
+import FullPageLoader from '@/components/common/FullPageLoader';
 
 export default function QuickThinkPage() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function QuickThinkPage() {
       toast({
         variant: "destructive",
         title: "Not Logged In",
-        description: "Please log in to ChirpChat first to send a ping.",
+        description: "Please log in to Kuchlu first to send a ping.",
         duration: 5000,
       });
       router.replace('/');
@@ -64,12 +65,7 @@ export default function QuickThinkPage() {
   const isLoadingPage = isAuthLoading || (isAuthenticated && isLoadingPartner && !pingSent);
 
   if (isLoadingPage) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
-        <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-        <p className="text-foreground">Sending your ping...</p>
-      </main>
-    );
+    return <FullPageLoader />;
   }
 
   if (!isAuthenticated) {
@@ -80,7 +76,7 @@ export default function QuickThinkPage() {
             <CardTitle className="text-2xl font-headline text-primary text-center">Access Denied</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-red-600 py-4">Please log in via the main ChirpChat app to use this feature.</p>
+            <p className="text-red-600 py-4">Please log in via the main Kuchlu app to use this feature.</p>
             <Button onClick={() => router.push('/')} className="w-full" variant="outline">Go to Login</Button>
           </CardContent>
         </Card>

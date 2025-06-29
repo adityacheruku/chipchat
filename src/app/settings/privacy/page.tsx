@@ -9,10 +9,11 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
-import { Loader2, ChevronRight, Trash2, FileText } from 'lucide-react';
+import { ChevronRight, Trash2, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import SettingsHeader from '@/components/settings/SettingsHeader';
 import { api } from '@/services/api';
+import FullPageLoader from '@/components/common/FullPageLoader';
 
 const SettingsItemButton = ({ children, onClick, destructive=false, ...props }: { children: React.ReactNode, onClick?: () => void, destructive?: boolean, disabled?: boolean }) => {
     return (
@@ -56,7 +57,7 @@ export default function PrivacySettingsPage() {
     };
 
     if (isAuthLoading || !currentUser) {
-        return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+        return <FullPageLoader />;
     }
 
     return (

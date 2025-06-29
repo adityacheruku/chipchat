@@ -10,7 +10,7 @@ const EVENTS_BASE_URL = API_BASE_URL;
 
 const HEARTBEAT_INTERVAL = 30000;
 const SERVER_ACTIVITY_TIMEOUT = 45000;
-const LAST_SEQUENCE_KEY = 'chirpChat_lastSequence';
+const LAST_SEQUENCE_KEY = 'kuchlu_lastSequence';
 const RECONNECT_DELAY_MS = 5000;
 
 export type RealtimeProtocol = 'connecting' | 'websocket' | 'sse' | 'disconnected' | 'fallback' | 'syncing';

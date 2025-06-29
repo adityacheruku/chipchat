@@ -19,7 +19,7 @@ import {
 import { MoodSuggestionToast } from '@/components/toasts/MoodSuggestionToast';
 
 const DEBOUNCE_DELAY = 1500;
-const DONT_SUGGEST_AGAIN_KEY = 'chirpChat_dontSuggestMoodAgain';
+const DONT_SUGGEST_AGAIN_KEY = 'kuchlu_dontSuggestMoodAgain';
 
 interface UseMoodSuggestionProps {
   currentUserMood: Mood;

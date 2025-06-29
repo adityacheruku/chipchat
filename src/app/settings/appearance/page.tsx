@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -7,8 +8,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Loader2 } from 'lucide-react';
 import SettingsHeader from '@/components/settings/SettingsHeader';
+import FullPageLoader from '@/components/common/FullPageLoader';
 
 const SettingsItem = ({ children }: { children: React.ReactNode }) => {
     return <div className="flex items-center justify-between py-4">{children}</div>;
@@ -46,7 +47,7 @@ export default function AppearanceSettingsPage() {
     };
 
     if (isAuthLoading || !currentUser) {
-        return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+        return <FullPageLoader />;
     }
 
     return (

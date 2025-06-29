@@ -6,7 +6,7 @@ import React, { useState, type FormEvent, useRef, type ChangeEvent, useEffect, u
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Smile, Mic, Paperclip, Loader2, X, Image as ImageIcon, Camera, FileText, StickyNote, Gift, ShieldAlert, EyeOff, MessageCircle, Trash2 } from 'lucide-react';
+import { Send, Smile, Mic, Paperclip, X, Image as ImageIcon, Camera, FileText, StickyNote, Gift, ShieldAlert, EyeOff, MessageCircle, Trash2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTrigger } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,6 +15,7 @@ import { PICKER_EMOJIS, type MessageMode, type Message, type User } from '@/type
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
+import Spinner from '../common/Spinner';
 
 interface InputBarProps {
   onSendMessage: (text: string, mode: MessageMode, replyToId?: string) => void;
@@ -128,7 +129,7 @@ function InputBar({
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedEmojis = localStorage.getItem('chirpChat_recentEmojis');
+      const savedEmojis = localStorage.getItem('kuchlu_recentEmojis');
       if (savedEmojis) setRecentEmojis(JSON.parse(savedEmojis));
     }
     // Add keyframes for wave animation to the document head
@@ -151,7 +152,7 @@ function InputBar({
     setRecentEmojis(prev => {
       const newRecents = [emoji, ...prev.filter(e => e !== emoji)].slice(0, 20);
       if (typeof window !== 'undefined') {
-        localStorage.setItem('chirpChat_recentEmojis', JSON.stringify(newRecents));
+        localStorage.setItem('kuchlu_recentEmojis', JSON.stringify(newRecents));
       }
       return newRecents;
     });
@@ -424,7 +425,7 @@ function InputBar({
           aria-label={isRecording ? "Send voice message" : showSendButton ? "Send message" : "Record voice message"}
         >
           {isSending ? (
-            <Loader2 size={22} className="animate-spin" />
+            <Spinner />
           ) : isRecording ? (
             <Send size={22} />
           ) : showSendButton ? (

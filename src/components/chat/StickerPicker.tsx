@@ -8,12 +8,13 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Sticker, StickerPack } from '@/types';
-import { Clock, Search, Star, Loader2, Frown } from 'lucide-react';
+import { Clock, Search, Star, Frown } from 'lucide-react';
 import { api } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
 import { useLongPress } from '@/hooks/useLongPress';
+import Spinner from '../common/Spinner';
 
 interface StickerPickerProps {
     onStickerSelect: (stickerId: string) => void;
@@ -38,7 +39,7 @@ const StickerGrid = memo(({
     favoriteStickerIds: Set<string>;
 }) => {
     if (status === 'loading') {
-      return <div className="h-64 flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>
+      return <div className="h-64 flex items-center justify-center"><Spinner /></div>
     }
     if (status === 'error') {
        return (

@@ -23,8 +23,8 @@ from app.routers.partners import router as partners_router
 from app.routers.events import router as events_router
 
 app = FastAPI(
-    title="ChirpChat API",
-    description="Backend API for ChirpChat",
+    title="Kuchlu API",
+    description="Backend API for Kuchlu",
     version="1.0.0",
 )
 
@@ -42,7 +42,7 @@ else:
             "http://localhost:9002",
             "capacitor://localhost",
             "http://localhost",
-            "https://chipchat.vercel.app", # Example production domain
+            "https://kuchlu.vercel.app", # Example production domain
         ],
         "allow_origin_regex": r"https?:\/\/.*\.vercel\.app"
     }
@@ -80,7 +80,7 @@ async def health_check():
     
     response_content = {
         "status": "healthy" if redis_healthy else "unhealthy",
-        "service": "chirpchat-api", "version": app.version,
+        "service": "kuchlu-api", "version": app.version,
         "dependencies": {"redis": "healthy" if redis_healthy else "unhealthy"}
     }
     

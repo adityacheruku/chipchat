@@ -7,7 +7,7 @@ import { api } from '@/services/api';
 import type { NotificationSettings } from '@/types';
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-const PUSH_SUBSCRIPTION_KEY = 'chirpChatPushSubscription';
+const PUSH_SUBSCRIPTION_KEY = 'kuchluPushSubscription';
 
 // Helper function to convert base64 string to Uint8Array
 function urlBase64ToUint8Array(base64String: string) {

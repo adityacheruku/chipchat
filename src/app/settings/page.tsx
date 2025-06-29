@@ -8,9 +8,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, ChevronRight, User, Bell, Palette, Shield, LogOut } from 'lucide-react';
+import { ArrowLeft, ChevronRight, User, Bell, Palette, Shield, LogOut } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Separator } from '@/components/ui/separator';
+import FullPageLoader from '@/components/common/FullPageLoader';
 
 const SettingsLink = ({ href, icon, title, description }: { href: string; icon: React.ElementType; title: string; description: string }) => {
     const Icon = icon;
@@ -40,7 +41,7 @@ export default function SettingsHubPage() {
     }, [isAuthLoading, isAuthenticated, router]);
 
     if (isAuthLoading || !currentUser) {
-        return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+        return <FullPageLoader />;
     }
 
     return (
