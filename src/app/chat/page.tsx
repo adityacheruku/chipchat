@@ -141,74 +141,75 @@ export default function ChatPage() {
     onChatHistoryCleared: (chatId) => { if (activeChat?.id === chatId) setMessages([]); },
   });
 
+  const sendMessageWithTimeout = useCallback((messagePayload: any) => {
+    sendMessage(messagePayload);
+    pendingMessageTimeouts.current[messagePayload.client_temp_id] = setTimeout(() => setMessageAsFailed(messagePayload.client_temp_id), MESSAGE_SEND_TIMEOUT_MS);
+  }, [sendMessage, setMessageAsFailed]);
+
   // Listen to upload progress events
   useEffect(() => {
     const handleProgress = (update: UploadProgress) => {
-      setMessages(prev => prev.map(m => {
-        if (m.client_temp_id === update.messageId) {
-          const updatedMessage: MessageType = { ...m };
-          if (update.status === 'completed' && update.result) {
+      setMessages(prev => {
+        const messageIndex = prev.findIndex(m => m.client_temp_id === update.messageId);
+        if (messageIndex === -1) return prev;
+
+        const newMessages = [...prev];
+        const updatedMessage: MessageType = { ...newMessages[messageIndex]! };
+
+        if (update.status === 'completed' && update.result) {
             updatedMessage.uploadStatus = 'completed';
-            updatedMessage.status = 'sending'; // Now waiting for WebSocket send
-          } else if (update.status === 'failed') {
+            updatedMessage.status = 'sending';
+        } else if (update.status === 'failed') {
             updatedMessage.uploadStatus = 'failed';
             updatedMessage.status = 'failed';
             updatedMessage.uploadError = update.error;
-          } else { // pending, processing, compressing, uploading
+        } else {
             updatedMessage.uploadStatus = update.status;
             updatedMessage.uploadProgress = update.progress;
-            if(update.thumbnailDataUrl) {
-              updatedMessage.thumbnailDataUrl = update.thumbnailDataUrl;
+            if (update.thumbnailDataUrl) {
+                updatedMessage.thumbnailDataUrl = update.thumbnailDataUrl;
             }
-          }
-          return updatedMessage;
         }
-        return m;
-      }));
+        newMessages[messageIndex] = updatedMessage;
+        
+        if (update.status === 'completed' && update.result) {
+            const originalMessage = updatedMessage;
+            const result = update.result;
+            let payload: any = {
+                event_type: "send_message",
+                client_temp_id: update.messageId,
+                chat_id: originalMessage.chat_id,
+                mode: originalMessage.mode,
+                reply_to_message_id: originalMessage.reply_to_message_id,
+                message_subtype: originalMessage.message_subtype,
+                file_metadata: result.file_metadata,
+            };
+            if (originalMessage.message_subtype === 'image') {
+                payload.image_url = result.secure_url;
+                payload.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
+                payload.image_thumbnail_url = originalMessage.thumbnailDataUrl;
+            } else if (['clip', 'voice_message', 'audio'].includes(originalMessage.message_subtype!)) {
+                payload.clip_url = result.secure_url;
+                payload.image_thumbnail_url = result.eager?.[0]?.secure_url;
+                payload.duration_seconds = result.duration;
+                payload.clip_type = (originalMessage.message_subtype === 'clip') ? 'video' : 'audio';
+                if (payload.clip_type === 'audio') {
+                    payload.audio_format = result.format;
+                }
+            } else if (originalMessage.message_subtype === 'document') {
+                payload.document_url = result.secure_url;
+                payload.document_name = result.original_filename;
+                payload.file_size_bytes = result.bytes;
+            }
+            sendMessageWithTimeout(payload);
+        }
 
-      // When upload is completed, find the message and send its final data via WebSocket
-      if (update.status === 'completed' && update.result) {
-          const originalMessage = messages.find(m => m.client_temp_id === update.messageId);
-          if (!originalMessage) return;
-
-          const result = update.result;
-          
-          let payload: any = { 
-              event_type: "send_message", 
-              client_temp_id: update.messageId, 
-              chat_id: originalMessage.chat_id,
-              mode: originalMessage.mode,
-              reply_to_message_id: originalMessage.reply_to_message_id,
-              message_subtype: originalMessage.message_subtype,
-              file_metadata: result.file_metadata,
-          };
-          
-          if (originalMessage.message_subtype === 'image') {
-              payload.image_url = result.secure_url;
-              payload.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
-              payload.image_thumbnail_url = originalMessage.thumbnailDataUrl; // Keep local thumb for perf
-          } else if (originalMessage.message_subtype === 'clip' || originalMessage.message_subtype === 'voice_message' || originalMessage.message_subtype === 'audio') {
-              payload.clip_url = result.secure_url;
-              payload.image_thumbnail_url = result.eager?.[0]?.secure_url;
-              payload.duration_seconds = result.duration;
-              if (originalMessage.message_subtype === 'voice_message' || originalMessage.message_subtype === 'audio') {
-                 payload.clip_type = 'audio';
-                 payload.audio_format = result.format;
-              } else {
-                 payload.clip_type = 'video';
-              }
-          } else if (originalMessage.message_subtype === 'document') {
-              payload.document_url = result.secure_url;
-              payload.document_name = result.original_filename;
-              payload.file_size_bytes = result.bytes;
-          }
-          
-          sendMessageWithTimeout(payload);
-      }
+        return newMessages;
+      });
     };
     const unsubscribe = uploadManager.subscribe(handleProgress);
     return () => unsubscribe();
-  }, [setMessages, sendMessage, messages]);
+  }, [setMessages, sendMessageWithTimeout]);
 
 
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast });
@@ -303,11 +304,6 @@ export default function ChatPage() {
     sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChat.id });
     if (isTyping) typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChat.id }), 3000);
   }, [activeChat, sendMessage]);
-
-  const sendMessageWithTimeout = useCallback((messagePayload: any) => {
-    sendMessage(messagePayload);
-    pendingMessageTimeouts.current[messagePayload.client_temp_id] = setTimeout(() => setMessageAsFailed(messagePayload.client_temp_id), MESSAGE_SEND_TIMEOUT_MS);
-  }, [sendMessage, setMessageAsFailed]);
 
   const handleSendMessage = useCallback((text: string, mode: MessageMode, replyToId?: string) => {
     if (!currentUser || !activeChat || !text.trim()) return;

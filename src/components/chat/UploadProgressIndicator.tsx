@@ -2,7 +2,7 @@
 "use client";
 
 import { Progress } from "@/components/ui/progress";
-import { AlertTriangle, ImageOff, RefreshCw } from "lucide-react";
+import { AlertTriangle, FileText, ImageOff, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import Spinner from "../common/Spinner";
 import { Button } from "../ui/button";
@@ -15,13 +15,11 @@ interface UploadProgressIndicatorProps {
 
 export default function UploadProgressIndicator({ message, onRetry }: UploadProgressIndicatorProps) {
     if (message.status === 'failed' || message.uploadStatus === 'failed') {
+        const Icon = message.message_subtype === 'image' ? ImageOff : FileText;
         return (
             <div className="w-[120px] h-[120px] rounded-md border-2 border-dashed border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center p-2 text-center text-destructive">
-                <ImageOff size={28} className="mb-2" />
+                <Icon size={28} className="mb-2" />
                 <p className="text-xs font-semibold mb-2">Upload Failed</p>
-                <p className="text-xs text-destructive/80 mb-2 leading-tight">
-                    {message.uploadError?.message || "An unknown error occurred."}
-                </p>
                 {message.uploadError?.retryable && (
                     <Button variant="destructive" size="sm" onClick={onRetry} className="h-auto px-2 py-1 text-xs">
                         <RefreshCw size={12} className="mr-1" />
@@ -32,24 +30,32 @@ export default function UploadProgressIndicator({ message, onRetry }: UploadProg
         );
     }
     
-    // Default to uploading view
     const imageUrl = message.thumbnailDataUrl || message.image_url;
+    const isDocument = message.message_subtype === 'document';
 
     return (
-        <div className="w-[120px] h-[120px] rounded-md overflow-hidden bg-muted relative flex items-center justify-center animate-pulse">
-            {imageUrl && (
+        <div className="w-full h-full rounded-md overflow-hidden bg-muted relative flex items-center justify-center animate-pulse p-2">
+            {imageUrl && !isDocument ? (
                 <Image
-                    src={imageUrl} // Use local blob URL or data URL
+                    src={imageUrl}
                     alt="Uploading preview"
                     fill
                     className="object-cover"
                     loading="lazy"
                 />
+            ) : isDocument ? (
+                 <div className="flex flex-col items-center justify-center text-muted-foreground text-center">
+                    <FileText size={40} />
+                    <p className="text-xs mt-2 break-all line-clamp-2">{message.file?.name}</p>
+                 </div>
+            ) : (
+                <div className="w-full h-full bg-muted"></div>
             )}
-            <div className="absolute inset-0 bg-black/20" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-2 text-center">
                 <Spinner />
                 <p className="text-xs font-semibold mt-2">{message.uploadProgress || 0}%</p>
+                {message.uploadStatus === 'compressing' && <p className="text-xs mt-1">Compressing...</p>}
             </div>
         </div>
     );
