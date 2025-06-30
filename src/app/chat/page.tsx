@@ -170,31 +170,23 @@ export default function ChatPage() {
       const originalMessage = messages.find(m => m.client_temp_id === update.messageId);
 
       if (update.status === 'completed' && update.result && originalMessage) {
-        const result = update.result;
         
         // 1. Prepare a clean object with only the fields relevant for the MessageType
         const messageUpdateData: Partial<MessageType> = {
             uploadStatus: 'completed',
             status: 'sending', // It's now ready to be sent via websocket
-            file_metadata: result.file_metadata,
+            file_metadata: update.result.file_metadata,
+            image_url: update.result.secure_url,
+            preview_url: update.result.eager?.[0]?.secure_url || update.result.secure_url,
+            clip_url: update.result.secure_url,
+            image_thumbnail_url: update.result.eager?.[0]?.secure_url,
+            duration_seconds: update.result.duration,
+            clip_type: (originalMessage.message_subtype === 'clip') ? 'video' : 'audio',
+            audio_format: update.result.format,
+            document_url: update.result.secure_url,
+            document_name: update.result.original_filename,
+            file_size_bytes: update.result.bytes
         };
-
-        if (originalMessage.message_subtype === 'image') {
-            messageUpdateData.image_url = result.secure_url;
-            messageUpdateData.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
-        } else if (['clip', 'voice_message', 'audio'].includes(originalMessage.message_subtype!)) {
-            messageUpdateData.clip_url = result.secure_url;
-            messageUpdateData.image_thumbnail_url = result.eager?.[0]?.secure_url;
-            messageUpdateData.duration_seconds = result.duration;
-            messageUpdateData.clip_type = (originalMessage.message_subtype === 'clip') ? 'video' : 'audio';
-            if (messageUpdateData.clip_type === 'audio') {
-                messageUpdateData.audio_format = result.format;
-            }
-        } else if (originalMessage.message_subtype === 'document') {
-            messageUpdateData.document_url = result.secure_url;
-            messageUpdateData.document_name = result.original_filename;
-            messageUpdateData.file_size_bytes = result.bytes;
-        }
         
         // 2. Update the local database with the clean data
         await storageService.updateMessage(update.messageId, messageUpdateData);
@@ -601,7 +593,7 @@ export default function ChatPage() {
                 isSelectionMode={isSelectionMode}
                 selectedMessageIds={selectedMessageIds}
                 onEnterSelectionMode={handleEnterSelectionMode}
-                onToggleMessageSelection={onToggleMessageSelection}
+                onToggleMessageSelection={handleToggleMessageSelection}
                 onShowInfo={handleShowInfo}
               />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendVideo={handleSendVideo} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} replyingTo={replyingTo} onCancelReply={handleCancelReply} allUsers={allUsersForMessageArea} />
