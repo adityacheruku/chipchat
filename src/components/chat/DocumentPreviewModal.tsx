@@ -4,7 +4,7 @@
 import type { Message } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { FileText, Download, ArrowUpRightFromSquare } from 'lucide-react';
+import { FileText, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface DocumentPreviewModalProps {
@@ -45,31 +45,6 @@ export default function DocumentPreviewModal({ isOpen, onClose, message }: Docum
     }
   };
 
-  const handleOpenIn = async () => {
-    if (!message?.document_url || !message.document_name) return;
-
-    try {
-        const response = await fetch(message.document_url);
-        const blob = await response.blob();
-        const file = new File([blob], message.document_name, { type: blob.type });
-
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-                files: [file],
-                title: message.document_name,
-                text: `Check out this document: ${message.document_name}`,
-            });
-        } else {
-             window.open(message.document_url, '_blank', 'noopener,noreferrer');
-        }
-    } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
-          console.error("Share failed, falling back:", error);
-          window.open(message.document_url, '_blank', 'noopener,noreferrer');
-        }
-    }
-  };
-
   if (!message) return null;
 
   return (
@@ -92,14 +67,10 @@ export default function DocumentPreviewModal({ isOpen, onClose, message }: Docum
                 )}
             </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 p-4">
+        <div className="p-4">
             <Button onClick={handleDownload} className="w-full">
                 <Download className="mr-2 h-4 w-4" />
                 Download
-            </Button>
-            <Button onClick={handleOpenIn} variant="secondary" className="w-full">
-                <ArrowUpRightFromSquare className="mr-2 h-4 w-4" />
-                Open In…
             </Button>
         </div>
       </SheetContent>

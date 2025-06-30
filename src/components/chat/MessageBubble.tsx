@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { Message, User, SupportedEmoji, DeleteType } from '@/types';
@@ -8,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { PlayCircle, SmilePlus, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, MoreHorizontal, Reply, Forward, Copy, Trash2, Heart, ImageOff, Eye, FileEdit, Mic, CheckCircle2, Info, Music } from 'lucide-react';
+import { PlayCircle, FileText, Clock, Play, Pause, AlertTriangle, RefreshCw, MoreHorizontal, Reply, Copy, Trash2, Heart, ImageOff, Eye, Mic, CheckCircle2, Info, Music } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Tooltip,
@@ -310,7 +309,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
   
   const isStickerMessage = message.message_subtype === 'sticker';
   const isEmojiOnlyMessage = message.message_subtype === 'text' && message.text && EMOJI_ONLY_REGEX.test(message.text.trim()) && message.text.trim().length <= 5;
-  const isMediaBubble = isStickerMessage || isEmojiOnlyMessage || message.message_subtype === 'image' || message.message_subtype === 'voice_message' || message.message_subtype === 'audio' || (message.message_subtype === 'clip' && message.clip_type === 'video');
+  const isMediaBubble = isStickerMessage || isEmojiOnlyMessage || message.message_subtype === 'image' || message.message_subtype === 'voice_message' || message.message_subtype === 'audio' || (message.message_subtype === 'clip' && message.clip_type === 'video') || message.message_subtype === 'document';
 
 
   let formattedTime = "sending...";
@@ -328,22 +327,15 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
   const repliedToSender = repliedToMessage ? allUsers[repliedToMessage.user_id] : null;
 
   const renderMessageContent = () => {
-    if (message.status === 'uploading' || (message.status === 'failed' && (message.message_subtype === 'image' || message.message_subtype === 'document'))) {
-      return (
-        <UploadProgressIndicator 
-            message={message} 
-            onRetry={() => handleRetry(message)} 
-        />
-      );
-    }
-    
     const content = (() => {
         switch (message.message_subtype) {
           case 'sticker': return message.sticker_image_url ? <Image src={message.sticker_image_url} alt="Sticker" width={128} height={128} className="bg-transparent animate-pop" unoptimized loading="lazy" /> : null;
           case 'voice_message': return message.clip_url ? <AudioPlayer message={message} sender={sender} isCurrentUser={isCurrentUser} /> : <p className="text-sm italic">Voice message unavailable</p>;
           case 'audio': return message.clip_url ? <AudioFilePlayer message={message} isCurrentUser={isCurrentUser} allUsers={allUsers} /> : <p className="text-sm italic">Audio file unavailable</p>;
           case 'image':
-            return message.image_url ? (
+            return message.status === 'uploading' || (message.status === 'failed' && !message.image_url) ? (
+                <div className="w-[250px] aspect-[4/3] rounded-md overflow-hidden"><UploadProgressIndicator message={message} onRetry={() => handleRetry(message)} /></div>
+            ) : message.image_url ? (
               <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-full max-w-[250px] aspect-[4/3] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
                   <Image src={message.preview_url || message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} layout="fill" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
               </button>
@@ -361,20 +353,46 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
             }
             return <p className="text-sm italic">Clip unavailable</p>;
           case 'document':
-            return message.document_url ? (
-               <div onClick={() => onShowDocumentPreview(message)} className={cn('flex items-center gap-3 p-3 rounded-lg cursor-pointer w-full max-w-[280px]', isCurrentUser ? 'bg-primary-foreground/10 hover:bg-primary-foreground/20' : 'bg-muted hover:bg-muted/80')} aria-label={`Preview document: ${message.document_name}`}>
-                <div className="flex-shrink-0 p-2 bg-background rounded-md"><FileText size={24} className="text-primary" /></div>
-                <div className="flex flex-col text-left min-w-0">
-                    <span className="font-medium text-sm line-clamp-2 text-foreground">{message.document_name || 'Document'}</span>
-                    <span className="text-xs text-muted-foreground">{formatFileSize(message.file_size_bytes) || 'Click to preview'}</span>
-                </div>
-              </div>
-          ) : (
-              <div className="flex items-center p-3 text-destructive">
-                <AlertTriangle className="w-6 h-6 mr-2" />
-                <span className="text-sm">Cannot load document</span>
-              </div>
-          );
+             if (message.status === 'uploading' || (message.status === 'failed' && !message.document_url)) {
+                return (
+                    <div className={cn('w-full max-w-[280px] h-[72px] rounded-lg', bubbleColorClass)}>
+                        <UploadProgressIndicator message={message} onRetry={() => handleRetry(message)} />
+                    </div>
+                );
+             }
+             if (!message.document_url) {
+                return (
+                    <div className={cn('flex items-center gap-3 p-3 rounded-lg w-full max-w-[280px]', bubbleColorClass, 'bg-destructive/80')}>
+                        <AlertTriangle className="w-6 h-6 mr-2" />
+                        <span className="text-sm">Cannot load document</span>
+                    </div>
+                );
+             }
+             const fileExtension = message.document_name?.split('.').pop()?.toUpperCase() || 'File';
+             return (
+                <button 
+                    onClick={() => onShowDocumentPreview(message)} 
+                    className={cn(
+                        'flex items-center gap-3 p-3 rounded-lg cursor-pointer w-full max-w-[280px] text-left transition-colors',
+                        isCurrentUser
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'bg-secondary text-secondary-foreground hover:bg-muted'
+                    )}
+                    aria-label={`Preview document: ${message.document_name}`}
+                >
+                    <div className={cn("flex-shrink-0 p-3 rounded-full", isCurrentUser ? "bg-primary-foreground/10" : "bg-primary/10")}>
+                        <FileText size={24} className={cn(isCurrentUser ? "text-primary-foreground" : "text-primary")} />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                        <span className="font-medium text-sm line-clamp-2">{message.document_name || 'Document'}</span>
+                        <span className="text-xs opacity-80">
+                            {formatFileSize(message.file_size_bytes) || ''}
+                            {message.file_size_bytes && fileExtension ? ' • ' : ''}
+                            {fileExtension}
+                        </span>
+                    </div>
+                </button>
+             );
           case 'text':
           case 'emoji_only':
           default: return message.text ? <p className={cn("text-sm whitespace-pre-wrap break-words", isEmojiOnlyMessage && "text-5xl")}>{message.text}</p> : <p className="text-sm italic">Message unavailable</p>;
@@ -396,7 +414,7 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
 
   const showRetry = message.status === 'failed' && onRetrySend && message.message_subtype !== 'image' && message.message_subtype !== 'document';
   const reactionsDisabled = message.mode === 'incognito' || isSelectionMode;
-  const swipeDisabled = isMediaBubble || isSelectionMode || message.message_subtype === 'document';
+  const swipeDisabled = isMediaBubble || isSelectionMode;
   const isVoiceOrAudioMessage = message.message_subtype === 'voice_message' || message.message_subtype === 'audio';
 
   const RightSwipeIcon = isCurrentUser ? Trash2 : Reply;
@@ -452,10 +470,10 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
                     onContextMenu={(e) => { if (!isSelectionMode) e.preventDefault(); }}
                     className={cn(
                       'relative rounded-xl shadow-md transition-all active:scale-95',
-                      isMediaBubble || message.message_subtype === 'document' ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
+                      isMediaBubble ? 'p-0 bg-transparent shadow-none' : cn(bubbleColorClass, 'p-3'),
                       isVoiceOrAudioMessage && cn(bubbleColorClass, 'p-0'),
-                      !isMediaBubble && message.message_subtype !== 'document' && !repliedToMessage && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
-                      !isMediaBubble && message.message_subtype !== 'document' && !repliedToMessage && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
+                      !isMediaBubble && !repliedToMessage && `after:content-[''] after:absolute after:bottom-0 after:w-0 after:h-0 after:border-[10px] after:border-solid after:border-transparent`,
+                      !isMediaBubble && !repliedToMessage && (isCurrentUser ? 'after:right-[-8px] after:border-l-primary' : 'after:left-[-8px] after:border-r-secondary'),
                       message.mode === 'fight' && !isMediaBubble && 'border-2 border-destructive/80',
                       (message.mode === 'incognito' && message.status !== 'sending') && 'border-2 border-dashed border-muted-foreground/50'
                     )}
@@ -539,5 +557,3 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
 }
 
 export default memo(MessageBubble);
-
-    
