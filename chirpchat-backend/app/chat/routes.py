@@ -1,8 +1,10 @@
 
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime, timezone
+import json
 
 from app.chat.schemas import (
     ChatCreate, ChatResponse, ChatListResponse, MessageCreate, MessageInDB,
@@ -19,21 +21,56 @@ import uuid
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
+def map_db_message_to_schema(message_data: dict) -> dict:
+    """Centralized function to map raw DB message data to a schema-compatible dict."""
+    if not message_data:
+        return {}
+    
+    # Map DB column names to Pydantic model field names
+    if message_data.get('media_type'):
+        message_data['message_subtype'] = message_data['media_type']
+    
+    if message_data.get('media_url'):
+        subtype = message_data.get('message_subtype')
+        if subtype == 'image':
+            message_data['image_url'] = message_data['media_url']
+            if message_data.get('thumbnail_url'):
+                message_data['image_thumbnail_url'] = message_data.get('thumbnail_url')
+        elif subtype in ['clip', 'voice_message', 'audio']:
+            message_data['clip_url'] = message_data['media_url']
+            if message_data.get('thumbnail_url'):
+                message_data['image_thumbnail_url'] = message_data.get('thumbnail_url')
+        elif subtype == 'document':
+            message_data['document_url'] = message_data['media_url']
+
+    if message_data.get('file_size'):
+        message_data['file_size_bytes'] = message_data['file_size']
+
+    # Unpack file_metadata JSON string into top-level fields
+    if isinstance(message_data.get('file_metadata'), str):
+        try:
+            metadata = json.loads(message_data['file_metadata'])
+            message_data.update(metadata)
+        except (json.JSONDecodeError, TypeError):
+            pass 
+
+    status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
+    if message_data.get("status") in status_map:
+        message_data["status"] = status_map[message_data["status"]]
+        
+    if message_data.get("stickers"):
+        message_data["sticker_image_url"] = message_data["stickers"].get("image_url")
+    
+    return message_data
+
 async def get_message_with_details_from_db(message_id: UUID) -> Optional[MessageInDB]:
-    """Helper function to fetch a message and join its sticker details."""
+    """Helper function to fetch a message and join its sticker/media details."""
     try:
         response = await db_manager.get_table("messages").select("*, stickers(image_url)").eq("id", str(message_id)).maybe_single().execute()
         if not response.data: return None
         
-        message_data = response.data
-        status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
-        if message_data.get("status") in status_map:
-            message_data["status"] = status_map[message_data["status"]]
-            
-        if message_data.get("stickers"):
-            message_data["sticker_image_url"] = message_data["stickers"].get("image_url")
-            del message_data["stickers"]
-        return MessageInDB(**message_data)
+        mapped_data = map_db_message_to_schema(response.data)
+        return MessageInDB.model_validate(mapped_data)
     except Exception as e:
         logger.error(f"Error getting message with details from DB for message {message_id}: {e}", exc_info=True)
         return None
@@ -44,15 +81,11 @@ async def get_chat_list_for_user(user_id: UUID) -> List[ChatResponse]:
         rpc_response = await db_manager.admin_client.rpc('get_user_chat_list', {'p_user_id': str(user_id)}).execute()
         if not rpc_response.data: return []
 
-        status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
-        
         for chat_data in rpc_response.data:
             if chat_data.get('last_message'):
-                last_message_status = chat_data['last_message'].get('status')
-                if last_message_status in status_map:
-                    chat_data['last_message']['status'] = status_map[last_message_status]
+                chat_data['last_message'] = map_db_message_to_schema(chat_data['last_message'])
         
-        return [ChatResponse.model_validate(chat_data) for chat_data in rpc_response.data]
+        return [ChatResponse.model_validate(chat) for chat in rpc_response.data]
     except Exception as e:
         logger.error(f"Error calling get_user_chat_list RPC for user {user_id}: {e}", exc_info=True)
         return []
@@ -162,18 +195,12 @@ async def get_messages(chat_id: UUID, limit: int = 50, before_timestamp: Optiona
     messages_resp = await query.execute()
     
     messages_data_list = messages_resp.data or []
-    status_map = {"sent_to_server": "sent", "delivered_to_recipient": "delivered", "read_by_recipient": "read"}
     cleaned_messages = []
 
     for m in reversed(messages_data_list):
-        if m.get("status") in status_map:
-            m["status"] = status_map[m["status"]]
-        if m.get("stickers"):
-            m["sticker_image_url"] = m["stickers"].get("image_url")
-            del m["stickers"]
-        cleaned_messages.append(m)
+        cleaned_messages.append(map_db_message_to_schema(m))
         
-    return MessageListResponse(messages=[MessageInDB(**m) for m in cleaned_messages])
+    return MessageListResponse(messages=[MessageInDB.model_validate(m) for m in cleaned_messages])
 
 @router.post("/{chat_id}/messages", response_model=MessageInDB)
 async def send_message_http(chat_id: UUID, message_create: MessageCreate, current_user: UserPublic = Depends(get_current_active_user)):
@@ -248,3 +275,4 @@ async def react_to_message(message_id: UUID, reaction_toggle: ReactionToggle, cu
 
     await ws_manager.broadcast_reaction_update(chat_id_str, message_for_response)
     return message_for_response
+
