@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Send, Smile, Mic, Paperclip, X, Image as ImageIcon, Camera, FileText, StickyNote, Gift, ShieldAlert, EyeOff, MessageCircle, Trash2 } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StickerPicker from './StickerPicker';
@@ -42,7 +42,7 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
   return (
     <div className="relative w-16 h-16 rounded-md overflow-hidden border bg-muted flex-shrink-0">
       {file.type.startsWith('image/') ? (
-        <Image src={fileUrl} alt={file.name} fill objectFit="cover" />
+        <Image src={fileUrl} alt={file.name} fill className="object-cover" />
       ) : file.type.startsWith('audio/') ? (
          <div className="flex flex-col items-center justify-center h-full p-1 text-center bg-primary/20">
           <Mic className="w-6 h-6 text-primary" />
@@ -394,7 +394,13 @@ function InputBar({
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" type="button" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring flex-shrink-0" aria-label="Attach file or change mode" disabled={isSending || disabled}><Paperclip size={22} /></Button>
               </SheetTrigger>
-              <SheetContent side="bottom" className="p-0 border-t bg-card h-auto rounded-t-lg"><AttachmentPicker /></SheetContent>
+              <SheetContent side="bottom" className="p-0 border-t bg-card h-auto rounded-t-lg">
+                  <SheetHeader className="sr-only">
+                    <SheetTitle>Attachments and Modes</SheetTitle>
+                    <SheetDescription>Select a file to attach or change the chat mode.</SheetDescription>
+                  </SheetHeader>
+                  <AttachmentPicker />
+              </SheetContent>
             </Sheet>
         )}
         
@@ -412,7 +418,13 @@ function InputBar({
                         <SheetTrigger asChild>
                             <Button variant="ghost" size="icon" type="button" className="absolute right-1 bottom-1 h-9 w-9 text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-full focus-visible:ring-ring" aria-label="Open emoji and sticker panel" disabled={isSending || disabled}><Smile size={22} /></Button>
                         </SheetTrigger>
-                        <SheetContent side="bottom" className="p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col"><ToolsPicker /></SheetContent>
+                        <SheetContent side="bottom" className="p-0 border-t bg-card h-[60%] rounded-t-lg flex flex-col">
+                            <SheetHeader className="sr-only">
+                                <SheetTitle>Emoji and Sticker Picker</SheetTitle>
+                                <SheetDescription>Select an emoji, sticker, or GIF to send.</SheetDescription>
+                            </SheetHeader>
+                            <ToolsPicker />
+                        </SheetContent>
                     </Sheet>
                 </>
             )}
