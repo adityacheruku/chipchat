@@ -19,7 +19,7 @@ import Spinner from '@/components/common/Spinner';
 
 const BrandSection = () => (
     <div className="max-w-md">
-      <Image src="https://placehold.co/400x300.png" alt="Kuchlu App Logo" width={400} height={300} className="rounded-lg object-cover shadow-lg" data-ai-hint="app logo" priority/>
+      <Image src="/icon/icon-512.png" alt="Kuchlu App Logo" width={400} height={300} className="rounded-lg object-cover shadow-lg" data-ai-hint="app logo" priority/>
       <h1 className="text-2xl font-bold mt-8 text-foreground">"One soulmate, infinite moods"</h1>
       <p className="text-muted-foreground mt-2">speak your heart in a single tap.</p>
     </div>
