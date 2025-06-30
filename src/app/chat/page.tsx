@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback, useRef, memo, useMemo, useLayo
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import dynamic from 'next/dynamic';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { User, Message as MessageType, Mood, SupportedEmoji, Chat, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, MessageAckEventData, MessageMode, ChatModeChangedEventData, DeleteType, MessageDeletedEventData, ChatHistoryClearedEventData, UploadProgress, MessageSubtype } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useThoughtNotification } from '@/hooks/useThoughtNotification';
@@ -18,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useRealtime } from '@/hooks/useRealtime';
 import { uploadManager } from '@/services/uploadManager';
+import { storageService } from '@/services/storageService';
 import { Wifi, WifiOff, Trash2, Video, File } from 'lucide-react';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
@@ -63,9 +65,16 @@ export default function ChatPage() {
   const { currentUser, token, logout, fetchAndUpdateUser, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { isSubscribed, permissionStatus, subscribeToPush, isPushApiSupported } = usePushNotifications();
 
-  const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<MessageType[]>([]);
+  
+  // Use Dexie's live query to reactively update messages from IndexedDB
+  const messages = useLiveQuery(
+    () => activeChatId ? storageService.messages.where('chat_id').equals(activeChatId).sortBy('created_at') : [],
+    [activeChatId],
+    []
+  );
+
   const [isChatLoading, setIsChatLoading] = useState(true);
   const [dynamicBgClass, setDynamicBgClass] = useState('bg-mood-default-chat-area');
   const [chatSetupErrorMessage, setChatSetupErrorMessage] = useState<string | null>(null);
@@ -96,49 +105,57 @@ export default function ChatPage() {
   const lastMessageTextRef = useRef<string>("");
   const handleSendThoughtRef = useRef<() => void>(() => {});
   const pendingMessageTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
-
+  
   const setMessageAsFailed = useCallback((clientTempId: string) => {
-    setMessages(prev => prev.map(msg => msg.client_temp_id === clientTempId && msg.status === 'sending' ? { ...msg, status: 'failed' } : msg));
+    storageService.updateMessage(clientTempId, { status: 'failed' });
     delete pendingMessageTimeouts.current[clientTempId];
   }, []);
 
-  const handleMessageAck = useCallback((ackData: MessageAckEventData) => {
-      if (pendingMessageTimeouts.current[ackData.client_temp_id]) {
-        clearTimeout(pendingMessageTimeouts.current[ackData.client_temp_id]);
-        delete pendingMessageTimeouts.current[ackData.client_temp_id];
-      }
-      setMessages(prev => prev.map(msg => msg.client_temp_id === ackData.client_temp_id ? { ...msg, id: ackData.server_assigned_id, status: 'sent' } : msg));
+  const handleMessageAck = useCallback(async (ackData: MessageAckEventData) => {
+    if (pendingMessageTimeouts.current[ackData.client_temp_id]) {
+      clearTimeout(pendingMessageTimeouts.current[ackData.client_temp_id]);
+      delete pendingMessageTimeouts.current[ackData.client_temp_id];
+    }
+    await storageService.updateMessage(ackData.client_temp_id, { id: ackData.server_assigned_id, status: 'sent' });
   }, []);
 
-  const handleNewMessage = useCallback((newMessageFromServer: MessageType) => {
-    setMessages(prev => {
-      const messageExists = prev.some(m => m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id);
-      if (messageExists) {
-          return prev.map(m => (m.client_temp_id === newMessageFromServer.client_temp_id || m.id === newMessageFromServer.id) ? { ...newMessageFromServer, status: newMessageFromServer.status || 'sent' } : m);
-      }
-      return [...prev, { ...newMessageFromServer, status: newMessageFromServer.status || 'sent' }];
-    });
-    if (activeChat && newMessageFromServer.chat_id === activeChat.id && newMessageFromServer.mode !== 'incognito' && newMessageFromServer.message_subtype !== 'history_cleared_marker') {
-        setActiveChat(prev => prev ? ({...prev, last_message: newMessageFromServer, updated_at: newMessageFromServer.updated_at }) : null);
+  const handleNewMessage = useCallback(async (newMessageFromServer: MessageType) => {
+    await storageService.addMessage({ ...newMessageFromServer, status: newMessageFromServer.status || 'sent' });
+    if(otherUser && newMessageFromServer.user_id !== otherUser.id) {
+       await storageService.upsertUser(otherUser);
     }
-  }, [activeChat]);
-  
+  }, [otherUser]);
+
   const handleMessageDeleted = useCallback((data: MessageDeletedEventData) => {
-    setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
+    storageService.deleteMessage(data.message_id);
   }, []);
   
-  const handlePresenceUpdate = useCallback((data: UserPresenceUpdateEventData) => setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : prev), []);
-  const handleProfileUpdate = useCallback((data: UserProfileUpdateEventData) => setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, ...data } : prev), []);
-  const handleTypingUpdate = useCallback((data: TypingIndicatorEventData) => { if (activeChat?.id === data.chat_id) setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }))}, [activeChat]);
-  const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => { if (activeChat?.id === data.chat_id) setChatMode(data.mode); }, [activeChat]);
+  const handlePresenceUpdate = useCallback(async (data: UserPresenceUpdateEventData) => {
+    setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood } : prev);
+    if (otherUser && data.user_id === otherUser.id) {
+      await storageService.upsertUser({ ...otherUser, is_online: data.is_online, last_seen: data.last_seen, mood: data.mood });
+    }
+  }, [otherUser]);
+
+  const handleProfileUpdate = useCallback(async (data: UserProfileUpdateEventData) => {
+    setOtherUser(prev => (prev && data.user_id === prev.id) ? { ...prev, ...data } : prev);
+    if (otherUser && data.user_id === otherUser.id) {
+      await storageService.upsertUser({ ...otherUser, ...data });
+    }
+  }, [otherUser]);
+
+  const handleTypingUpdate = useCallback((data: TypingIndicatorEventData) => { if (activeChatId === data.chat_id) setTypingUsers(prev => ({ ...prev, [data.user_id]: { userId: data.user_id, isTyping: data.is_typing } }))}, [activeChatId]);
+  const handleChatModeChanged = useCallback((data: ChatModeChangedEventData) => { if (activeChatId === data.chat_id) setChatMode(data.mode); }, [activeChatId]);
   const handleThinkingOfYou = useCallback((data: ThinkingOfYouReceivedEventData) => { if (otherUser?.id === data.sender_id) toast({ title: "❤️ Thinking of You!", description: `${otherUser.display_name} is thinking of you.` })}, [otherUser, toast]);
-  const handleChatHistoryCleared = useCallback((data: ChatHistoryClearedEventData) => { if(activeChat?.id === data.chat_id) setMessages([]); }, [activeChat]);
+  const handleChatHistoryCleared = useCallback((data: ChatHistoryClearedEventData) => { if(activeChatId === data.chat_id) storageService.messages.where('chat_id').equals(data.chat_id).delete(); }, [activeChatId]);
 
   const { protocol, sendMessage, isBrowserOnline } = useRealtime({
-    onMessageReceived: handleNewMessage, onReactionUpdate: (data) => setMessages(prev => prev.map(msg => msg.id === data.message_id ? { ...msg, reactions: data.reactions } : msg)), onPresenceUpdate: handlePresenceUpdate,
+    onMessageReceived: handleNewMessage, 
+    onReactionUpdate: async (data) => await storageService.updateMessage(data.message_id, { reactions: data.reactions }),
+    onPresenceUpdate: handlePresenceUpdate,
     onTypingUpdate: handleTypingUpdate, onThinkingOfYouReceived: handleThinkingOfYou, onUserProfileUpdate: handleProfileUpdate,
     onMessageAck: handleMessageAck, onChatModeChanged: handleChatModeChanged, onMessageDeleted: handleMessageDeleted,
-    onChatHistoryCleared: (chatId) => { if (activeChat?.id === chatId) setMessages([]); },
+    onChatHistoryCleared: (chatId) => { if (activeChatId === chatId) storageService.messages.where('chat_id').equals(chatId).delete(); },
   });
 
   const sendMessageWithTimeout = useCallback((messagePayload: any) => {
@@ -149,67 +166,53 @@ export default function ChatPage() {
   // Listen to upload progress events
   useEffect(() => {
     const handleProgress = (update: UploadProgress) => {
-      setMessages(prev => {
-        const messageIndex = prev.findIndex(m => m.client_temp_id === update.messageId);
-        if (messageIndex === -1) return prev;
+      if (update.status === 'completed' && update.result) {
+        const originalMessage = messages.find(m => m.client_temp_id === update.messageId);
+        if (!originalMessage) return;
 
-        const newMessages = [...prev];
-        const updatedMessage: MessageType = { ...newMessages[messageIndex]! };
-
-        if (update.status === 'completed' && update.result) {
-            updatedMessage.uploadStatus = 'completed';
-            updatedMessage.status = 'sending';
-        } else if (update.status === 'failed') {
-            updatedMessage.uploadStatus = 'failed';
-            updatedMessage.status = 'failed';
-            updatedMessage.uploadError = update.error;
-        } else {
-            updatedMessage.uploadStatus = update.status;
-            updatedMessage.uploadProgress = update.progress;
-            if (update.thumbnailDataUrl) {
-                updatedMessage.thumbnailDataUrl = update.thumbnailDataUrl;
+        const result = update.result;
+        let payload: any = {
+            event_type: "send_message",
+            client_temp_id: update.messageId,
+            chat_id: originalMessage.chat_id,
+            mode: originalMessage.mode,
+            reply_to_message_id: originalMessage.reply_to_message_id,
+            message_subtype: originalMessage.message_subtype,
+            file_metadata: result.file_metadata,
+        };
+        if (originalMessage.message_subtype === 'image') {
+            payload.image_url = result.secure_url;
+            payload.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
+            payload.image_thumbnail_url = originalMessage.thumbnailDataUrl;
+        } else if (['clip', 'voice_message', 'audio'].includes(originalMessage.message_subtype!)) {
+            payload.clip_url = result.secure_url;
+            payload.image_thumbnail_url = result.eager?.[0]?.secure_url;
+            payload.duration_seconds = result.duration;
+            payload.clip_type = (originalMessage.message_subtype === 'clip') ? 'video' : 'audio';
+            if (payload.clip_type === 'audio') {
+                payload.audio_format = result.format;
             }
+        } else if (originalMessage.message_subtype === 'document') {
+            payload.document_url = result.secure_url;
+            payload.document_name = result.original_filename;
+            payload.file_size_bytes = result.bytes;
         }
-        newMessages[messageIndex] = updatedMessage;
         
-        if (update.status === 'completed' && update.result) {
-            const originalMessage = updatedMessage;
-            const result = update.result;
-            let payload: any = {
-                event_type: "send_message",
-                client_temp_id: update.messageId,
-                chat_id: originalMessage.chat_id,
-                mode: originalMessage.mode,
-                reply_to_message_id: originalMessage.reply_to_message_id,
-                message_subtype: originalMessage.message_subtype,
-                file_metadata: result.file_metadata,
-            };
-            if (originalMessage.message_subtype === 'image') {
-                payload.image_url = result.secure_url;
-                payload.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
-                payload.image_thumbnail_url = originalMessage.thumbnailDataUrl;
-            } else if (['clip', 'voice_message', 'audio'].includes(originalMessage.message_subtype!)) {
-                payload.clip_url = result.secure_url;
-                payload.image_thumbnail_url = result.eager?.[0]?.secure_url;
-                payload.duration_seconds = result.duration;
-                payload.clip_type = (originalMessage.message_subtype === 'clip') ? 'video' : 'audio';
-                if (payload.clip_type === 'audio') {
-                    payload.audio_format = result.format;
-                }
-            } else if (originalMessage.message_subtype === 'document') {
-                payload.document_url = result.secure_url;
-                payload.document_name = result.original_filename;
-                payload.file_size_bytes = result.bytes;
-            }
-            sendMessageWithTimeout(payload);
-        }
-
-        return newMessages;
-      });
+        storageService.updateMessage(update.messageId, { uploadStatus: 'completed', status: 'sending', ...payload });
+        sendMessageWithTimeout(payload);
+      } else {
+         storageService.updateMessage(update.messageId, {
+            uploadStatus: update.status,
+            uploadProgress: update.progress,
+            uploadError: update.error,
+            status: update.status === 'failed' ? 'failed' : 'uploading',
+            thumbnailDataUrl: update.thumbnailDataUrl
+         });
+      }
     };
     const unsubscribe = uploadManager.subscribe(handleProgress);
     return () => unsubscribe();
-  }, [setMessages, sendMessageWithTimeout]);
+  }, [sendMessageWithTimeout, messages]);
 
 
   const { activeTargetId: activeThoughtNotificationFor, initiateThoughtNotification } = useThoughtNotification({ duration: THINKING_OF_YOU_DURATION, toast });
@@ -220,13 +223,27 @@ export default function ChatPage() {
   const performLoadChatData = useCallback(async () => {
     if (!currentUser) return;
     if (!currentUser.partner_id) { router.push('/onboarding/find-partner'); return; }
+    
     setIsChatLoading(true); setChatSetupErrorMessage(null);
     try {
-        const [partnerDetails, chatSession] = await Promise.all([api.getUserProfile(currentUser.partner_id), api.createOrGetChat(currentUser.partner_id)]);
-        setOtherUser(partnerDetails); setActiveChat(chatSession);
-        const messagesData = await api.getMessages(chatSession.id, 50);
+        let chat = await storageService.getChatWithParticipants(currentUser.partner_id);
+        if (!chat) {
+          const chatSession = await api.createOrGetChat(currentUser.partner_id);
+          const partnerDetails = await api.getUserProfile(currentUser.partner_id);
+          
+          await storageService.upsertUser(partnerDetails);
+          await storageService.addChat(chatSession);
+          
+          chat = chatSession;
+        }
+        
+        setActiveChatId(chat.id);
+        setOtherUser(chat.participants.find(p => p.id !== currentUser.id)!);
+
+        // Fetch latest messages from API and update local DB
+        const messagesData = await api.getMessages(chat.id, 50);
+        await storageService.bulkAddMessages(messagesData.messages);
         setHasMoreMessages(messagesData.messages.length >= 50);
-        setMessages(messagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' })));
         
         if (typeof window !== 'undefined' && currentUser.mood) {
           const lastPromptTimestamp = localStorage.getItem('kuchlu_lastMoodPromptTimestamp');
@@ -241,39 +258,21 @@ export default function ChatPage() {
     } finally { setIsChatLoading(false); }
   }, [currentUser, router, toast]);
 
-  useEffect(() => {
-    const checkPermissions = async () => {
-      if (typeof window !== 'undefined' && !localStorage.getItem('kuchlu_permissions_requested')) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          stream.getTracks().forEach(track => track.stop());
-          toast({ title: "Permissions Granted", description: "Camera and microphone access enabled." });
-        } catch (error) {
-          console.warn("Permission denied for camera/microphone:", error);
-          toast({ variant: 'destructive', title: "Permissions Denied", description: "Some features may not work without camera and microphone access." });
-        } finally {
-           localStorage.setItem('kuchlu_permissions_requested', 'true');
-        }
-      }
-    };
-    checkPermissions();
-  }, [toast]);
-
   const loadMoreMessages = useCallback(async () => {
-    if (isLoadingMore || !hasMoreMessages || !activeChat || messages.length === 0) return;
+    if (isLoadingMore || !hasMoreMessages || !activeChatId || messages.length === 0) return;
     setIsLoadingMore(true);
     try {
         const oldestMessage = messages[0];
         if(!oldestMessage) { setIsLoadingMore(false); return; }
         setTopMessageId(oldestMessage.id);
-        const olderMessagesData = await api.getMessages(activeChat.id, 50, oldestMessage.created_at);
+        const olderMessagesData = await api.getMessages(activeChatId, 50, oldestMessage.created_at);
         if (olderMessagesData.messages?.length > 0) {
-            setMessages(prev => [...olderMessagesData.messages.map(m => ({...m, client_temp_id: m.client_temp_id || m.id, status: m.status || 'sent' })), ...prev]);
+            await storageService.bulkAddMessages(olderMessagesData.messages);
             setHasMoreMessages(olderMessagesData.messages.length >= 50);
         } else { setHasMoreMessages(false); }
     } catch (error: any) { toast({ variant: 'destructive', title: 'Error', description: 'Could not load older messages.' })
     } finally { setIsLoadingMore(false); }
-  }, [isLoadingMore, hasMoreMessages, activeChat, messages, toast]);
+  }, [isLoadingMore, hasMoreMessages, activeChatId, messages, toast]);
   
   const handleEnterSelectionMode = useCallback((messageId: string) => {
     setIsSelectionMode(true);
@@ -299,26 +298,29 @@ export default function ChatPage() {
   }, []);
 
   const handleTyping = useCallback((isTyping: boolean) => {
-    if (!activeChat) return;
+    if (!activeChatId) return;
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChat.id });
-    if (isTyping) typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChat.id }), 3000);
-  }, [activeChat, sendMessage]);
+    sendMessage({ event_type: isTyping ? "start_typing" : "stop_typing", chat_id: activeChatId });
+    if (isTyping) typingTimeoutRef.current = setTimeout(() => sendMessage({ event_type: "stop_typing", chat_id: activeChatId }), 3000);
+  }, [activeChatId, sendMessage]);
 
-  const handleSendMessage = useCallback((text: string, mode: MessageMode, replyToId?: string) => {
-    if (!currentUser || !activeChat || !text.trim()) return;
+  const handleSendMessage = useCallback(async (text: string, mode: MessageMode, replyToId?: string) => {
+    if (!currentUser || !activeChatId || !text.trim()) return;
     handleTyping(false);
     const clientTempId = uuidv4();
-    const optimisticMessage: MessageType = { id: clientTempId, user_id: currentUser.id, chat_id: activeChat.id, text, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text", mode: mode, reply_to_message_id: replyToId };
-    setMessages(prev => [...prev, optimisticMessage]);
-    sendMessageWithTimeout({ event_type: "send_message", text, mode, client_temp_id: clientTempId, message_subtype: "text", reply_to_message_id: replyToId, chat_id: activeChat.id });
+    const optimisticMessage: MessageType = { id: clientTempId, user_id: currentUser.id, chat_id: activeChatId, text, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), reactions: {}, client_temp_id: clientTempId, status: "sending", message_subtype: "text", mode: mode, reply_to_message_id: replyToId };
+    
+    await storageService.addMessage(optimisticMessage);
+    
+    sendMessageWithTimeout({ event_type: "send_message", text, mode, client_temp_id: clientTempId, message_subtype: "text", reply_to_message_id: replyToId, chat_id: activeChatId });
+    
     if (ENABLE_AI_MOOD_SUGGESTION && currentUser.mood) { lastMessageTextRef.current = text; aiSuggestMood(text); }
     if (isPushApiSupported && !isSubscribed && permissionStatus === 'default' && !localStorage.getItem(FIRST_MESSAGE_SENT_KEY)) { localStorage.setItem(FIRST_MESSAGE_SENT_KEY, 'true'); setTimeout(() => setShowNotificationPrompt(true), 2000); }
     if (replyToId) setReplyingTo(null);
-  }, [currentUser, activeChat, handleTyping, sendMessageWithTimeout, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
+  }, [currentUser, activeChatId, handleTyping, sendMessageWithTimeout, aiSuggestMood, isPushApiSupported, isSubscribed, permissionStatus]);
   
-  const handleFileUpload = useCallback((file: File, mode: MessageMode, intendedSubtype: MessageType['message_subtype']) => {
-    if (!currentUser || !activeChat) return;
+  const handleFileUpload = useCallback(async (file: File, mode: MessageMode, intendedSubtype: MessageType['message_subtype']) => {
+    if (!currentUser || !activeChatId) return;
 
     const validation = validateFile(file);
     const finalSubtype = (intendedSubtype === 'document' && ['image', 'video', 'audio'].includes(validation.fileType))
@@ -327,26 +329,17 @@ export default function ChatPage() {
 
     let priority: number;
     switch (finalSubtype) {
-        case 'voice_message':
-            priority = 1;
-            break;
-        case 'image':
-        case 'clip':
-            priority = 5;
-            break;
-        case 'document':
-        case 'audio':
-            priority = 10;
-            break;
-        default:
-            priority = 5;
+        case 'voice_message': priority = 1; break;
+        case 'image': case 'clip': priority = 5; break;
+        case 'document': case 'audio': priority = 10; break;
+        default: priority = 5;
     }
 
     const clientTempId = uuidv4();
     const optimisticMessage: MessageType = {
         id: clientTempId,
         user_id: currentUser.id,
-        chat_id: activeChat.id,
+        chat_id: activeChatId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         status: 'uploading',
@@ -358,38 +351,39 @@ export default function ChatPage() {
         document_name: file.name,
         thumbnailDataUrl: finalSubtype === 'image' ? URL.createObjectURL(file) : undefined,
     };
-    setMessages(prev => [...prev, optimisticMessage]);
+    
+    await storageService.addMessage(optimisticMessage);
     
     uploadManager.addToQueue({
       id: uuidv4(),
       file,
       messageId: clientTempId,
-      chatId: activeChat.id,
+      chatId: activeChatId,
       priority,
       subtype: finalSubtype
     });
-  }, [currentUser, activeChat]);
+  }, [currentUser, activeChatId]);
 
   const handleRetrySend = useCallback((message: MessageType) => {
     if (message.uploadStatus === 'failed' && message.file) {
       uploadManager.retryUpload(message.client_temp_id);
     } else {
-      setMessages(prev => prev.map(m => m.client_temp_id === message.client_temp_id ? { ...m, status: 'sending' } : m));
+      storageService.updateMessage(message.client_temp_id, { status: 'sending' });
     }
   }, []);
   
   const handleDeleteMessage = useCallback(async (messageId: string, deleteType: DeleteType) => { 
-    if (!activeChat) return; 
+    if (!activeChatId) return; 
     try { 
         if (deleteType === 'everyone') { 
-            await api.deleteMessageForEveryone(messageId, activeChat.id); 
+            await api.deleteMessageForEveryone(messageId, activeChatId); 
         } 
-        setMessages(prev => prev.filter(msg => msg.id !== messageId)); 
+        await storageService.deleteMessage(messageId);
         toast({ title: "Message Deleted" }); 
     } catch (error: any) { 
         toast({ variant: 'destructive', title: 'Delete Failed', description: error.message }); 
     }
-  }, [activeChat, toast]);
+  }, [activeChatId, toast]);
 
   const allUsersForMessageArea = useMemo(() => (currentUser && otherUser ? {[currentUser.id]: currentUser, [otherUser.id]: otherUser} : {}), [currentUser, otherUser]);
 
@@ -425,16 +419,18 @@ export default function ChatPage() {
   }, [messages, selectedMessageIds, toast, handleExitSelectionMode, allUsersForMessageArea]);
 
   const handleDeleteSelected = useCallback(async (deleteType: DeleteType) => {
-    if (!activeChat) return;
+    if (!activeChatId) return;
     
     const idsToDelete = Array.from(selectedMessageIds);
     
-    // Optimistically remove from UI
-    setMessages(prev => prev.filter(m => !idsToDelete.includes(m.id)));
+    // Optimistically remove from UI via Dexie
+    for (const id of idsToDelete) {
+        await storageService.deleteMessage(id);
+    }
     
     if (deleteType === 'everyone') {
       try {
-        await Promise.all(idsToDelete.map(id => api.deleteMessageForEveryone(id, activeChat.id)));
+        await Promise.all(idsToDelete.map(id => api.deleteMessageForEveryone(id, activeChatId)));
         toast({ title: "Messages Deleted", description: `${idsToDelete.length} messages deleted for everyone.` });
       } catch (error: any) {
         toast({ variant: 'destructive', title: 'Delete Failed', description: 'Some messages could not be deleted.' });
@@ -445,34 +441,49 @@ export default function ChatPage() {
     }
     handleExitSelectionMode();
     setIsDeleteDialogOpen(false);
-  }, [activeChat, selectedMessageIds, handleExitSelectionMode, toast, performLoadChatData]);
+  }, [activeChatId, selectedMessageIds, handleExitSelectionMode, toast, performLoadChatData]);
 
   const handleClearChat = useCallback(async () => {
-    if (!activeChat) return;
+    if (!activeChatId) return;
     try {
-        await api.clearChatHistory(activeChat.id);
+        await api.clearChatHistory(activeChatId);
         toast({ title: "Chat Cleared", description: "Your view of this chat has been cleared."});
-        setMessages([]);
     } catch (error: any) {
         toast({ variant: "destructive", title: 'Clear Failed', description: error.message });
     }
     setIsClearChatDialogOpen(false);
-  }, [activeChat, toast]);
+  }, [activeChatId, toast]);
 
   const handleSendImage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, mode, 'image'), [handleFileUpload]);
   const handleSendVideo = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, mode, 'clip'), [handleFileUpload]);
   const handleSendDocument = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, mode, 'document'), [handleFileUpload]);
   const handleSendVoiceMessage = useCallback((file: File, mode: MessageMode) => handleFileUpload(file, mode, 'voice_message'), [handleFileUpload]);
-  const handleSendSticker = useCallback((stickerId: string, mode: MessageMode) => { if (!currentUser || !activeChat) return; sendMessageWithTimeout({ event_type: "send_message", sticker_id: stickerId, client_temp_id: uuidv4(), message_subtype: "sticker", mode, chat_id: activeChat.id }); }, [currentUser, activeChat, sendMessageWithTimeout]);
+  const handleSendSticker = useCallback(async (stickerId: string, mode: MessageMode) => { 
+    if (!currentUser || !activeChatId) return; 
+    const optimisticMessage = { client_temp_id: uuidv4(), user_id: currentUser.id, chat_id: activeChatId, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sticker_id: stickerId, mode, message_subtype: 'sticker', status: 'sending', reactions: {}, id: uuidv4() };
+    await storageService.addMessage(optimisticMessage);
+    sendMessageWithTimeout({ event_type: "send_message", ...optimisticMessage });
+  }, [currentUser, activeChatId, sendMessageWithTimeout]);
   
-  const handleToggleReaction = useCallback((messageId: string, emoji: SupportedEmoji) => {
-    if (!currentUser || !activeChat || messages.find(m => m.id === messageId)?.mode === 'incognito') return;
+  const handleToggleReaction = useCallback(async (messageId: string, emoji: SupportedEmoji) => {
+    if (!currentUser || !activeChatId || messages.find(m => m.id === messageId)?.mode === 'incognito') return;
     const key = `${messageId}_${emoji}`; const now = Date.now();
     if (lastReactionToggleTimes.current[key] && (now - lastReactionToggleTimes.current[key] < 500)) return;
     lastReactionToggleTimes.current[key] = now;
-    setMessages(prev => prev.map(m => { if (m.id === messageId) { const r = { ...m.reactions }; if (!r[emoji]) r[emoji] = []; const i = r[emoji]!.indexOf(currentUser.id); if (i > -1) r[emoji]!.splice(i, 1); else r[emoji]!.push(currentUser.id); if (r[emoji]!.length === 0) delete r[emoji]; return { ...m, reactions: r }; } return m; }));
-    sendMessage({ event_type: "toggle_reaction", message_id: messageId, chat_id: activeChat.id, emoji });
-  }, [currentUser, activeChat, sendMessage, messages]);
+    
+    // Optimistic update in local DB
+    const message = messages.find(m => m.id === messageId);
+    if(message) {
+      const r = { ...message.reactions }; 
+      if (!r[emoji]) r[emoji] = []; 
+      const i = r[emoji]!.indexOf(currentUser.id); 
+      if (i > -1) r[emoji]!.splice(i, 1); else r[emoji]!.push(currentUser.id); 
+      if (r[emoji]!.length === 0) delete r[emoji];
+      await storageService.updateMessage(message.client_temp_id, { reactions: r });
+    }
+
+    sendMessage({ event_type: "toggle_reaction", message_id: messageId, chat_id: activeChatId, emoji });
+  }, [currentUser, activeChatId, sendMessage, messages]);
   
   const getDynamicBg = useCallback((m1?: Mood, m2?: Mood) => !m1||!m2?'bg-mood-default-chat-area':m1==='Happy'&&m2==='Happy'?'bg-mood-happy-happy':m1==='Excited'&&m2==='Excited'?'bg-mood-excited-excited':(['Chilling','Neutral','Thoughtful','Content'].includes(m1))&&(['Chilling','Neutral','Thoughtful','Content'].includes(m2))?'bg-mood-calm-calm':m1==='Sad'&&m2==='Sad'?'bg-mood-sad-sad':m1==='Angry'&&m2==='Angry'?'bg-mood-angry-angry':m1==='Anxious'&&m2==='Anxious'?'bg-mood-anxious-anxious':(((m1==='Happy'&&(m2==='Sad'||m2==='Angry'))||((m1==='Sad'||m1==='Angry')&&m2==='Happy'))||(m1==='Excited'&&(m2==='Sad'||m2==='Chilling'||m2==='Angry'))||(((m1==='Sad'||m1==='Chilling'||m1==='Angry')&&m2==='Excited')))?'bg-mood-thoughtful-thoughtful':'bg-mood-default-chat-area', []);
   handleSendThoughtRef.current = useCallback(async () => { if (!currentUser || !otherUser) return; sendMessage({ event_type: "ping_thinking_of_you", recipient_user_id: otherUser.id }); initiateThoughtNotification(otherUser.id, otherUser.display_name, currentUser.display_name); }, [currentUser, otherUser, sendMessage, initiateThoughtNotification]);
@@ -504,13 +515,13 @@ export default function ChatPage() {
   const handleShowMedia = useCallback((url: string, type: 'image' | 'video') => setMediaModalData({ url, type }), []);
   const handleShowDocumentPreview = useCallback((message: MessageType) => setDocumentPreview(message), []);
   const handleShowInfo = useCallback((message: MessageType) => setMessageInfo(message), []);
-  const handleSelectMode = useCallback((mode: MessageMode) => { if (activeChat) { setChatMode(mode); sendMessage({ event_type: "change_chat_mode", chat_id: activeChat.id, mode }); toast({ title: `Switched to ${mode} Mode` }); }}, [activeChat, sendMessage, toast]);
+  const handleSelectMode = useCallback((mode: MessageMode) => { if (activeChatId) { setChatMode(mode); sendMessage({ event_type: "change_chat_mode", chat_id: activeChatId, mode }); toast({ title: `Switched to ${mode} Mode` }); }}, [activeChatId, sendMessage, toast]);
   const handleCancelReply = useCallback(() => setReplyingTo(null), []);
   const handleSetReplyingTo = useCallback((message: MessageType | null) => setReplyingTo(message), []);
 
   useEffect(() => { if (!isAuthLoading && !isAuthenticated) router.push('/'); if (isAuthenticated && currentUser) performLoadChatData(); }, [isAuthenticated, isAuthLoading, currentUser?.id, performLoadChatData, router]);
   useEffect(() => { setDynamicBgClass(chatMode==='fight'?'bg-mode-fight':chatMode==='incognito'?'bg-mode-incognito':getDynamicBg(currentUser?.mood, otherUser?.mood)); }, [chatMode, currentUser?.mood, otherUser?.mood, getDynamicBg]);
-  useEffect(() => { const incognito = messages.filter(m => m.mode === 'incognito'); if (incognito.length > 0) { const timer = setTimeout(() => { setMessages(prev => prev.filter(m => m.mode !== 'incognito')); }, 30000); return () => clearTimeout(timer); } }, [messages]);
+  useEffect(() => { const incognito = messages.filter(m => m.mode === 'incognito'); if (incognito.length > 0) { const timer = setTimeout(() => { storageService.messages.where('mode').equals('incognito').delete(); }, 30000); return () => clearTimeout(timer); } }, [messages]);
   useLayoutEffect(() => { if (topMessageId && viewportRef.current) { const el = viewportRef.current.querySelector(`#message-${topMessageId}`); if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' }); setTopMessageId(null); }}, [topMessageId, messages]);
   useEffect(() => { const timeouts = pendingMessageTimeouts.current; return () => { Object.values(timeouts).forEach(clearTimeout); }; }, []);
 
@@ -533,7 +544,7 @@ export default function ChatPage() {
   };
 
   if (isLoadingPage || !currentUser) return <FullPageLoader />;
-  if (!otherUser || !activeChat) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><FullPageLoader /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}</div></div>;
+  if (!otherUser || !activeChatId) return <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center"><div><FullPageLoader /><p className="text-lg text-foreground">Setting up your chat...</p>{chatSetupErrorMessage && <p className="text-destructive mt-2">{chatSetupErrorMessage}</p>}</div></div>;
 
   return (
     <div className="flex h-[100svh] flex-col overflow-hidden">
@@ -577,7 +588,7 @@ export default function ChatPage() {
                 isSelectionMode={isSelectionMode}
                 selectedMessageIds={selectedMessageIds}
                 onEnterSelectionMode={handleEnterSelectionMode}
-                onToggleMessageSelection={handleToggleMessageSelection}
+                onToggleMessageSelection={onToggleMessageSelection}
                 onShowInfo={handleShowInfo}
               />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendVideo={handleSendVideo} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} replyingTo={replyingTo} onCancelReply={handleCancelReply} allUsers={allUsersForMessageArea} />

@@ -56,7 +56,7 @@ export interface Message {
   document_name?: string | null;
   sticker_id?: string | null;
   sticker_image_url?: string | null;
-  client_temp_id: string;
+  client_temp_id: string; // Primary key for Dexie, always present
   status: MessageStatus;
   uploadStatus?: 'pending' | 'processing' | 'compressing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   duration_seconds?: number | null;
@@ -67,8 +67,8 @@ export interface Message {
   reply_to_message_id?: string | null;
   uploadProgress?: number;
   uploadError?: UploadError;
-  file?: File;
-  thumbnailDataUrl?: string; // For optimistic image previews
+  file?: File; // Not stored in DB
+  thumbnailDataUrl?: string; // Not stored in DB
 }
 
 export interface Chat {

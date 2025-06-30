@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { api } from '@/services/api';
 import type { UserInToken, AuthResponse, CompleteRegistrationRequest } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { storageService } from '@/services/storageService';
 
 interface AuthContextType {
   currentUser: UserInToken | null;
@@ -30,18 +31,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const isAuthenticated = !!token && !!currentUser;
 
-  const handleAuthSuccess = useCallback((data: AuthResponse) => {
+  const handleAuthSuccess = useCallback(async (data: AuthResponse) => {
     localStorage.setItem('kuchluToken', data.access_token);
     api.setAuthToken(data.access_token);
     setCurrentUser(data.user);
     setToken(data.access_token);
+    // Store user profile in IndexedDB for offline access
+    await storageService.upsertUser(data.user);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     setCurrentUser(null);
     setToken(null);
     api.setAuthToken(null);
     localStorage.removeItem('kuchluToken');
+    // Clear local database on logout
+    await storageService.delete();
+    await storageService.open(); // Re-open DB for next user
     if (pathname !== '/') {
         router.push('/');
     }
@@ -56,6 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           api.setAuthToken(tokenToLoad);
           const userProfile = await api.getCurrentUserProfile();
           setCurrentUser(userProfile);
+          await storageService.upsertUser(userProfile);
           setToken(tokenToLoad);
         } catch (error) {
           console.error("Failed to load user from token", error);
@@ -74,7 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       const data: AuthResponse = await api.login(phone, password_plaintext); 
-      handleAuthSuccess(data);
+      await handleAuthSuccess(data);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Login Failed', description: error.message || 'Please check your credentials.' });
       throw error;
@@ -87,7 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       const data: AuthResponse = await api.completeRegistration(userData);
-      handleAuthSuccess(data);
+      await handleAuthSuccess(data);
        toast({ title: 'Registration Successful!', description: 'Welcome to Kuchlu.' });
     } catch (error: any)
     {
@@ -103,6 +110,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userProfile = await api.getCurrentUserProfile();
       setCurrentUser(userProfile);
+      await storageService.upsertUser(userProfile);
     } catch (error) {
       console.error("Failed to refresh user profile", error);
       logout();
