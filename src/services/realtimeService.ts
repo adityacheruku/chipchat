@@ -4,7 +4,7 @@
 import type { Message, MessageAckEventData, UserPresenceUpdateEventData, TypingIndicatorEventData, ThinkingOfYouReceivedEventData, NewMessageEventData, MessageReactionUpdateEventData, UserProfileUpdateEventData, EventPayload, ChatModeChangedEventData, MessageDeletedEventData, ChatHistoryClearedEventData } from '@/types';
 import { api } from './api';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://2191-49-43-228-136.ngrok-free.app';
 const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 const EVENTS_BASE_URL = API_BASE_URL;
 

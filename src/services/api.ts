@@ -6,7 +6,7 @@ import type {
   CompleteRegistrationRequest, PasswordChangeRequest, DeleteAccountRequest, FileAnalyticsPayload
 } from '@/types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://2191-49-43-228-136.ngrok-free.app';
 let currentAuthToken: string | null = null;
 
 function getAuthToken(): string | null {
