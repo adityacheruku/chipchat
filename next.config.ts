@@ -14,11 +14,6 @@ const withPWA = withPWAImport({
 
 
 const nextConfig: NextConfig = {
-  // Required for static export to work with Capacitor
-  output: 'export',
-  images: {
-    unoptimized: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -42,17 +37,6 @@ const nextConfig: NextConfig = {
         topLevelAwait: true, // Helpful for some modern libraries
     };
     
-    // Blacklist Stencil's dynamic loader from SSR builds to prevent build errors.
-    // This is the correct way to handle this without patching the library.
-    if (isServer) {
-      config.module = config.module || {};
-      config.module.rules = config.module.rules || [];
-      config.module.rules.push({
-        test: /@stencil\/core\/internal\/client\/index\.js$/,
-        use: 'null-loader',
-      });
-    }
-
     return config;
   },
 };
