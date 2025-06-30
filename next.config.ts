@@ -39,9 +39,11 @@ const nextConfig: NextConfig = {
     config.experiments = {
         ...config.experiments,
         asyncWebAssembly: true,
+        topLevelAwait: true, // Helpful for some modern libraries
     };
     
-    // Blacklist Stencil's dynamic loader from SSR builds
+    // Blacklist Stencil's dynamic loader from SSR builds to prevent build errors.
+    // This is the correct way to handle this without patching the library.
     if (isServer) {
       config.module = config.module || {};
       config.module.rules = config.module.rules || [];
