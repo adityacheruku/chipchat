@@ -1,13 +1,14 @@
+
 "use client";
 
 import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite';
-import { JeepSqlite } from 'jeep-sqlite/dist/components/jeep-sqlite';
+import { defineCustomElements as jeepSqliteLoader } from 'jeep-sqlite/loader';
 import type { UploadItem } from '@/types';
 
 // Define the web component for the web platform
-if (typeof window !== 'undefined' && !customElements.get('jeep-sqlite')) {
-    customElements.define('jeep-sqlite', JeepSqlite);
+if (typeof window !== 'undefined') {
+    jeepSqliteLoader(window);
 }
 
 const DB_NAME = 'chirpchat_uploads';
@@ -28,8 +29,11 @@ class StorageService {
 
         try {
             if (this.platform === 'web') {
-                const jeepSqliteEl = document.createElement('jeep-sqlite');
-                document.body.appendChild(jeepSqliteEl);
+                const jeepEl = document.querySelector('jeep-sqlite');
+                if (!jeepEl) {
+                    const jeepSqliteEl = document.createElement('jeep-sqlite');
+                    document.body.appendChild(jeepSqliteEl);
+                }
                 await customElements.whenDefined('jeep-sqlite');
                 await this.sqlite.initWebStore();
             }
