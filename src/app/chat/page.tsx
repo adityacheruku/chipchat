@@ -165,43 +165,55 @@ export default function ChatPage() {
 
   // Listen to upload progress events
   useEffect(() => {
-    const handleProgress = (update: UploadProgress) => {
-      if (update.status === 'completed' && update.result) {
-        const originalMessage = messages.find(m => m.client_temp_id === update.messageId);
-        if (!originalMessage) return;
+    const handleProgress = async (update: UploadProgress) => {
+      // Find the message in the local state first
+      const originalMessage = messages.find(m => m.client_temp_id === update.messageId);
 
+      if (update.status === 'completed' && update.result && originalMessage) {
         const result = update.result;
-        let payload: any = {
+        
+        // 1. Prepare a clean object with only the fields relevant for the MessageType
+        const messageUpdateData: Partial<MessageType> = {
+            uploadStatus: 'completed',
+            status: 'sending', // It's now ready to be sent via websocket
+            file_metadata: result.file_metadata,
+        };
+
+        if (originalMessage.message_subtype === 'image') {
+            messageUpdateData.image_url = result.secure_url;
+            messageUpdateData.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
+        } else if (['clip', 'voice_message', 'audio'].includes(originalMessage.message_subtype!)) {
+            messageUpdateData.clip_url = result.secure_url;
+            messageUpdateData.image_thumbnail_url = result.eager?.[0]?.secure_url;
+            messageUpdateData.duration_seconds = result.duration;
+            messageUpdateData.clip_type = (originalMessage.message_subtype === 'clip') ? 'video' : 'audio';
+            if (messageUpdateData.clip_type === 'audio') {
+                messageUpdateData.audio_format = result.format;
+            }
+        } else if (originalMessage.message_subtype === 'document') {
+            messageUpdateData.document_url = result.secure_url;
+            messageUpdateData.document_name = result.original_filename;
+            messageUpdateData.file_size_bytes = result.bytes;
+        }
+        
+        // 2. Update the local database with the clean data
+        await storageService.updateMessage(update.messageId, messageUpdateData);
+        
+        // 3. Prepare the WebSocket payload, which CAN include extra fields
+        const websocketPayload = {
             event_type: "send_message",
             client_temp_id: update.messageId,
             chat_id: originalMessage.chat_id,
             mode: originalMessage.mode,
             reply_to_message_id: originalMessage.reply_to_message_id,
-            message_subtype: originalMessage.message_subtype,
-            file_metadata: result.file_metadata,
+            ...messageUpdateData // Spread the clean data here
         };
-        if (originalMessage.message_subtype === 'image') {
-            payload.image_url = result.secure_url;
-            payload.preview_url = result.eager?.[0]?.secure_url || result.secure_url;
-            payload.image_thumbnail_url = originalMessage.thumbnailDataUrl;
-        } else if (['clip', 'voice_message', 'audio'].includes(originalMessage.message_subtype!)) {
-            payload.clip_url = result.secure_url;
-            payload.image_thumbnail_url = result.eager?.[0]?.secure_url;
-            payload.duration_seconds = result.duration;
-            payload.clip_type = (originalMessage.message_subtype === 'clip') ? 'video' : 'audio';
-            if (payload.clip_type === 'audio') {
-                payload.audio_format = result.format;
-            }
-        } else if (originalMessage.message_subtype === 'document') {
-            payload.document_url = result.secure_url;
-            payload.document_name = result.original_filename;
-            payload.file_size_bytes = result.bytes;
-        }
-        
-        storageService.updateMessage(update.messageId, { uploadStatus: 'completed', status: 'sending', ...payload });
-        sendMessageWithTimeout(payload);
+
+        sendMessageWithTimeout(websocketPayload);
+
       } else {
-         storageService.updateMessage(update.messageId, {
+         // For other statuses, just update the progress in the DB
+         await storageService.updateMessage(update.messageId, {
             uploadStatus: update.status,
             uploadProgress: update.progress,
             uploadError: update.error,
@@ -210,6 +222,7 @@ export default function ChatPage() {
          });
       }
     };
+    
     const unsubscribe = uploadManager.subscribe(handleProgress);
     return () => unsubscribe();
   }, [sendMessageWithTimeout, messages]);
@@ -521,7 +534,7 @@ export default function ChatPage() {
 
   useEffect(() => { if (!isAuthLoading && !isAuthenticated) router.push('/'); if (isAuthenticated && currentUser) performLoadChatData(); }, [isAuthenticated, isAuthLoading, currentUser?.id, performLoadChatData, router]);
   useEffect(() => { setDynamicBgClass(chatMode==='fight'?'bg-mode-fight':chatMode==='incognito'?'bg-mode-incognito':getDynamicBg(currentUser?.mood, otherUser?.mood)); }, [chatMode, currentUser?.mood, otherUser?.mood, getDynamicBg]);
-  useEffect(() => { const incognito = messages.filter(m => m.mode === 'incognito'); if (incognito.length > 0) { const timer = setTimeout(() => { storageService.messages.where('mode').equals('incognito').delete(); }, 30000); return () => clearTimeout(timer); } }, [messages]);
+  useEffect(() => { const incognitoMessages = messages?.filter(m => m.mode === 'incognito') || []; if (incognitoMessages.length > 0) { const timer = setTimeout(() => { storageService.messages.where('mode').equals('incognito').delete(); }, 30000); return () => clearTimeout(timer); } }, [messages]);
   useLayoutEffect(() => { if (topMessageId && viewportRef.current) { const el = viewportRef.current.querySelector(`#message-${topMessageId}`); if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' }); setTopMessageId(null); }}, [topMessageId, messages]);
   useEffect(() => { const timeouts = pendingMessageTimeouts.current; return () => { Object.values(timeouts).forEach(clearTimeout); }; }, []);
 
@@ -529,7 +542,7 @@ export default function ChatPage() {
   const isInputDisabled = protocol === 'disconnected' || isSelectionMode;
 
   const canDeleteForEveryone = useMemo(() => {
-    if (!currentUser) return false;
+    if (!currentUser || !messages) return false;
     return Array.from(selectedMessageIds).every(id => {
       const msg = messages.find(m => m.id === id);
       return msg?.user_id === currentUser.id;
@@ -572,7 +585,7 @@ export default function ChatPage() {
               />
               <MemoizedMessageArea 
                 viewportRef={viewportRef} 
-                messages={messages} 
+                messages={messages || []} 
                 currentUser={currentUser} 
                 allUsers={allUsersForMessageArea} 
                 onToggleReaction={handleToggleReaction} 
