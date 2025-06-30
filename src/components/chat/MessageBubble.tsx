@@ -539,3 +539,5 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
 }
 
 export default memo(MessageBubble);
+
+    
