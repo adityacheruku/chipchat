@@ -1,0 +1,10 @@
+diff --git a/node_modules/jeep-sqlite/dist/components/jeep-sqlite.js b/node_modules/jeep-sqlite/dist/components/jeep-sqlite.js
+index 28e83a4..ef82ff4 100644
+--- a/node_modules/jeep-sqlite/dist/components/jeep-sqlite.js
++++ b/node_modules/jeep-sqlite/dist/components/jeep-sqlite.js
+@@ -1,4 +1,4 @@
+-import { proxyCustomElement, HTMLElement, createEvent } from '@stencil/core/internal/client';
++import { proxyCustomElement, HTMLElement, createEvent } from 'null-loader';
+ 
+ const global$1 = (typeof global !== "undefined" ? global :
+   typeof self !== "undefined" ? self :

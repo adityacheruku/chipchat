@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "cap:sync": "npx cap sync",
     "build-mobile": "npm run build && npm run cap:sync",
-    "postinstall": "patch-package && (test -d node_modules/@ffmpeg/core/dist && cp -R ./node_modules/@ffmpeg/core/dist/ ./public/ffmpeg || echo 'ffmpeg-core not found, skipping copy') && (mkdir -p public/assets && test -f node_modules/jeep-sqlite/dist/jeep-sqlite/sql-wasm.wasm && cp node_modules/jeep-sqlite/dist/jeep-sqlite/sql-wasm.wasm public/assets/sql-wasm.wasm || echo 'jeep-sqlite wasm not found, skipping copy')"
+    "postinstall": "patch-package && node -e \"const fs = require('fs'); const path = require('path'); try { if (fs.existsSync('node_modules/@ffmpeg/core/dist')) { fs.mkdirSync('public/ffmpeg', { recursive: true }); fs.cpSync('node_modules/@ffmpeg/core/dist', 'public/ffmpeg', { recursive: true }); console.log('Copied ffmpeg assets.'); } else { console.log('ffmpeg-core not found, skipping copy'); } } catch(e) { console.error('Error copying ffmpeg files:', e.message); }\" && node -e \"const fs = require('fs'); const path = require('path'); try { fs.mkdirSync('public/assets', { recursive: true }); fs.copyFileSync('node_modules/jeep-sqlite/dist/jeep-sqlite/sql-wasm.wasm', 'public/assets/sql-wasm.wasm'); console.log('Copied sql-wasm.wasm.'); } catch(e) { console.error('Error copying jeep-sqlite wasm:', e.message); }\""
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^6.0.0-1",
@@ -48,7 +48,7 @@
     "dotenv": "^16.5.0",
     "firebase": "^11.8.1",
     "genkit": "^1.8.0",
-    "jeep-sqlite": "^2.6.4",
+    "jeep-sqlite": "^2.8.0",
     "lucide-react": "^0.475.0",
     "next": "15.3.3",
     "next-pwa": "^5.6.0",
