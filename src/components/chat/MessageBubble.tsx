@@ -337,14 +337,14 @@ function MessageBubble({ message, messages, sender, isCurrentUser, currentUserId
                 <div className="w-[250px] aspect-[4/3] rounded-md overflow-hidden"><UploadProgressIndicator message={message} onRetry={() => handleRetry(message)} /></div>
             ) : message.image_url ? (
               <button onClick={() => onShowMedia(message.image_url!, 'image')} className="block w-full max-w-[250px] aspect-[4/3] relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View image sent at ${formattedTime}`}>
-                  <Image src={message.preview_url || message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} fill className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
+                  <Image src={message.preview_url || message.image_thumbnail_url || message.image_url} alt={`Image from ${sender.display_name}`} fill sizes="(max-width: 640px) 85vw, 250px" className="object-cover" data-ai-hint="chat photo" loading="lazy"/>
               </button>
             ) : <p className="text-sm italic">Image unavailable</p>;
           case 'clip':
             if (message.clip_type === 'video') {
                 return message.clip_url ? (
                   <button onClick={() => onShowMedia(message.clip_url!, 'video')} className="block w-full max-w-[250px] aspect-video relative group/media rounded-md overflow-hidden bg-muted transition-transform active:scale-95 md:hover:scale-105 shadow-md md:hover:shadow-lg" aria-label={`View video sent at ${formattedTime}`}>
-                      <Image src={message.image_thumbnail_url || "https://placehold.co/250x140.png"} alt={`Video thumbnail from ${sender.display_name}`} fill className="object-cover" data-ai-hint="video thumbnail" loading="lazy"/>
+                      <Image src={message.image_thumbnail_url || "https://placehold.co/250x140.png"} alt={`Video thumbnail from ${sender.display_name}`} fill sizes="(max-width: 640px) 85vw, 250px" className="object-cover" data-ai-hint="video thumbnail" loading="lazy"/>
                       <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                         <PlayCircle size={48} className="text-white/80 transition-transform group-hover/media:scale-110" />
                       </div>

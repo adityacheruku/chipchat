@@ -42,7 +42,7 @@ const AttachmentPreview = ({ file, onRemove }: { file: File; onRemove: () => voi
   return (
     <div className="relative w-16 h-16 rounded-md overflow-hidden border bg-muted flex-shrink-0">
       {file.type.startsWith('image/') ? (
-        <Image src={fileUrl} alt={file.name} fill className="object-cover" />
+        <Image src={fileUrl} alt={file.name} fill sizes="64px" className="object-cover" />
       ) : file.type.startsWith('audio/') ? (
          <div className="flex flex-col items-center justify-center h-full p-1 text-center bg-primary/20">
           <Mic className="w-6 h-6 text-primary" />
