@@ -80,8 +80,8 @@ class VideoCompressor {
       const data = await this.ffmpeg.readFile(outputName);
       
       onProgress({ progress: 100, stage: 'done' });
-      // The data is a Uint8Array, which is a valid BlobPart
-      return new Blob([data], { type: 'video/mp4' });
+      // Create a new Uint8Array from the buffer to satisfy TypeScript's strict BlobPart type.
+      return new Blob([new Uint8Array(data.buffer)], { type: 'video/mp4' });
 
     } catch (error: any) {
       console.error("Video compression failed:", error);
@@ -133,7 +133,8 @@ class VideoCompressor {
       const data = await this.ffmpeg.readFile(outputName);
       
       onProgress({ progress: 100, stage: 'done' });
-      return new Blob([data], { type: 'audio/mp4' });
+      // Create a new Uint8Array from the buffer to satisfy TypeScript's strict BlobPart type.
+      return new Blob([new Uint8Array(data.buffer)], { type: 'audio/mp4' });
 
     } catch (error: any) {
       console.error("Audio compression failed:", error);
