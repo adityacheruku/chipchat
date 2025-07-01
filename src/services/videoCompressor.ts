@@ -2,7 +2,7 @@
 "use client";
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 export interface CompressionSettings {
   maxWidth: number;
@@ -36,8 +36,10 @@ class VideoCompressor {
         }
       });
       
+      const baseURL = '/ffmpeg'; // Files must be in public/ffmpeg directory
       await this.ffmpeg.load({
-        coreURL: '/ffmpeg/ffmpeg-core.js',
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
       });
       
       this.isInitialized = true;
@@ -81,7 +83,7 @@ class VideoCompressor {
       
       onProgress({ progress: 100, stage: 'done' });
       // Create a new Uint8Array from the buffer to satisfy TypeScript's strict BlobPart type.
-      return new Blob([new Uint8Array(data.buffer)], { type: 'video/mp4' });
+      return new Blob([new Uint8Array(data)], { type: 'video/mp4' });
 
     } catch (error: any) {
       console.error("Video compression failed:", error);
@@ -134,7 +136,7 @@ class VideoCompressor {
       
       onProgress({ progress: 100, stage: 'done' });
       // Create a new Uint8Array from the buffer to satisfy TypeScript's strict BlobPart type.
-      return new Blob([new Uint8Array(data.buffer)], { type: 'audio/mp4' });
+      return new Blob([new Uint8Array(data)], { type: 'audio/mp4' });
 
     } catch (error: any) {
       console.error("Audio compression failed:", error);
