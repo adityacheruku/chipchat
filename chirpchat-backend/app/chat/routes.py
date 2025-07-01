@@ -275,4 +275,3 @@ async def react_to_message(message_id: UUID, reaction_toggle: ReactionToggle, cu
 
     await ws_manager.broadcast_reaction_update(chat_id_str, message_for_response)
     return message_for_response
-
