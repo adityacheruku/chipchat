@@ -166,45 +166,53 @@ export default function ChatPage() {
   // Listen to upload progress events
   useEffect(() => {
     const handleProgress = async (update: UploadProgress) => {
-      // Find the message in the local state first
       const originalMessage = messages.find(m => m.client_temp_id === update.messageId);
 
       if (update.status === 'completed' && update.result && originalMessage) {
         
-        // 1. Prepare a clean object with only the fields relevant for the MessageType
         const messageUpdateData: Partial<MessageType> = {
             uploadStatus: 'completed',
-            status: 'sending', // It's now ready to be sent via websocket
-            file_metadata: update.result.file_metadata,
-            image_url: update.result.secure_url,
-            preview_url: update.result.eager?.[0]?.secure_url || update.result.secure_url,
-            clip_url: update.result.secure_url,
-            image_thumbnail_url: update.result.eager?.[0]?.secure_url,
-            duration_seconds: update.result.duration,
-            clip_type: (originalMessage.message_subtype === 'clip') ? 'video' : 'audio',
-            audio_format: update.result.format,
-            document_url: update.result.secure_url,
-            document_name: update.result.original_filename,
-            file_size_bytes: update.result.bytes
+            status: 'sending',
         };
+
+        if (originalMessage.message_subtype === 'image') {
+            messageUpdateData.image_url = update.result.secure_url;
+            messageUpdateData.image_thumbnail_url = update.result.eager?.[0]?.secure_url || update.result.secure_url;
+            messageUpdateData.preview_url = update.result.eager?.[0]?.secure_url || update.result.secure_url;
+        } else if (originalMessage.message_subtype === 'clip') { // Video
+            messageUpdateData.clip_url = update.result.secure_url;
+            messageUpdateData.image_thumbnail_url = update.result.eager?.[0]?.secure_url;
+            messageUpdateData.duration_seconds = update.result.duration;
+            messageUpdateData.clip_type = 'video';
+        } else if (originalMessage.message_subtype === 'voice_message' || originalMessage.message_subtype === 'audio') {
+            messageUpdateData.clip_url = update.result.secure_url;
+            messageUpdateData.duration_seconds = update.result.duration;
+            messageUpdateData.audio_format = update.result.format;
+            messageUpdateData.clip_type = 'audio';
+        } else if (originalMessage.message_subtype === 'document') {
+            messageUpdateData.document_url = update.result.secure_url;
+            messageUpdateData.document_name = update.result.original_filename;
+        }
+
+        messageUpdateData.file_size_bytes = update.result.bytes;
+        if (update.result.file_metadata) {
+            messageUpdateData.file_metadata = update.result.file_metadata;
+        }
         
-        // 2. Update the local database with the clean data
         await storageService.updateMessage(update.messageId, messageUpdateData);
         
-        // 3. Prepare the WebSocket payload, which CAN include extra fields
         const websocketPayload = {
             event_type: "send_message",
             client_temp_id: update.messageId,
             chat_id: originalMessage.chat_id,
             mode: originalMessage.mode,
             reply_to_message_id: originalMessage.reply_to_message_id,
-            ...messageUpdateData // Spread the clean data here
+            ...messageUpdateData
         };
 
         sendMessageWithTimeout(websocketPayload);
 
       } else {
-         // For other statuses, just update the progress in the DB
          await storageService.updateMessage(update.messageId, {
             uploadStatus: update.status,
             uploadProgress: update.progress,
