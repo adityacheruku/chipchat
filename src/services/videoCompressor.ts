@@ -36,7 +36,7 @@ class VideoCompressor {
         }
       });
       
-      const baseURL = '/ffmpeg'; // Files must be in public/ffmpeg directory
+      const baseURL = '/ffmpeg/esm'; // Files must be in public/ffmpeg/esm directory
       await this.ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
         wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
