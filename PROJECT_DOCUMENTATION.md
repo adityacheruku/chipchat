@@ -16,7 +16,7 @@ All core screens have been implemented as high-fidelity, functional components. 
 *   **Mood Entry Modal**: A dialog for users to set their current mood.
 *   **Settings Hub**: A central navigation page for all application settings.
 *   **Settings Sub-Pages**: Dedicated pages for Account, Notifications, Appearance, and Privacy.
-*   **PWA Quick Action Pages**: Simplified pages for "Set Mood," "Send Image," and "Thinking of You" actions.
+*   **PWA Quick Action Pages**: Simplified pages for "Set Mood," "Send Image," "Send a Snap," and "Thinking of You" actions.
 
 **1.2 Do you have high-fidelity designs (Figma/Sketch) or just low-fi sketches?**
 
@@ -55,7 +55,7 @@ Yes, the visual style is well-defined and consistently applied.
     *   Real-time typing indicators and online presence.
 *   **Dynamic Moods**: Users can set their mood, which is visible to their partner.
 *   **Multiple Chat Modes**: "Normal," "Fight," and ephemeral "Incognito" modes are implemented.
-*   **PWA Quick Actions**: "Set Mood," "Send Image," and "Thinking of You" work from the device's home screen.
+*   **PWA Quick Actions**: "Set Mood," "Send Image," "Send a Snap," and "Thinking of You" work from the device's home screen.
 
 **2.2 Which features are in progress or stalled?**
 
