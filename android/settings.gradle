@@ -1,10 +1,5 @@
-
-// This file tells Gradle which modules to include in the build.
-
 include ':app'
-include ':capacitor-android'
-project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
-
-// Define our custom plugin module and its location.
 include ':assistivetouch'
 project(':assistivetouch').projectDir = new File('../assistive-touch-plugin/android')
+include ':capacitor-cordova-android-plugins'
+project(':capacitor-cordova-android-plugins').projectDir = new File('capacitor-cordova-android-plugins')
