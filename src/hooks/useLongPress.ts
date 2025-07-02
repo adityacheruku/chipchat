@@ -5,11 +5,14 @@ import { useCallback, useRef } from 'react';
 
 interface LongPressOptions {
   threshold?: number;
+  onStart?: (event: React.MouseEvent | React.TouchEvent) => void;
+  onFinish?: (event: React.MouseEvent | React.TouchEvent) => void;
+  onCancel?: (event: React.MouseEvent | React.TouchEvent) => void;
 }
 
 export const useLongPress = (
   callback: (event: React.MouseEvent | React.TouchEvent) => void,
-  { threshold = 400 }: LongPressOptions = {}
+  { threshold = 400, onStart, onFinish, onCancel }: LongPressOptions = {}
 ) => {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressTriggered = useRef(false);
@@ -21,12 +24,14 @@ export const useLongPress = (
           event.preventDefault();
       }
       isLongPressTriggered.current = false;
+      onStart?.(event);
       timeoutRef.current = setTimeout(() => {
         callback(event);
         isLongPressTriggered.current = true;
+        onFinish?.(event);
       }, threshold);
     },
-    [callback, threshold]
+    [callback, threshold, onStart, onFinish]
   );
 
   const clear = useCallback(
@@ -34,8 +39,11 @@ export const useLongPress = (
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
+      if (!isLongPressTriggered.current) {
+         onCancel?.(event);
+      }
     },
-    []
+    [onCancel]
   );
 
   return {
@@ -52,5 +60,3 @@ export const useLongPress = (
     isLongPressing: () => isLongPressTriggered.current,
   };
 };
-
-    
