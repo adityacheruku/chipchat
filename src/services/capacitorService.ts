@@ -10,18 +10,6 @@ const isCapacitorAvailable = () => {
     return typeof window !== 'undefined' && (window as any).Capacitor;
 };
 
-const showExplanationDialog = (
-    onConfirm: () => void,
-    onCancel: () => void
-) => {
-    // This function would be implemented in a UI context or passed in.
-    // For now, we'll assume the UI layer handles showing the dialog.
-    // In a real implementation, you might use a global dialog context.
-    console.log("Showing explanation dialog...");
-    // Simulating user clicking "Continue"
-    onConfirm();
-};
-
 export const capacitorService = {
     isAssistiveTouchAvailable: (): boolean => {
         // This would check if the specific native plugin is available.
@@ -65,15 +53,26 @@ export const capacitorService = {
         });
     },
 
+    /**
+     * Corresponds to `FloatingButton.createButton()` and `BackgroundService.initialize()`.
+     * This function tells the native layer to create and display the floating button.
+     * The native code would be responsible for the UI, drag logic, and edge snapping.
+     */
     showFloatingButton: async (): Promise<void> => {
         if (!isCapacitorAvailable()) return;
+        // In a native build, this would call the custom Capacitor plugin:
         // const { AssistiveTouch } = (window as any).Capacitor.Plugins;
-        // await AssistiveTouch.show();
+        // await AssistiveTouch.show({ size: 56, opacity: 0.8 }); // Pass properties
         console.log("Showing native floating button... (simulated)");
     },
     
+    /**
+     * Corresponds to `BackgroundService.onDestroy()`.
+     * This function tells the native layer to remove the floating button from the screen.
+     */
     hideFloatingButton: async (): Promise<void> => {
         if (!isCapacitorAvailable()) return;
+        // In a native build, this would call the custom Capacitor plugin:
         // const { AssistiveTouch } = (window as any).Capacitor.Plugins;
         // await AssistiveTouch.hide();
         console.log("Hiding native floating button... (simulated)");
