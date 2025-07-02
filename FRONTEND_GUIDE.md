@@ -66,7 +66,7 @@ The message area supports a rich set of interactions, each with immediate and in
 | **Send Text**             | Type in the input bar and press the "Send" button.                                                               | The "Send" button appears with a pop animation when text is entered. Upon sending, the message optimistically appears in the chat area with a "sending" status (clock icon). The input field clears.                     |
 | **Send Attachments**      | Tap the paperclip icon to open a bottom sheet (mobile) or popover (desktop). Select camera, gallery, or document. | Selected files appear in a "staging area" above the input bar. The user can add text before sending. Upon sending, the message appears with an upload progress indicator before transitioning to the "sending" status. |
 | **Record Voice Note**     | Press and hold the microphone icon in the attachment panel.                                                      | A timer and a pulsing red mic icon appear during recording. Releasing stops the recording. The user can then preview the note with a fully functional audio player before sending.                                     |
-| **React to Message**      | Long-press a message bubble and select an emoji from the quick-reaction menu.                                    | The selected emoji appears on the message bubble with a counter. The user's own reaction is highlighted. Others in the chat see the reaction appear in real-time. Tapping the reaction shows who reacted.         |
+| **React to Message**      | Long-press a message bubble and select an emoji from the quick-reaction menu.         | The selected emoji appears on the message bubble with a counter. The user's own reaction is highlighted. Others in the chat see the reaction appear in real-time. Tapping the reaction shows who reacted.         |
 | **Copy Message Text**     | Long-press a message bubble and select "Copy" from the context menu.                                             | A toast notification confirms that the text has been copied to the clipboard.                                                                                                                                           |
 | **View Media**            | Tap on an image or video thumbnail in the chat.                                                                  | A full-screen, immersive modal opens, displaying the media. Users can pinch-to-zoom on images and use standard video controls. A download button is provided.                                                          |
 | **Load Older Messages**   | Scroll to the top of the chat and click the "Load Older Messages" button.                                        | A loading spinner appears on the button. Once loaded, older messages are prepended to the chat history, and the scroll position is maintained to prevent jarring jumps.                                                |
@@ -95,7 +95,6 @@ Accessibility is a core consideration, not an afterthought.
 ### 3.4 Usability & UX Considerations
 
 *   **Known Issues/Improvements**:
-    *   **Lack of Swipe Gestures**: On mobile, users often expect to swipe-to-reply on a message. This is a high-impact feature for a future iteration.
     *   **No "Is Read" on a Per-Message Basis**: The current "Read" status applies to the whole chat. A more granular, per-message read receipt system would provide more precise feedback.
     *   **No Typing Indicator for SSE Fallback**: The typing indicator currently only works over a WebSocket connection. A solution for the SSE fallback (e.g., a short-lived API call) would improve consistency.
 *   **Strengths**:
@@ -117,16 +116,3 @@ The application is designed as a Progressive Web App (PWA) to ensure a consisten
     *   Supports drag-and-drop for file attachments directly onto the input bar area.
 
 This detailed approach ensures that ChirpChat feels thoughtfully designed and robust, regardless of how the user accesses it.
-
----
-
-## 4. PWA Features & Mobile Experience
-
-ChirpChat is a fully-featured Progressive Web App (PWA).
-
--   **Installability**: Users can "Add to Home Screen" on both mobile and desktop for a native-like experience. This is configured in `public/manifest.json`.
--   **Offline Support**: A service worker (`next-pwa` config) caches the application shell and static assets, allowing the app to load instantly even when offline. A connection status banner keeps the user informed of their connectivity state.
--   **Quick Actions**: The `manifest.json` defines shortcuts that appear when a user long-presses the app icon on their home screen. These include:
-    -   **Set My Mood**: Opens a dedicated page (`/quick/mood`) to quickly update mood.
-    -   **Send an Image**: Opens a page (`/quick/image`) to select and send an image to the partner.
-    -   **Thinking of You**: Opens a page (`/quick/think`) that immediately sends a ping to the partner.
