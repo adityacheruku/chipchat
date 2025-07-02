@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, ChevronRight, User, Bell, Palette, Shield, LogOut } from 'lucide-react';
+import { ArrowLeft, ChevronRight, User, Bell, Palette, Shield, LogOut, Accessibility } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Separator } from '@/components/ui/separator';
 import FullPageLoader from '@/components/common/FullPageLoader';
@@ -86,6 +86,12 @@ export default function SettingsHubPage() {
                             icon={Palette}
                             title="Appearance"
                             description="Theme, text size, backgrounds"
+                       />
+                        <SettingsLink 
+                            href="/settings/accessibility"
+                            icon={Accessibility}
+                            title="Accessibility"
+                            description="Touch, visual, and audio assistance"
                        />
                        <SettingsLink 
                             href="/settings/privacy"
