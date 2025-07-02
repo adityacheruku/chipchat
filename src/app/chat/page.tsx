@@ -26,7 +26,6 @@ import MessageArea from '@/components/chat/MessageArea';
 import InputBar from '@/components/chat/InputBar';
 import NotificationPrompt from '@/components/chat/NotificationPrompt';
 import DeleteMessageDialog from '@/components/chat/DeleteMessageDialog';
-import FloatingMoodButton from '@/components/chat/FloatingMoodButton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -606,7 +605,6 @@ export default function ChatPage() {
               />
               <MemoizedInputBar onSendMessage={handleSendMessage} onSendSticker={handleSendSticker} onSendVoiceMessage={handleSendVoiceMessage} onSendImage={handleSendImage} onSendVideo={handleSendVideo} onSendDocument={handleSendDocument} isSending={isLoadingAISuggestion} onTyping={handleTyping} disabled={isInputDisabled} chatMode={chatMode} onSelectMode={handleSelectMode} replyingTo={replyingTo} onCancelReply={handleCancelReply} allUsers={allUsersForMessageArea} />
             </div>
-            <FloatingMoodButton />
           </ErrorBoundary>
         </div>
         {fullScreenUserData && <FullScreenAvatarModal isOpen={isFullScreenAvatarOpen} onClose={() => setIsFullScreenAvatarOpen(false)} user={fullScreenUserData}/>}
