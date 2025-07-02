@@ -20,6 +20,7 @@ import { api } from '@/services/api';
 import { useRealtime } from '@/hooks/useRealtime';
 import { uploadManager } from '@/services/uploadManager';
 import { storageService } from '@/services/storageService';
+import { capacitorService } from '@/services/capacitorService';
 import { Wifi, WifiOff, Trash2, Video, File } from 'lucide-react';
 import ChatHeader from '@/components/chat/ChatHeader';
 import MessageArea from '@/components/chat/MessageArea';
@@ -536,6 +537,19 @@ export default function ChatPage() {
   useEffect(() => { const incognitoMessages = messages?.filter(m => m.mode === 'incognito') || []; if (incognitoMessages.length > 0) { const timer = setTimeout(() => { storageService.messages.where('mode').equals('incognito').delete(); }, 30000); return () => clearTimeout(timer); } }, [messages]);
   useLayoutEffect(() => { if (topMessageId && viewportRef.current) { const el = viewportRef.current.querySelector(`#message-${topMessageId}`); if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' }); setTopMessageId(null); }}, [topMessageId, messages]);
   useEffect(() => { const timeouts = pendingMessageTimeouts.current; return () => { Object.values(timeouts).forEach(clearTimeout); }; }, []);
+
+  // Listen for native gesture events
+  useEffect(() => {
+    const unsubSingleTap = capacitorService.on('singleTap', () => setIsMoodModalOpen(true));
+    const unsubDoubleTap = capacitorService.on('doubleTap', handleSendThoughtRef.current);
+    const unsubLongPress = capacitorService.on('longPress', () => toast({ title: "Custom actions coming soon!"}));
+
+    return () => {
+      unsubSingleTap();
+      unsubDoubleTap();
+      unsubLongPress();
+    };
+  }, [toast]); // handleSendThoughtRef is stable due to useRef
 
   const isLoadingPage = isAuthLoading || (isAuthenticated && isChatLoading);
   const isInputDisabled = protocol === 'disconnected' || isSelectionMode;
