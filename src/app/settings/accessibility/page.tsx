@@ -20,8 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { capacitorService } from '@/services/capacitorService';
 
 const SettingsRow = ({ children, onClick, disabled = false }: { children: React.ReactNode, onClick?: () => void, disabled?: boolean }) => {
     const interactionClass = disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/50';
@@ -46,53 +46,48 @@ export default function AccessibilitySettingsPage() {
     // State for the dialogs
     const [isExplanationDialogOpen, setIsExplanationDialogOpen] = useState(false);
     const [isPermissionDeniedDialogOpen, setIsPermissionDeniedDialogOpen] = useState(false);
+    const [permissionDialogCallbacks, setPermissionDialogCallbacks] = useState<{ onConfirm: () => void, onCancel: () => void } | null>(null);
 
     if (isAuthLoading || !currentUser) {
         return <FullPageLoader />;
     }
 
-    // A placeholder for detail page navigation
-    const navigateToDetail = () => {
-        // This will be implemented in a future step.
-        // For now, it could show a toast or do nothing.
+    const showPermissionDialog = (callbacks: { onConfirm: () => void, onCancel: () => void }) => {
+        setPermissionDialogCallbacks(callbacks);
+        setIsExplanationDialogOpen(true);
     };
 
-    // Mock PermissionManager to follow the user's pseudocode
-    const PermissionManager = {
-        hasPermission: () => assistiveTouchEnabled,
-
-        requestOverlayPermission: async () => {
-            setIsExplanationDialogOpen(true);
-        },
-
-        handlePermissionRequest: async () => {
-            setIsExplanationDialogOpen(false);
-            
-            // --- SIMULATION ---
-            // In a real Capacitor app, you would call:
-            // const result = await Capacitor.requestSystemAlertWindow();
-            // For now, we'll simulate a "granted" result.
-            const result = { granted: true }; 
-
-            if (result.granted) {
-                toast({ title: "Permission Granted!", description: "AssistiveTouch has been enabled." });
-                setAssistiveTouchEnabled(true);
-            } else {
-                // If permission was denied, show the help dialog.
-                setIsPermissionDeniedDialogOpen(true);
-                setAssistiveTouchEnabled(false);
-            }
-        }
-    };
-    
-    const handleToggleChange = (checked: boolean) => {
+    const handleToggleChange = async (checked: boolean) => {
         if (checked) {
-            // If user is trying to enable it, start the permission flow.
-            PermissionManager.requestOverlayPermission();
+            const granted = await capacitorService.requestOverlayPermission(showPermissionDialog);
+            if (granted) {
+                await capacitorService.showFloatingButton();
+                setAssistiveTouchEnabled(true);
+                toast({ title: "AssistiveTouch Enabled", description: "The floating button is now active." });
+            } else {
+                setAssistiveTouchEnabled(false);
+                // In a real scenario, we might need to know if it was denied or just cancelled.
+                // For this simulation, we'll assume any non-grant is a denial that needs guidance.
+                if (!permissionDialogCallbacks) { // This means the dialog was not even shown (e.g., cancelled by user action elsewhere)
+                    setIsPermissionDeniedDialogOpen(true);
+                }
+            }
         } else {
-            // If user is disabling it, just update the state.
+            await capacitorService.hideFloatingButton();
             setAssistiveTouchEnabled(false);
         }
+    };
+
+    const onDialogConfirm = () => {
+        setIsExplanationDialogOpen(false);
+        permissionDialogCallbacks?.onConfirm();
+        setPermissionDialogCallbacks(null);
+    };
+    
+    const onDialogCancel = () => {
+        setIsExplanationDialogOpen(false);
+        permissionDialogCallbacks?.onCancel();
+        setPermissionDialogCallbacks(null);
     };
 
     return (
@@ -106,10 +101,10 @@ export default function AccessibilitySettingsPage() {
                     </CardHeader>
                     <CardContent className="p-0 divide-y">
                        <div className="px-4">
-                            <SettingsRow onClick={navigateToDetail}>
+                            <SettingsRow>
                                 <Label htmlFor="assistive-touch-toggle" className="font-medium pr-4 cursor-pointer">
                                     AssistiveTouch
-                                    <p className="text-sm text-muted-foreground font-normal">Use a floating button to quickly access app features from anywhere.</p>
+                                    <p className="text-sm text-muted-foreground font-normal">Use a floating button to quickly access app features from anywhere on your device. Requires special permissions.</p>
                                 </Label>
                                 <div className="flex items-center gap-2">
                                      <Switch
@@ -118,7 +113,6 @@ export default function AccessibilitySettingsPage() {
                                         onCheckedChange={handleToggleChange}
                                         onClick={(e) => e.stopPropagation()}
                                     />
-                                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
                                 </div>
                             </SettingsRow>
                        </div>
@@ -156,10 +150,8 @@ export default function AccessibilitySettingsPage() {
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={PermissionManager.handlePermissionRequest}>
-                            Continue
-                        </AlertDialogAction>
+                        <AlertDialogCancel onClick={onDialogCancel}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={onDialogConfirm}>Continue</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
