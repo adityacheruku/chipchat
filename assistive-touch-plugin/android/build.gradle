@@ -1,0 +1,33 @@
+apply plugin: 'com.android.library'
+
+ext {
+    capacitorVersion = '5'
+}
+
+android {
+    namespace "com.kuchlu.plugin"
+    compileSdkVersion 34
+    defaultConfig {
+        minSdkVersion 22
+        targetSdkVersion 34
+    }
+    lintOptions {
+        abortOnError false
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation "com.getcapacitor:capacitor-android:$capacitorVersion"
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
